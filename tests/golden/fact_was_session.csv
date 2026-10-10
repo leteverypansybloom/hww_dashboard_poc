@@ -1,0 +1,106 @@
+session_id,was_request_id,employer_id,session_number,session_date,duration,summary_sent_date,topics
+WAS-1-S1,WAS-1,Ed5bb318b,1,2025-12-04,Under 90 minutes,2025-12-11,Mental health and wellbeing
+WAS-1-S2,WAS-1,Ed5bb318b,2,,Under 90 minutes,2026-07-01,Physical activity; Mental health and wellbeing
+WAS-1-S3,WAS-1,Ed5bb318b,3,2026-09-11,,,
+WAS-2-S1,WAS-2,Ee5043f73,1,2025-12-05,Under 90 minutes,2025-12-12,Mental health and wellbeing
+WAS-2-S2,WAS-2,Ee5043f73,2,,Under 90 minutes,2026-07-02,Physical activity; Mental health and wellbeing
+WAS-2-S3,WAS-2,Ee5043f73,3,2026-09-12,,,
+WAS-3-S1,WAS-3,E8308eb53,1,2025-12-06,Under 90 minutes,2025-12-13,Mental health and wellbeing
+WAS-3-S2,WAS-3,E8308eb53,2,,Under 90 minutes,2026-07-03,Physical activity; Mental health and wellbeing
+WAS-3-S3,WAS-3,E8308eb53,3,2026-09-13,,,
+WAS-4-S1,WAS-4,Ec789d568,1,2025-12-07,Under 90 minutes,2025-12-14,Mental health and wellbeing
+WAS-4-S2,WAS-4,Ec789d568,2,,Under 90 minutes,2026-07-04,Physical activity; Mental health and wellbeing
+WAS-4-S3,WAS-4,Ec789d568,3,2026-09-14,,,
+WAS-5-S1,WAS-5,Eb634f870,1,2025-12-08,Under 90 minutes,2025-12-15,Mental health and wellbeing
+WAS-5-S2,WAS-5,Eb634f870,2,,Under 90 minutes,2026-07-05,Physical activity; Mental health and wellbeing
+WAS-5-S3,WAS-5,Eb634f870,3,2026-09-15,,,
+WAS-6-S1,WAS-6,Efdeceb25,1,2025-12-09,Under 90 minutes,2025-12-16,Mental health and wellbeing
+WAS-6-S2,WAS-6,Efdeceb25,2,,Under 90 minutes,2026-07-06,Physical activity; Mental health and wellbeing
+WAS-6-S3,WAS-6,Efdeceb25,3,2026-09-16,,,
+WAS-7-S1,WAS-7,Ebc43b46a,1,2025-12-10,Under 90 minutes,2025-12-17,Mental health and wellbeing
+WAS-7-S2,WAS-7,Ebc43b46a,2,,Under 90 minutes,2026-07-07,Physical activity; Mental health and wellbeing
+WAS-7-S3,WAS-7,Ebc43b46a,3,2026-09-17,,,
+WAS-8-S1,WAS-8,E06b54441,1,2025-12-11,Under 90 minutes,2025-12-18,Mental health and wellbeing
+WAS-8-S2,WAS-8,E06b54441,2,,Under 90 minutes,2026-07-08,Physical activity; Mental health and wellbeing
+WAS-8-S3,WAS-8,E06b54441,3,2026-09-18,,,
+WAS-9-S1,WAS-9,E8e41c795,1,2025-12-12,Under 90 minutes,2025-12-19,Mental health and wellbeing
+WAS-9-S2,WAS-9,E8e41c795,2,,Under 90 minutes,2026-07-09,Physical activity; Mental health and wellbeing
+WAS-9-S3,WAS-9,E8e41c795,3,2026-09-19,,,
+WAS-10-S1,WAS-10,E9967ef58,1,2025-12-13,Under 90 minutes,2025-12-20,Mental health and wellbeing
+WAS-10-S2,WAS-10,E9967ef58,2,,Under 90 minutes,2026-07-10,Physical activity; Mental health and wellbeing
+WAS-10-S3,WAS-10,E9967ef58,3,2026-09-20,,,
+WAS-11-S1,WAS-11,E7f29becf,1,2025-12-14,Under 90 minutes,2025-12-21,Mental health and wellbeing
+WAS-11-S2,WAS-11,E7f29becf,2,,Under 90 minutes,2026-07-11,Physical activity; Mental health and wellbeing
+WAS-11-S3,WAS-11,E7f29becf,3,2026-09-21,,,
+WAS-12-S1,WAS-12,E22270a22,1,2025-12-15,Under 90 minutes,2025-12-22,Mental health and wellbeing
+WAS-12-S2,WAS-12,E22270a22,2,,Under 90 minutes,2026-07-12,Physical activity; Mental health and wellbeing
+WAS-12-S3,WAS-12,E22270a22,3,2026-09-22,,,
+WAS-13-S1,WAS-13,E6e270e4a,1,2025-12-16,Under 90 minutes,2025-12-23,Mental health and wellbeing
+WAS-13-S2,WAS-13,E6e270e4a,2,,Under 90 minutes,2026-07-13,Physical activity; Mental health and wellbeing
+WAS-13-S3,WAS-13,E6e270e4a,3,2026-09-23,,,
+WAS-15-S1,WAS-15,E8758777a,1,2025-12-17,Under 90 minutes,2025-12-24,Mental health and wellbeing
+WAS-15-S2,WAS-15,E8758777a,2,,Under 90 minutes,2026-07-14,Physical activity; Mental health and wellbeing
+WAS-15-S3,WAS-15,E8758777a,3,2026-09-24,,,
+WAS-14-S1,WAS-14,E3c2c7766,1,2025-12-18,Under 90 minutes,2025-12-25,Mental health and wellbeing
+WAS-14-S2,WAS-14,E3c2c7766,2,,Under 90 minutes,2026-07-15,Physical activity; Mental health and wellbeing
+WAS-14-S3,WAS-14,E3c2c7766,3,2026-09-25,,,
+WAS-16-S1,WAS-16,E5f6d6e31,1,2025-12-19,Under 90 minutes,2025-12-26,Mental health and wellbeing
+WAS-16-S2,WAS-16,E5f6d6e31,2,,Under 90 minutes,2026-07-16,Physical activity; Mental health and wellbeing
+WAS-16-S3,WAS-16,E5f6d6e31,3,2026-09-26,,,
+WAS-17-S1,WAS-17,Ebe9f60b2,1,2025-12-20,Under 90 minutes,2025-12-27,Mental health and wellbeing
+WAS-17-S2,WAS-17,Ebe9f60b2,2,,Under 90 minutes,2026-07-17,Physical activity; Mental health and wellbeing
+WAS-17-S3,WAS-17,Ebe9f60b2,3,2026-09-27,,,
+WAS-18-S1,WAS-18,Eada26654,1,2025-12-21,Under 90 minutes,2025-12-28,Mental health and wellbeing
+WAS-18-S2,WAS-18,Eada26654,2,,Under 90 minutes,2026-07-18,Physical activity; Mental health and wellbeing
+WAS-18-S3,WAS-18,Eada26654,3,2026-09-28,,,
+WAS-19-S1,WAS-19,Ec543e7e4,1,2025-12-22,Under 90 minutes,2025-12-29,Mental health and wellbeing
+WAS-19-S2,WAS-19,Ec543e7e4,2,,Under 90 minutes,2026-07-19,Physical activity; Mental health and wellbeing
+WAS-19-S3,WAS-19,Ec543e7e4,3,2026-09-29,,,
+WAS-20-S1,WAS-20,E0ea57f51,1,2025-12-23,Under 90 minutes,2025-12-30,Mental health and wellbeing
+WAS-20-S2,WAS-20,E0ea57f51,2,,Under 90 minutes,2026-07-20,Physical activity; Mental health and wellbeing
+WAS-20-S3,WAS-20,E0ea57f51,3,2026-09-30,,,
+WAS-row22-S1,WAS-row22,Ee265c02b,1,2025-12-24,Under 90 minutes,2025-12-31,Mental health and wellbeing
+WAS-row22-S2,WAS-row22,Ee265c02b,2,,Under 90 minutes,2026-07-21,Physical activity; Mental health and wellbeing
+WAS-row22-S3,WAS-row22,Ee265c02b,3,2026-10-01,,,
+WAS-21-S1,WAS-21,Eb99a3aa5,1,2025-12-25,Under 90 minutes,2026-01-01,Mental health and wellbeing
+WAS-21-S2,WAS-21,Eb99a3aa5,2,,Under 90 minutes,2026-07-22,Physical activity; Mental health and wellbeing
+WAS-21-S3,WAS-21,Eb99a3aa5,3,2026-10-02,,,
+WAS-22-S1,WAS-22,Ecd0ef611,1,2025-12-26,Under 90 minutes,2026-01-02,Mental health and wellbeing
+WAS-22-S2,WAS-22,Ecd0ef611,2,,Under 90 minutes,2026-07-23,Physical activity; Mental health and wellbeing
+WAS-22-S3,WAS-22,Ecd0ef611,3,2026-10-03,,,
+WAS-23-S1,WAS-23,Ee6efca00,1,2025-12-27,Under 90 minutes,2026-01-03,Mental health and wellbeing
+WAS-23-S2,WAS-23,Ee6efca00,2,,Under 90 minutes,2026-07-24,Physical activity; Mental health and wellbeing
+WAS-23-S3,WAS-23,Ee6efca00,3,2026-10-04,,,
+WAS-24-S1,WAS-24,E8a6bfad7,1,2025-12-28,Under 90 minutes,2026-01-04,Mental health and wellbeing
+WAS-24-S2,WAS-24,E8a6bfad7,2,,Under 90 minutes,2026-07-25,Physical activity; Mental health and wellbeing
+WAS-24-S3,WAS-24,E8a6bfad7,3,2026-10-05,,,
+WAS-26-S1,WAS-26,E4abc24ae,1,2025-12-29,Under 90 minutes,2026-01-05,Mental health and wellbeing
+WAS-26-S2,WAS-26,E4abc24ae,2,,Under 90 minutes,2026-07-26,Physical activity; Mental health and wellbeing
+WAS-26-S3,WAS-26,E4abc24ae,3,2026-10-06,,,
+WAS-27-S1,WAS-27,Ea7885286,1,2025-12-30,Under 90 minutes,2026-01-06,Mental health and wellbeing
+WAS-27-S2,WAS-27,Ea7885286,2,,Under 90 minutes,2026-07-27,Physical activity; Mental health and wellbeing
+WAS-27-S3,WAS-27,Ea7885286,3,2026-10-07,,,
+WAS-29-S1,WAS-29,Eae2282ab,1,2025-12-31,Under 90 minutes,2026-01-07,Mental health and wellbeing
+WAS-29-S2,WAS-29,Eae2282ab,2,,Under 90 minutes,2026-07-28,Physical activity; Mental health and wellbeing
+WAS-29-S3,WAS-29,Eae2282ab,3,2026-10-08,,,
+WAS-33-S1,WAS-33,E88f78f23,1,2026-01-01,Under 90 minutes,2026-01-08,Mental health and wellbeing
+WAS-33-S2,WAS-33,E88f78f23,2,,Under 90 minutes,2026-07-29,Physical activity; Mental health and wellbeing
+WAS-33-S3,WAS-33,E88f78f23,3,2026-10-09,,,
+WAS-25-S1,WAS-25,Eb493898d,1,2026-01-02,Under 90 minutes,2026-01-09,Mental health and wellbeing
+WAS-25-S2,WAS-25,Eb493898d,2,,Under 90 minutes,2026-07-30,Physical activity; Mental health and wellbeing
+WAS-25-S3,WAS-25,Eb493898d,3,2026-10-10,,,
+WAS-30-S1,WAS-30,E562f9dab,1,2026-01-03,Under 90 minutes,2026-01-10,Mental health and wellbeing
+WAS-30-S2,WAS-30,E562f9dab,2,,Under 90 minutes,2026-07-31,Physical activity; Mental health and wellbeing
+WAS-30-S3,WAS-30,E562f9dab,3,2026-10-11,,,
+WAS-32-S1,WAS-32,E78676da7,1,2026-01-04,Under 90 minutes,2026-01-11,Mental health and wellbeing
+WAS-32-S2,WAS-32,E78676da7,2,,Under 90 minutes,2026-08-01,Physical activity; Mental health and wellbeing
+WAS-32-S3,WAS-32,E78676da7,3,2026-10-12,,,
+WAS-31-S1,WAS-31,E0b0ebd14,1,2026-01-05,Under 90 minutes,2026-01-12,Mental health and wellbeing
+WAS-31-S2,WAS-31,E0b0ebd14,2,,Under 90 minutes,2026-08-02,Physical activity; Mental health and wellbeing
+WAS-31-S3,WAS-31,E0b0ebd14,3,2026-10-13,,,
+WAS-28-S1,WAS-28,E62b73cb6,1,2026-01-06,Under 90 minutes,2026-01-13,Mental health and wellbeing
+WAS-28-S2,WAS-28,E62b73cb6,2,,Under 90 minutes,2026-08-03,Physical activity; Mental health and wellbeing
+WAS-28-S3,WAS-28,E62b73cb6,3,2026-10-14,,,
+WAS-34-S1,WAS-34,E61d70320,1,2026-01-07,Under 90 minutes,2026-01-14,Mental health and wellbeing
+WAS-34-S2,WAS-34,E61d70320,2,,Under 90 minutes,2026-08-04,Physical activity; Mental health and wellbeing
+WAS-34-S3,WAS-34,E61d70320,3,2026-10-15,,,
