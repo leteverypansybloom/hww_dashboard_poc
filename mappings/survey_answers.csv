@@ -1,0 +1,97 @@
+question_id,answer,answer_short,answer_order
+Q01,Embedded - health and wellbeing is integrated across the organisation and supported at all levels,Embedded,1
+Q01,Established - we have a range of planned and consistent activities in place,Established,2
+Q01,"Developing - we have some structured initiatives, but they are not yet consistent or strategic",Developing,3
+Q01,"Basic - we've taken some steps, but activity is limited or informal",Basic,4
+Q01,Minimal - we have little or no activity in place,Minimal,5
+Q02,"Yes, dedicated team","Yes, dedicated team",1
+Q02,"Yes, individual with other responsibilities","Yes, individual with other responsibilities",2
+Q02,No designated lead,No designated lead,3
+Q03,A significant issue - it regularly disrupts productivity or staffing,A significant issue,1
+Q03,A moderate issue - it impacts operations at times,A moderate issue,2
+Q03,A minor issue - occasional spikes but not a major concern,A minor issue,3
+Q03,Not an issue - levels are very low and manageable,Not an issue,4
+Q03,Not sure,Not sure,5
+Q04,Caring responsibilities,Caring responsibilities,1
+Q04,Eye/ear/nose/mouth/dental problems,Eye/ear/nose/mouth/dental problems,2
+Q04,Fatigue or burnout,Fatigue or burnout,3
+Q04,Gastrointestinal problems,Gastrointestinal problems,4
+Q04,Genito-urinary problems,Genito-urinary problems,5
+Q04,Headaches and migraines,Headaches and migraines,6
+Q04,"Heart, blood pressure, circulation problems","Heart, blood pressure, circulation problems",7
+Q04,"Mental health conditions (e.g. anxiety, depression, stress)",Mental health,8
+Q04,"Minor illness (includes coughs, colds and flu; sickness, nausea and diarrhoea)",Minor illness,9
+Q04,"Musculoskeletal issues or injuries (e.g. back pain, repetitive strain)",Musculoskeletal issues,10
+Q04,Respiratory conditions,Respiratory conditions,11
+Q04,Surgery or planned treatment,Surgery or planned treatment,12
+Q04,Other,Other,13
+Q04,Not known,Not known,14
+Q05,"Yes, structured return-to-work support","Yes, structured return-to-work support",1
+Q05,Informal support only,Informal support only,2
+Q05,No support available,No support available,3
+Q05,Other,Other,4
+Q06,Regularly,Regularly,1
+Q06,Occasionally,Occasionally,2
+Q06,Rarely/Never,Rarely/Never,3
+Q07,Financial wellbeing,Financial wellbeing,1
+Q07,Flexible working,Flexible working,2
+Q07,Diversity and inclusion,Diversity and inclusion,3
+Q07,Healthy eating,Healthy eating,4
+Q07,Mental health and wellbeing,Mental health and wellbeing,5
+Q07,Physical activity,Physical activity,6
+Q07,Sickness absence management,Sickness absence management,7
+Q07,Tobacco/alcohol/substance misuse,Tobacco/alcohol/substance misuse,8
+Q07,Musculoskeletal health,Musculoskeletal health,9
+Q07,Other,Other,10
+Q08,Employee Assistance Programme (EAP) or counselling,EAP or counselling,1
+Q08,In Work Support services,In Work Support services,2
+Q08,Occupational health,Occupational health,3
+Q08,Signposting to support services,Signposting to support services,4
+Q08,Stress Risk Assessments,Stress Risk Assessments,5
+Q08,Other,Other,6
+Q08,None of the above,None of the above,7
+Q09,Active travel,Active travel,1
+Q09,Being active,Being active,2
+Q09,Connecting with nature,Connecting with nature,3
+Q09,Healthy eating,Healthy eating,4
+Q09,Mental wellbeing and stress management,Mental wellbeing and stress management,5
+Q09,Quitting smoking or vaping,Quitting smoking or vaping,6
+Q09,Signposting to information and resources,Signposting to information and resources,7
+Q09,Social connection and team engagement,Social connection and team engagement,8
+Q09,Taking breaks and avoiding prolonged sitting,Taking breaks and avoiding prolonged sitting,9
+Q09,Work-life balance and rest,Work-life balance and rest,10
+Q09,Other,Other,11
+Q09,None of the above,None of the above,12
+Q10,Intranet/email,Intranet/email,1
+Q10,Noticeboards/posters,Noticeboards/posters,2
+Q10,Staff meetings,Staff meetings,3
+Q10,No regular communication,No regular communication,4
+Q10,Other,Other,5
+Q11,"Yes, regularly","Yes, regularly",1
+Q11,Occasionally,Occasionally,2
+Q11,No,No,3
+Q12,Informal feedback,Informal feedback,1
+Q12,No data use,No data use,2
+Q12,Sickness absence data,Sickness absence data,3
+Q12,Staff surveys,Staff surveys,4
+Q12,Other,Other,5
+Q13,"Yes, widely available","Yes, widely available",1
+Q13,In some teams,In some teams,2
+Q13,Rarely or not at all,Rarely or not at all,3
+Q14,Yes,Yes,1
+Q14,Sometimes,Sometimes,2
+Q14,No,No,3
+Q15,"Yes, regularly","Yes, regularly",1
+Q15,Occasionally,Occasionally,2
+Q15,"No, food options are not healthy","No, food options are not healthy",3
+Q15,No catering provision,No catering provision,4
+Q16,Strongly agree,Strongly agree,1
+Q16,Agree,Agree,2
+Q16,Neither agree or disagree,Neither agree or disagree,3
+Q16,Disagree,Disagree,4
+Q16,Strongly disagree,Strongly disagree,5
+Q17,Strongly agree,Strongly agree,1
+Q17,Agree,Agree,2
+Q17,Neither agree or disagree,Neither agree or disagree,3
+Q17,Disagree,Disagree,4
+Q17,Strongly disagree,Strongly disagree,5

@@ -1,0 +1,37 @@
+response_id,employer_id,date,question_id,question,answer_id,answer
+19460,,2026-09-08,Q01,How would you rate your organisation's current level of activity to support employee health and wellbeing?,Q01-01,Embedded - health and wellbeing is integrated across the organisation and supported at all levels
+19460,,2026-09-08,Q02,Is there a named person or team responsible for health and wellbeing at work?,Q02-02,"Yes, individual with other responsibilities"
+19460,,2026-09-08,Q03,"Overall, how much of an issue is sickness absence for your organisation or business?",Q03-02,A moderate issue - it impacts operations at times
+19460,,2026-09-08,Q04,What are the most common reasons for sickness absence in your organisation?,Q04-08,"Mental health conditions (e.g. anxiety, depression, stress)"
+19460,,2026-09-08,Q04,What are the most common reasons for sickness absence in your organisation?,Q04-10,"Musculoskeletal issues or injuries (e.g. back pain, repetitive strain)"
+19460,,2026-09-08,Q05,Do employees have access to support during sickness absence?,Q05-01,"Yes, structured return-to-work support"
+19460,,2026-09-08,Q06,Do you involve employees in shaping health and wellbeing activities or decisions at work?,Q06-01,Regularly
+19460,,2026-09-08,Q07,"Which of the following areas are currently a priority for your organisation, or that you'd like to focus on in the near future?",Q07-01,Financial wellbeing
+19460,,2026-09-08,Q07,"Which of the following areas are currently a priority for your organisation, or that you'd like to focus on in the near future?",Q07-03,Diversity and inclusion
+19460,,2026-09-08,Q07,"Which of the following areas are currently a priority for your organisation, or that you'd like to focus on in the near future?",Q07-10,Other
+19460,,2026-09-08,Q08,Do you provide access to any of the following health and wellbeing services?,Q08-01,Employee Assistance Programme (EAP) or counselling
+19460,,2026-09-08,Q08,Do you provide access to any of the following health and wellbeing services?,Q08-02,In Work Support services
+19460,,2026-09-08,Q08,Do you provide access to any of the following health and wellbeing services?,Q08-03,Occupational health
+19460,,2026-09-08,Q08,Do you provide access to any of the following health and wellbeing services?,Q08-04,Signposting to support services
+19460,,2026-09-08,Q08,Do you provide access to any of the following health and wellbeing services?,Q08-05,Stress Risk Assessments
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-02,Being active
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-03,Connecting with nature
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-04,Healthy eating
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-05,Mental wellbeing and stress management
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-06,Quitting smoking or vaping
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-07,Signposting to information and resources
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-08,Social connection and team engagement
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-09,Taking breaks and avoiding prolonged sitting
+19460,,2026-09-08,Q09,Do you promote any of the following positive health and wellbeing behaviours?,Q09-10,Work-life balance and rest
+19460,,2026-09-08,Q10,How is health and wellbeing information communicated to staff?,Q10-01,Intranet/email
+19460,,2026-09-08,Q10,How is health and wellbeing information communicated to staff?,Q10-02,Noticeboards/posters
+19460,,2026-09-08,Q10,How is health and wellbeing information communicated to staff?,Q10-05,Other
+19460,,2026-09-08,Q11,Do you evaluate the impact of your wellbeing activities?,Q11-02,Occasionally
+19460,,2026-09-08,Q12,What kind of data does your organisation use to inform and evaluate wellbeing activities?,Q12-01,Informal feedback
+19460,,2026-09-08,Q12,What kind of data does your organisation use to inform and evaluate wellbeing activities?,Q12-03,Sickness absence data
+19460,,2026-09-08,Q12,What kind of data does your organisation use to inform and evaluate wellbeing activities?,Q12-04,Staff surveys
+19460,,2026-09-08,Q13,Does your organisation offer flexible working arrangements?,Q13-01,"Yes, widely available"
+19460,,2026-09-08,Q14,Do employees have regular opportunities to provide feedback on organisational changes?,Q14-01,Yes
+19460,,2026-09-08,Q15,Are healthy food options available at your workplace?,Q15-04,No catering provision
+19460,,2026-09-08,Q16,Completing the HWW Employer Survey Tool was easy:,Q16-02,Agree
+19460,,2026-09-08,Q17,I will take action on the advice provided to me in my report:,Q17-01,Strongly agree

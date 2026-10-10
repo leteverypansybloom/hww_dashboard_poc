@@ -1,0 +1,18 @@
+question_id,question,question_short,question_type
+Q01,How would you rate your organisation's current level of activity to support employee health and wellbeing?,Current level of wellbeing activity,single
+Q02,Is there a named person or team responsible for health and wellbeing at work?,Named wellbeing lead,single
+Q03,"Overall, how much of an issue is sickness absence for your organisation or business?",How much of an issue is sickness absence,single
+Q04,What are the most common reasons for sickness absence in your organisation?,Most common reasons for sickness absence,multi
+Q05,Do employees have access to support during sickness absence?,Support during sickness absence,single
+Q06,Do you involve employees in shaping health and wellbeing activities or decisions at work?,Employee involvement in wellbeing,single
+Q07,"Which of the following areas are currently a priority for your organisation, or that you'd like to focus on in the near future?",Priority areas,multi
+Q08,Do you provide access to any of the following health and wellbeing services?,Wellbeing services provided,multi
+Q09,Do you promote any of the following positive health and wellbeing behaviours?,Healthy behaviours promoted,multi
+Q10,How is health and wellbeing information communicated to staff?,How wellbeing information is communicated,multi
+Q11,Do you evaluate the impact of your wellbeing activities?,Evaluate impact of wellbeing activities,single
+Q12,What kind of data does your organisation use to inform and evaluate wellbeing activities?,Data used to evaluate wellbeing,multi
+Q13,Does your organisation offer flexible working arrangements?,Flexible working,single
+Q14,Do employees have regular opportunities to provide feedback on organisational changes?,Employee feedback on change,single
+Q15,Are healthy food options available at your workplace?,Healthy food options,single
+Q16,Completing the HWW Employer Survey Tool was easy:,Survey tool was easy,single
+Q17,I will take action on the advice provided to me in my report:,Will take action on report,single

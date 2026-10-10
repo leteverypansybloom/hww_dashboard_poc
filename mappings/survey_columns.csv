@@ -1,0 +1,94 @@
+column,role,question_id,option_or_note
+How would you rate your organisation's current level of activity to support employee health and wellbeing?,single,Q01,
+Is there a named person or team responsible for health and wellbeing at work?,single,Q02,
+"Overall, how much of an issue is sickness absence for your organisation or business?",single,Q03,
+Caring responsibilities,tick,Q04,Caring responsibilities
+Eye/ear/nose/mouth/dental problems,tick,Q04,Eye/ear/nose/mouth/dental problems
+Fatigue or burnout,tick,Q04,Fatigue or burnout
+Gastrointestinal problems,tick,Q04,Gastrointestinal problems
+Genito-urinary problems,tick,Q04,Genito-urinary problems
+Headaches and migraines,tick,Q04,Headaches and migraines
+"Heart, blood pressure, circulation problems",tick,Q04,"Heart, blood pressure, circulation problems"
+"Mental health conditions (e.g. anxiety, depression, stress)",tick,Q04,"Mental health conditions (e.g. anxiety, depression, stress)"
+"Minor illness (includes coughs, colds and flu; sickness, nausea and diarrhoea)",tick,Q04,"Minor illness (includes coughs, colds and flu; sickness, nausea and diarrhoea)"
+"Musculoskeletal issues or injuries (e.g. back pain, repetitive strain)",tick,Q04,"Musculoskeletal issues or injuries (e.g. back pain, repetitive strain)"
+Respiratory conditions,tick,Q04,Respiratory conditions
+Surgery or planned treatment,tick,Q04,Surgery or planned treatment
+Other,tick,Q04,Other
+Not known,tick,Q04,Not known
+Other.1,other_text,Q04,
+Do employees have access to support during sickness absence?,single,Q05,
+Other.2,other_text,Q05,
+Do you involve employees in shaping health and wellbeing activities or decisions at work?,single,Q06,
+Financial wellbeing,tick,Q07,Financial wellbeing
+Flexible working,tick,Q07,Flexible working
+Diversity and inclusion,tick,Q07,Diversity and inclusion
+Healthy eating,tick,Q07,Healthy eating
+Mental health and wellbeing,tick,Q07,Mental health and wellbeing
+Physical activity,tick,Q07,Physical activity
+Sickness absence management,tick,Q07,Sickness absence management
+Tobacco/alcohol/substance misuse,tick,Q07,Tobacco/alcohol/substance misuse
+Musculoskeletal health,tick,Q07,Musculoskeletal health
+Other.3,tick,Q07,Other
+Other.4,other_text,Q07,
+Employee Assistance Programme (EAP) or counselling,tick,Q08,Employee Assistance Programme (EAP) or counselling
+In Work Support services,tick,Q08,In Work Support services
+Occupational health,tick,Q08,Occupational health
+Signposting to support services,tick,Q08,Signposting to support services
+Stress Risk Assessments,tick,Q08,Stress Risk Assessments
+Other.5,tick,Q08,Other
+None of the above,tick,Q08,None of the above
+Other.6,other_text,Q08,
+Active travel,tick,Q09,Active travel
+Being active,tick,Q09,Being active
+Connecting with nature,tick,Q09,Connecting with nature
+Healthy eating.1,tick,Q09,Healthy eating
+Mental wellbeing and stress management,tick,Q09,Mental wellbeing and stress management
+Quitting smoking or vaping,tick,Q09,Quitting smoking or vaping
+Signposting to information and resources,tick,Q09,Signposting to information and resources
+Social connection and team engagement,tick,Q09,Social connection and team engagement
+Taking breaks and avoiding prolonged sitting,tick,Q09,Taking breaks and avoiding prolonged sitting
+Work-life balance and rest,tick,Q09,Work-life balance and rest
+Other.7,tick,Q09,Other
+None of the above.1,tick,Q09,None of the above
+Other.8,other_text,Q09,
+Intranet/email,tick,Q10,Intranet/email
+Noticeboards/posters,tick,Q10,Noticeboards/posters
+Staff meetings,tick,Q10,Staff meetings
+No regular communication,tick,Q10,No regular communication
+Other.9,tick,Q10,Other
+Other.10,other_text,Q10,
+Do you evaluate the impact of your wellbeing activities?,single,Q11,
+Informal feedback,tick,Q12,Informal feedback
+No data use,tick,Q12,No data use
+Sickness absence data,tick,Q12,Sickness absence data
+Staff surveys,tick,Q12,Staff surveys
+Other.11,tick,Q12,Other
+Other.12,other_text,Q12,
+Does your organisation offer flexible working arrangements?,single,Q13,
+Do employees have regular opportunities to provide feedback on organisational changes?,single,Q14,
+Are healthy food options available at your workplace?,single,Q15,
+Completing the HWW Employer Survey Tool was easy:,single,Q16,
+What parts (if any) of the tool completion process could be improved?,drop,,"free text, not chartable"
+I will take action on the advice provided to me in my report:,single,Q17,
+Full Name,drop,,personal
+Company,org,,
+Organisation Size,size,,
+Organisation Sector,sector,,
+Industry,industry,,
+Organisation Welsh Sites,sites,,
+Created By (User Id),drop,,personal
+Entry Id,response_id,,
+Entry Date,date,,
+Date Updated,drop,,personal or technical
+Source Url,drop,,personal or technical
+Transaction Id,drop,,personal or technical
+Payment Amount,drop,,personal or technical
+Payment Date,drop,,personal or technical
+Payment Status,drop,,personal or technical
+Post Id,drop,,personal or technical
+User Agent,drop,,personal or technical
+User IP,drop,,personal or technical
+Submission Speed (ms),drop,,personal or technical
+PDF: HWW Employer Survey Tool,drop,,personal or technical
+PDF: HWW Employer Survey Tool (Internal),drop,,personal or technical

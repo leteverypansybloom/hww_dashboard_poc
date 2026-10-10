@@ -1,0 +1,21 @@
+# Streamlit look and feel for dashboard.py (read when you run streamlit from this folder).
+
+[theme]
+base = "light"
+primaryColor = "#232a6b"          # HWW navy
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f4f8"
+textColor = "#0b0b0b"
+font = "sans-serif"
+
+[theme.sidebar]
+backgroundColor = "#232a6b"       # navy side menu, as in the mockups
+secondaryBackgroundColor = "#343c80"
+textColor = "#ffffff"
+primaryColor = "#ff2fd6"          # the pink highlight on the current page
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "viewer"            # hide the Deploy button
