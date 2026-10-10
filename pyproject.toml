@@ -1,0 +1,44 @@
+# Tool settings only. This is not an installable package: run the scripts directly
+# (python wrangle.py, streamlit run dashboard.py). Pipeline settings live in config.toml.
+#
+#   ruff check .        lint (PEP 8, imports, docstrings)
+#   ruff format .       layout (line length 100)
+#   mypy                type check
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle (PEP 8)
+    "F",        # pyflakes: unused names, undefined names
+    "I",        # import order
+    "N",        # PEP 8 naming
+    "D",        # docstrings
+    "UP",       # modern syntax for the target Python version
+    "B",        # likely bugs (mutable defaults, loop variables in closures, ...)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests add the project folder to sys.path before importing it.
+"tests/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["wrangle.py", "dashboard_data.py", "dashboard.py", "tests"]
+strict = true
+# Tests import wrangle / dashboard_data from the folder above.
+mypy_path = "."
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# plotly ships without type information.
+module = ["plotly", "plotly.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

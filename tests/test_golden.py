@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 GOLDEN = Path(__file__).resolve().parent / "golden"
 sys.path.insert(0, str(ROOT))
 
-import wrangle  # noqa: E402
+import wrangle
 
 
 def read_lines(path: Path) -> list[str]:
@@ -44,6 +44,7 @@ def fresh_output(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def test_same_set_of_csv_files(fresh_output: Path) -> None:
+    """The run writes exactly the tables in the snapshot, no more and no fewer."""
     made = sorted(p.name for p in fresh_output.glob("*.csv"))
     saved = sorted(p.name for p in GOLDEN.glob("*.csv"))
     assert made == saved
@@ -51,10 +52,13 @@ def test_same_set_of_csv_files(fresh_output: Path) -> None:
 
 @pytest.mark.parametrize("name", sorted(p.name for p in GOLDEN.glob("*.csv")))
 def test_csv_identical_to_snapshot(fresh_output: Path, name: str) -> None:
+    """Each table matches its snapshot line for line (line endings aside)."""
     expected = read_lines(GOLDEN / name)
     actual = read_lines(fresh_output / name)
     if actual != expected:
         diff = "\n".join(
-            list(difflib.unified_diff(expected, actual, "golden/" + name, "new/" + name, lineterm=""))[:40]
+            list(
+                difflib.unified_diff(expected, actual, "golden/" + name, "new/" + name, lineterm="")
+            )[:40]
         )
         pytest.fail(f"{name} differs from the snapshot:\n{diff}")

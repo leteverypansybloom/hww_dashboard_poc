@@ -8,9 +8,12 @@ The numbers come from dashboard_data.py; this file only draws them.
 """
 
 import html
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
@@ -22,7 +25,9 @@ LOGO = HERE / "assets" / "logo.png"  # optional: drop the HWW logo here and it a
 
 # Colours. One colour per chart (every chart here shows a single series).
 NAVY = "#232a6b"  # HWW navy, bars (13:1 contrast on white)
-TEAL = "#178a7d"  # darker step of HWW teal, lines (4.2:1 on white; the bright brand teal is too pale)
+TEAL = (
+    "#178a7d"  # darker step of HWW teal, lines (4.2:1 on white; the bright brand teal is too pale)
+)
 INK = "#0b0b0b"
 INK_2 = "#52514e"
 MUTED = "#898781"
@@ -57,13 +62,25 @@ st.markdown(
 
 
 @st.cache_data
-def load(stamp):
-    """Read the CSVs once. 'stamp' changes when wrangle.py rewrites them, which forces a reload."""
+def load(stamp: float) -> dd.Tables:
+    """Read the CSVs once per change of the output folder.
+
+    Args:
+        stamp: From ``dd.data_stamp()``. It changes when wrangle.py rewrites the CSVs, which
+            makes Streamlit's cache run this again.
+
+    Returns:
+        The tables from ``dd.load_tables()``.
+    """
     return dd.load_tables()
 
 
-def header(title):
-    """Page title on the left, HWW name (or logo) on the right, as in the mockups."""
+def header(title: str) -> None:
+    """Draw the page title on the left and the HWW name (or logo) on the right.
+
+    Args:
+        title: Page title.
+    """
     left, right = st.columns([3, 1])
     left.title(title)
     if LOGO.exists():
@@ -76,35 +93,76 @@ def header(title):
         )
 
 
-def style(fig, height):
-    """Quiet chart chrome: white surface, hairline grid, no legend (single series)."""
+def style(fig: go.Figure, height: int) -> go.Figure:
+    """Apply quiet chart chrome: white surface, hairline grid, no legend (single series).
+
+    Args:
+        fig: The chart (changed in place).
+        height: Chart height in pixels.
+
+    Returns:
+        The same chart, so calls can be chained.
+    """
     fig.update_layout(
         height=height,
         margin=dict(l=8, r=48, t=96, b=8),
         paper_bgcolor="white",
         plot_bgcolor="white",
         font=dict(family=FONT, size=13, color=INK_2),
-        title=dict(x=0, xanchor="left", y=1, yref="container", yanchor="top", pad=dict(t=8),
-                   font=dict(size=16, color=INK)),
+        title=dict(
+            x=0,
+            xanchor="left",
+            y=1,
+            yref="container",
+            yanchor="top",
+            pad=dict(t=8),
+            font=dict(size=16, color=INK),
+        ),
         showlegend=False,
         hoverlabel=dict(bgcolor="white", bordercolor=GRID, font=dict(family=FONT, color=INK)),
     )
-    fig.update_xaxes(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickfont=dict(color=MUTED), automargin=True)
-    fig.update_yaxes(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickfont=dict(color=MUTED), automargin=True)
+    fig.update_xaxes(
+        gridcolor=GRID, linecolor=AXIS, zeroline=False, tickfont=dict(color=MUTED), automargin=True
+    )
+    fig.update_yaxes(
+        gridcolor=GRID, linecolor=AXIS, zeroline=False, tickfont=dict(color=MUTED), automargin=True
+    )
     return fig
 
 
-def whole_number_ticks(largest):
-    """Axis settings for counts: no 0.5 ticks. Step by 1 when the numbers are small."""
+def whole_number_ticks(largest: float) -> dict[str, Any]:
+    """Make axis settings for counts: no 0.5 ticks, and a step of 1 for small numbers.
+
+    Args:
+        largest: The biggest value on the axis.
+
+    Returns:
+        Keyword arguments for ``fig.update_yaxes`` / ``update_xaxes``.
+    """
     return dict(tickformat=",d", dtick=1 if largest <= 5 else None, rangemode="tozero")
 
 
-def show_chart(fig):
+def show_chart(fig: go.Figure) -> None:
+    """Draw a chart with the HWW styling (not Streamlit's theme) and no Plotly logo.
+
+    Args:
+        fig: The chart.
+    """
     st.plotly_chart(fig, theme=None, config={"displaylogo": False})
 
 
-def date_range(dates, key):
-    """Start and end date pickers, defaulting to the first and last date in the data."""
+def date_range(dates: pd.Series, key: str) -> tuple[date, date]:
+    """Draw start and end date pickers, defaulting to the first and last date in the data.
+
+    The default end is never after today.
+
+    Args:
+        dates: The dates in the data (NaT is ignored).
+        key: Prefix for the widget keys, unique per page.
+
+    Returns:
+        (start, end). Start may be after end: an error is shown and callers should stop.
+    """
     valid = dates.dropna()
     first = valid.min().date() if len(valid) else date.today()
     last = min(valid.max().date(), date.today()) if len(valid) else date.today()
@@ -115,13 +173,24 @@ def date_range(dates, key):
     return start, end
 
 
-def choice_filter(label, options, key):
-    """All options selected by default, as in the mockups.
+def choice_filter(label: str, options: Sequence[str], key: str) -> list[str]:
+    """Draw a multi-choice filter with every option selected to start with, as in the mockups.
 
-    Short lists are pills. Long lists are checkboxes in a collapsed box whose title says how many are on.
+    Short lists are pills. Long lists are checkboxes in a collapsed box whose title says how
+    many are on.
+
+    Args:
+        label: Filter label.
+        options: Choices, in display order.
+        key: Widget key, unique per page and filter.
+
+    Returns:
+        The chosen options.
     """
     if len(options) <= 6:
-        chosen = st.pills(label, options, selection_mode="multi", default=options, key=key, wrap=True)
+        chosen = st.pills(
+            label, options, selection_mode="multi", default=options, key=key, wrap=True
+        )
         return list(chosen or [])
     on = [o for o in options if st.session_state.get(f"{key}_{o}", True)]
     # The key keeps the box open while its title (the count) changes.
@@ -129,8 +198,19 @@ def choice_filter(label, options, key):
         return [o for o in options if st.checkbox(o, value=True, key=f"{key}_{o}")]
 
 
-def employer_filters(tables, key, include_size=True):
-    """Sector / industry / (size) / sites filters. Returns {column: chosen values}."""
+def employer_filters(
+    tables: dd.Tables, key: str, include_size: bool = True
+) -> dict[str, list[str]]:
+    """Draw the sector / industry / (size) / sites filters.
+
+    Args:
+        tables: From ``load``.
+        key: Page name; ``"survey"`` also offers values found only on survey responses.
+        include_size: Show the number-of-employees filter.
+
+    Returns:
+        {column: chosen values}, ready for ``dd.apply_filters``.
+    """
     sources = [tables["dim_employer"]]
     if key == "survey":
         sources.append(tables["dim_survey_response"])
@@ -146,18 +226,29 @@ def employer_filters(tables, key, include_size=True):
     return filters
 
 
-def small_numbers_warning(n, what):
+def small_numbers_warning(n: int, what: str) -> None:
+    """Warn when a chart rests on fewer than ``SMALL_N`` people or records.
+
+    Args:
+        n: How many the chart is based on.
+        what: Singular noun for the message, e.g. ``"respondent"``.
+    """
     if 0 < n < SMALL_N:
         st.warning(
-            f"Only {n} {what}(s) match these filters. Patterns based on small numbers are not robust "
-            "and should not be published."
+            f"Only {n} {what}(s) match these filters. "
+            "Patterns based on small numbers are not robust and should not be published."
         )
 
 
 # ---------------------------------------------------------------- pages
 
 
-def page_home(tables):
+def page_home(tables: dd.Tables) -> None:
+    """Draw the home page: headline numbers and the latest data quality report.
+
+    Args:
+        tables: From ``load``.
+    """
     header("HWW dashboard")
     events = tables["fact_engagement"]["event_type"].value_counts()
     cols = st.columns(4)
@@ -181,7 +272,12 @@ def page_home(tables):
             st.markdown(report.read_text(encoding="utf-8"))
 
 
-def page_employer(tables):
+def page_employer(tables: dd.Tables) -> None:
+    """Draw the employer view (mockup page 2): counts, first/last engagement and badges.
+
+    Args:
+        tables: From ``load``.
+    """
     header("Employer view")
     dim = tables["dim_employer"]
     names = sorted(dim["employer_name"], key=dd.natural_key)
@@ -202,32 +298,51 @@ def page_employer(tables):
         (s["was_relationships"], "Workplace Advisor Support relationships"),
         (s["peer_relationships"], "Peer mentoring relationships"),
     ]
-    rows = "".join(f'<div class="hww-row"><span class="num">{n:,}</span><span>{label}</span></div>' for n, label in counts)
+    rows = "".join(
+        f'<div class="hww-row"><span class="num">{n:,}</span><span>{label}</span></div>'
+        for n, label in counts
+    )
+    dates = (
+        '<div class="hww-row"><span class="lbl">First engagement on</span>'
+        f"<span>{first}</span></div>"
+        '<div class="hww-row"><span class="lbl">Most recent engagement on</span>'
+        f"<span>{last}</span></div>"
+    )
+    badge_row = f'<div class="hww-row"><span>Badges</span><span>{html.escape(badges)}</span></div>'
     st.markdown(
         f'<div class="hww-block">{rows}</div>'
-        f'<div class="hww-block">'
-        f'<div class="hww-row"><span class="lbl">First engagement on</span><span>{first}</span></div>'
-        f'<div class="hww-row"><span class="lbl">Most recent engagement on</span><span>{last}</span></div>'
-        f"</div>"
-        f'<div class="hww-block"><div class="hww-row"><span>Badges</span><span>{html.escape(badges)}</span></div></div>',
+        f'<div class="hww-block">{dates}</div>'
+        f'<div class="hww-block">{badge_row}</div>',
         unsafe_allow_html=True,
     )
     notes = []
     if s["first_precision"] == "month":
-        notes.append("Account sign ups are only recorded by month, so the first engagement shows a month.")
+        notes.append(
+            "Account sign ups are only recorded by month, so the first engagement shows a month."
+        )
     if s["future_events"]:
-        notes.append(f"{s['future_events']} event(s) dated in the future (e.g. booked WAS sessions) are not counted as engagement yet.")
+        notes.append(
+            f"{s['future_events']} event(s) dated in the future (e.g. booked WAS sessions) "
+            "are not counted as engagement yet."
+        )
     for note in notes:
         st.caption(note)
 
     with st.expander("Employer details"):
         st.dataframe(
-            dim[dim["employer_name"].isin(chosen)][["employer_name", "sector", "industry", "size_band", "sites_band"]],
+            dim[dim["employer_name"].isin(chosen)][
+                ["employer_name", "sector", "industry", "size_band", "sites_band"]
+            ],
             hide_index=True,
         )
 
 
-def page_engagement(tables):
+def page_engagement(tables: dd.Tables) -> None:
+    """Draw the engagement page (mockup page 3): monthly and cumulative counts.
+
+    Args:
+        tables: From ``load``.
+    """
     header("Engagement")
     left, right = st.columns([1, 2.6], gap="large")
     with left:
@@ -259,51 +374,89 @@ def page_engagement(tables):
             st.dataframe(table.rename(columns={"count": "new"}), hide_index=True)
 
 
-def engagement_chart(result, title, start, end):
-    """Monthly bars above a cumulative line, sharing the month axis.
+def engagement_chart(result: pd.DataFrame, title: str, start: date, end: date) -> go.Figure:
+    """Build monthly bars above a cumulative line, sharing the month axis.
 
     The mockup puts both on one chart with two y-axes. Two panels are used instead,
     because two y-scales on one plot invite a false comparison between them.
+
+    Args:
+        result: From ``dd.monthly_counts`` (month, count, cumulative).
+        title: Chart title.
+        start: Start of the date range, for the subtitle.
+        end: End of the date range, for the subtitle.
+
+    Returns:
+        The styled chart.
     """
     months = result["month"].dt.strftime("%b %Y")
     fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.14, row_heights=[0.55, 0.45],
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.14,
+        row_heights=[0.55, 0.45],
         subplot_titles=("New per month", "Cumulative"),
     )
     fig.add_trace(
         go.Bar(
-            x=months, y=result["count"], marker=dict(color=NAVY, cornerradius=4),
+            x=months,
+            y=result["count"],
+            marker=dict(color=NAVY, cornerradius=4),
             hovertemplate="%{x}<br><b>%{y:,}</b> new<extra></extra>",
         ),
-        row=1, col=1,
+        row=1,
+        col=1,
     )
     fig.add_trace(
         go.Scatter(
-            x=months, y=result["cumulative"], mode="lines+markers",
-            line=dict(color=TEAL, width=2), marker=dict(size=8, color=TEAL, line=dict(color="white", width=2)),
+            x=months,
+            y=result["cumulative"],
+            mode="lines+markers",
+            line=dict(color=TEAL, width=2),
+            marker=dict(size=8, color=TEAL, line=dict(color="white", width=2)),
             hovertemplate="%{x}<br><b>%{y:,}</b> in total<extra></extra>",
         ),
-        row=2, col=1,
+        row=2,
+        col=1,
     )
     # Label only the end of the running total.
     fig.add_annotation(
-        x=months.iloc[-1], y=result["cumulative"].iloc[-1], text=f"{result['cumulative'].iloc[-1]:,}",
-        showarrow=False, xanchor="left", xshift=8, font=dict(color=INK, size=13), row=2, col=1,
+        x=months.iloc[-1],
+        y=result["cumulative"].iloc[-1],
+        text=f"{result['cumulative'].iloc[-1]:,}",
+        showarrow=False,
+        xanchor="left",
+        xshift=8,
+        font=dict(color=INK, size=13),
+        row=2,
+        col=1,
     )
     # Keep columns thin: about 24px wide on a typical screen.
     fig.update_layout(bargap=max(0.3, 1 - 24 / (760 / max(len(result), 1))))
     fig.update_yaxes(**whole_number_ticks(result["count"].max()), row=1, col=1)
     fig.update_yaxes(**whole_number_ticks(result["cumulative"].max()), row=2, col=1)
-    fig.update_annotations(selector=dict(text="New per month"), font=dict(size=13, color=INK_2), x=0, xanchor="left")
-    fig.update_annotations(selector=dict(text="Cumulative"), font=dict(size=13, color=INK_2), x=0, xanchor="left")
-    fig.update_layout(title=dict(
-        text=f"{title}, monthly and cumulative",
-        subtitle=dict(text=f"{start:%b %Y} to {end:%b %Y}", font=dict(color=INK_2, size=13)),
-    ))
+    fig.update_annotations(
+        selector=dict(text="New per month"), font=dict(size=13, color=INK_2), x=0, xanchor="left"
+    )
+    fig.update_annotations(
+        selector=dict(text="Cumulative"), font=dict(size=13, color=INK_2), x=0, xanchor="left"
+    )
+    fig.update_layout(
+        title=dict(
+            text=f"{title}, monthly and cumulative",
+            subtitle=dict(text=f"{start:%b %Y} to {end:%b %Y}", font=dict(color=INK_2, size=13)),
+        )
+    )
     return style(fig, 560)
 
 
-def page_events(tables):
+def page_events(tables: dd.Tables) -> None:
+    """Draw the events page (mockup page 4): one metric for the chosen events.
+
+    Args:
+        tables: From ``load``.
+    """
     header("Events")
     events = tables["fact_event"]
     names = sorted(set(events["event_name"]) - {""})
@@ -314,8 +467,8 @@ def page_events(tables):
     with right:
         if not names:
             st.info(
-                "No event data yet. When output/fact_event.csv has rows (one per sign up, attendance or "
-                "completed survey), this page will chart them."
+                "No event data yet. When output/fact_event.csv has rows "
+                "(one per sign up, attendance or completed survey), this page will chart them."
             )
             return
         if not chosen:
@@ -323,11 +476,18 @@ def page_events(tables):
             return
         counts = dd.event_counts(tables, chosen, dd.EVENT_METRICS[label])
         small_numbers_warning(int(counts["count"].sum()), "record")
-        fig = go.Figure(go.Bar(
-            x=counts["count"], y=counts["event_name"], orientation="h",
-            marker=dict(color=NAVY, cornerradius=4), text=counts["count"], textposition="outside",
-            cliponaxis=False, hovertemplate="%{y}<br><b>%{x:,}</b><extra></extra>",
-        ))
+        fig = go.Figure(
+            go.Bar(
+                x=counts["count"],
+                y=counts["event_name"],
+                orientation="h",
+                marker=dict(color=NAVY, cornerradius=4),
+                text=counts["count"],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="%{y}<br><b>%{x:,}</b><extra></extra>",
+            )
+        )
         fig.update_layout(title=dict(text=f"{label} by event"), bargap=0.45)
         fig.update_yaxes(autorange="reversed", gridcolor="white")
         fig.update_xaxes(**whole_number_ticks(counts["count"].max()))
@@ -336,15 +496,26 @@ def page_events(tables):
             st.dataframe(counts, hide_index=True)
 
 
-def page_survey(tables):
+def page_survey(tables: dd.Tables) -> None:
+    """Draw the survey findings page (mockup page 1): % choosing each answer to a question.
+
+    Args:
+        tables: From ``load``.
+    """
     header("Survey findings")
     catalogue = tables["question_catalogue"]
     questions = catalogue.drop_duplicates("question_id")
-    labels = dict(zip(questions["question_id"], questions["question_short"]))
+    labels = dict(zip(questions["question_id"], questions["question_short"], strict=True))
     ids = list(labels)
     question_id = st.selectbox(
-        "Select survey question", ids, format_func=labels.get, index=ids.index("Q04") if "Q04" in ids else 0
+        "Select survey question",
+        ids,
+        format_func=lambda qid: labels[qid],
+        index=ids.index("Q04") if "Q04" in ids else 0,
     )
+    if question_id is None:
+        st.info("question_catalogue.csv has no questions.")
+        return
 
     left, right = st.columns([1, 2.6], gap="large")
     with left:
@@ -362,7 +533,10 @@ def page_survey(tables):
         question = questions.loc[questions["question_id"] == question_id].iloc[0]
         show_chart(survey_chart(options, question, respondents))
         if question["question_type"] == "multi":
-            st.caption("Respondents could choose more than one answer, so percentages can add up to more than 100%.")
+            st.caption(
+                "Respondents could choose more than one answer, "
+                "so percentages can add up to more than 100%."
+            )
         with st.expander("Show data table"):
             st.dataframe(
                 options[["answer", "ticks", "respondents", "percent"]].round({"percent": 1}),
@@ -370,26 +544,45 @@ def page_survey(tables):
             )
 
 
-def survey_chart(options, question, respondents):
-    """Horizontal bars of % of respondents per answer, like Figure 13.
+def survey_chart(options: pd.DataFrame, question: pd.Series, respondents: int) -> go.Figure:
+    """Build horizontal bars of % of respondents per answer, like Figure 13.
 
     Multi-select questions are sorted by size; single-choice questions keep the form's order.
+
+    Args:
+        options: From ``dd.survey_question_results``.
+        question: The question's row in question_catalogue.
+        respondents: Number of respondents (the base for the percentages).
+
+    Returns:
+        The styled chart.
     """
     if question["question_type"] == "multi":
         ordered = options.sort_values(["percent", "answer_order"], ascending=[True, False])
     else:
         ordered = options.sort_values("answer_order", ascending=False)
-    fig = go.Figure(go.Bar(
-        x=ordered["percent"], y=ordered["answer_short"], orientation="h",
-        marker=dict(color=NAVY, cornerradius=4),
-        text=[f"{p:.0f}%" for p in ordered["percent"]], textposition="outside", cliponaxis=False,
-        customdata=ordered[["ticks", "respondents", "answer"]].to_numpy(),
-        hovertemplate="%{customdata[2]}<br><b>%{x:.1f}%</b> (%{customdata[0]} of %{customdata[1]})<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Bar(
+            x=ordered["percent"],
+            y=ordered["answer_short"],
+            orientation="h",
+            marker=dict(color=NAVY, cornerradius=4),
+            text=[f"{p:.0f}%" for p in ordered["percent"]],
+            textposition="outside",
+            cliponaxis=False,
+            customdata=ordered[["ticks", "respondents", "answer"]].to_numpy(),
+            hovertemplate=(
+                "%{customdata[2]}<br><b>%{x:.1f}%</b> "
+                "(%{customdata[0]} of %{customdata[1]})<extra></extra>"
+            ),
+        )
+    )
     fig.update_layout(
         title=dict(
             text=f"{question['question_short']} (n={respondents:,})",
-            subtitle=dict(text=html.escape(question["question"], quote=False), font=dict(color=INK_2, size=12)),
+            subtitle=dict(
+                text=html.escape(question["question"], quote=False), font=dict(color=INK_2, size=12)
+            ),
         ),
         bargap=0.4,
     )
@@ -404,7 +597,8 @@ def survey_chart(options, question, respondents):
 # ---------------------------------------------------------------- main
 
 
-def main():
+def main() -> None:
+    """Draw the sidebar menu and the chosen page."""
     st.sidebar.title("HWW dashboard")
     page = st.sidebar.radio("Pages", PAGES, label_visibility="collapsed")
     try:

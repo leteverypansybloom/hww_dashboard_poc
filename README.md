@@ -17,8 +17,29 @@ python -m pytest
 ```
 
 Inputs are read from the folder above this one (set in `config.toml`).
+The survey export is found by `file_pattern`: drop a new download in the input folder and the
+newest one (by the date in its name) is used. The other files are named exactly.
+If a file, sheet, column, mapping file or setting is missing, `wrangle.py` stops with a message
+saying which one (exit code 1) before writing anything.
 Tables and `data_quality_report.md` are written to `output/`. Read the report after every run.
 The dashboard picks up new tables automatically after `wrangle.py` runs again (refresh the browser).
+
+How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md).
+
+## Checks for developers
+
+```
+pip install -r requirements-dev.txt
+ruff format --check .
+ruff check .
+mypy
+python -m pytest
+```
+
+Settings are in `pyproject.toml` (line length 100, Google-style docstrings, mypy strict).
+`tests/test_golden.py` compares every output CSV with a saved copy in `tests/golden/`, so a tidy-up
+that changes any output fails. When an output change is intended, check the diff, then refresh the
+copy with `HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py` and commit it with the change.
 
 ## Dashboard pages
 

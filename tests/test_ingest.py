@@ -1,4 +1,4 @@
-"""Checks on reading the input files: newest survey export and clear errors. Run: python -m pytest"""
+"""Checks on reading the input files: newest survey export and clear errors."""
 
 import os
 import sys
@@ -12,7 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import wrangle  # noqa: E402
+import wrangle
 
 CONFIG = ROOT / "config.toml"
 
@@ -111,7 +111,9 @@ def test_config_uses_a_pattern_for_the_survey() -> None:
 def test_missing_file_is_reported_with_a_suggestion(tmp_path: Path) -> None:
     """A misspelt file name points at the closest file in the folder."""
     (tmp_path / "dummy_was_database.xlsx").write_bytes(b"")
-    with pytest.raises(wrangle.InputError, match=r"file not found.*Did you mean 'dummy_was_database"):
+    with pytest.raises(
+        wrangle.InputError, match=r"file not found.*Did you mean 'dummy_was_database"
+    ):
         wrangle.input_file(tmp_path, {"file": "dummy_was_databse.xlsx"}, "WAS database")
 
 
@@ -127,7 +129,9 @@ def test_missing_sheet_lists_the_sheets(tmp_path: Path) -> None:
 def test_missing_column_is_caught_as_the_file_is_read(tmp_path: Path) -> None:
     """Missing headings are reported with the file, sheet and heading row."""
     path = save_xlsx(tmp_path / "was.xlsx", {"query": [["Title", "Sector"], ["Org 1", "Public"]]})
-    with pytest.raises(wrangle.InputError, match=r"was.xlsx, sheet 'query'.*\['Sectr'\]. Did you mean 'Sector'"):
+    with pytest.raises(
+        wrangle.InputError, match=r"was.xlsx, sheet 'query'.*\['Sectr'\]. Did you mean 'Sector'"
+    ):
         wrangle.read_sheet(path, 0, 1, "WAS", ["Title", "Sectr"])
     df = wrangle.read_sheet(path, 0, 1, "WAS", ["Title", "Sector"])
     assert list(df.columns) == ["Title", "Sector", "excel_row"]
@@ -179,7 +183,7 @@ def test_config_problems_stop_before_any_file_is_read(
 def test_command_line_exits_with_1_and_a_message(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """python wrangle.py with a bad survey pattern: no traceback, exit code 1, nothing written."""
+    """Command line with a bad survey pattern: no traceback, exit code 1, nothing written."""
     cfg = real_config()
     cfg["survey"]["file_pattern"] = "no-such-export-*.xlsx"
     code = wrangle.main([str(config_in(tmp_path, cfg))])
