@@ -1,0 +1,97 @@
+# Frozen copy of config.toml used ONLY by tests/test_golden.py.
+# It pins the dummy input files the snapshot in this folder was made from, so the golden test
+# keeps working after config.toml is switched to the real data. Paths are relative to this file.
+
+[paths]
+input_folder = "../../.."
+output_folder = "out"   # not used: the test writes to a temporary folder
+mappings_folder = "../../mappings"
+
+[signups]
+file = "dummy_HWW monitoring and reporting.xlsx"
+sheet = "Account signups"
+header_row = 2            # Excel row that holds the column headings
+# The month column has no heading, so it is referred to by its Excel letter.
+month = "B"
+org = "Org (duplicates in red)"
+role = "Role (complete if duplicate org)"
+size = "Size"
+sector = "Sector"
+industry = "Industry"
+sites = "Number of sites"
+completed_survey = "Completed survey?"
+requested_was = "Requested WAS?"
+
+[survey]
+file = "dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx"
+sheet = 0                 # first sheet
+header_row = 1
+# Which column is which question lives in mappings/survey_columns.csv.
+# Free text typed into "Other" boxes may contain personal details, so it is off by default.
+keep_other_free_text = false
+
+[was]
+file = "dummy_was_database.xlsx"
+sheet = 0
+header_row = 1
+id = "Participant ID"
+org = "Title"
+enquiry_date = "Date of Enquiry"
+fallback_enquiry_date = "Date allocated to adviser"
+size = "Number of employees"
+sector = "Sector"
+industry = "Organisation Industry"
+sites = "Number of sites"
+topic_separator = ";#"
+# When is a WAS request "completed"? One of:
+#   "summary_1_sent"     - the session 1 summary has been sent (date = summary date)
+#   "session_1_held"     - session 1 has a date
+#   "last_session_held"  - date of the latest session that has a date
+completed_rule = "summary_1_sent"
+
+[[was.sessions]]
+number = 1
+date = "Date of Session 1"
+duration = "Duration of session 1"
+summary_sent = "Date summary sent to organisation"
+topics = "Topics discussed in session 1"
+
+[[was.sessions]]
+number = 2
+date = "Date of session 2"
+duration = "Duration of session 2"
+summary_sent = "Date Summary 2 sent"
+topics = "Topics discussed in session 2"
+
+[[was.sessions]]
+number = 3
+date = "Date of Session 3"
+
+[peer]
+file = "dummy_peer_montoring.xlsx"
+sheet = 0
+header_row = 1
+id = "Participant ID"
+org = "Business Name"
+interest_date = "Date of expression of interest"
+size = "Business Size"
+sector = "Sector"
+industry = "Industry"
+
+[employers]
+# When duplicate rows for one organisation disagree, the most common value wins.
+# On a tie, a specific value beats "Other", then this source order decides.
+source_priority = ["signups", "survey", "was", "peer"]
+
+[privacy]
+# These columns must never reach the output. The script only keeps the columns it needs,
+# and the tests fail if any of these names appears in an output file.
+personal_columns = [
+    "Full Name", "Email address", "Email Address", "First Name", "Last Name",
+    "Job role", "Job Role Title", "Key contact", "Preferred contact details",
+    "Accessibility requirements including language", "HWW Adviser", "HWW Adviser (Cohort)",
+    "User IP", "User Agent", "Created By (User Id)", "Source Url", "Post Id",
+    "Transaction Id", "Payment Amount", "Payment Date", "Payment Status",
+    "Submission Speed (ms)", "PDF: HWW Employer Survey Tool",
+    "PDF: HWW Employer Survey Tool (Internal)", "Item Type", "Path",
+]

@@ -8,6 +8,10 @@ the difference by hand, then refresh the snapshot with:
     $env:HWW_UPDATE_GOLDEN=1; python -m pytest tests/test_golden.py  (PowerShell)
 
 and commit the new files in tests/golden/ together with the code change.
+
+The run uses tests/golden/config.toml, a frozen copy of config.toml that pins the dummy input
+files, so this test is unaffected when config.toml moves to the real data. It does use the
+live mappings/ folder: adding a mapping that changes the dummy output is an output change.
 """
 
 import difflib
@@ -32,9 +36,9 @@ def read_lines(path: Path) -> list[str]:
 
 @pytest.fixture(scope="module")
 def fresh_output(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Run the whole pipeline once into a temporary folder."""
+    """Run the whole pipeline on the dummy inputs once, into a temporary folder."""
     folder = tmp_path_factory.mktemp("golden_check")
-    wrangle.run(ROOT / "config.toml", output_folder=folder)
+    wrangle.run(GOLDEN / "config.toml", output_folder=folder)
     if os.environ.get("HWW_UPDATE_GOLDEN") == "1":
         for old in GOLDEN.glob("*.csv"):
             old.unlink()
