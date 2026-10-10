@@ -1,5 +1,7 @@
 # Settings for wrangle.py.
 # Folder paths are relative to this file. Column names are matched after trimming spaces.
+# wrangle.py checks these settings first, then each file's sheet and columns as it reads it,
+# and stops with a message naming what to fix.
 
 [paths]
 input_folder = ".."
@@ -22,7 +24,10 @@ completed_survey = "Completed survey?"
 requested_was = "Requested WAS?"
 
 [survey]
-file = "dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx"
+# A new export is downloaded each time, with the date in its name. The newest one wins:
+# the latest YYYY-MM-DD date in the file name, then the most recently saved file.
+# Use file = "exact name.xlsx" instead to pin one export. (Any source can use file_pattern.)
+file_pattern = "*healthy-working-wales-employer-survey-tool-*.xlsx"
 sheet = 0                 # first sheet
 header_row = 1
 # Which column is which question lives in mappings/survey_columns.csv.
