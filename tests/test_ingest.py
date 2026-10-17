@@ -358,6 +358,14 @@ class TestCheckConfig:
         with pytest.raises(wrangle.InputError, match="config.toml"):
             wrangle.check_config(settings)
 
+    def test_rejects_personal_source_column(
+        self, settings: wrangle.Config
+    ) -> None:
+        """A personal name cannot be configured as the employer name."""
+        settings["signups"]["org"] = "Full Name"
+        with pytest.raises(wrangle.InputError, match="personal"):
+            wrangle.check_config(settings)
+
 
 class TestMain:
     """``main``: the command line, ``python wrangle.py [config.toml]``."""
@@ -550,4 +558,25 @@ class TestLoadSurvey:
                 lookups,
                 overrides,
                 wrangle.Report(),
+            )
+
+    def test_personal_heading_must_be_dropped(
+        self, tmp_path: Path, project_folder: Path, settings: wrangle.Config
+    ) -> None:
+        """Reject personal survey columns before opening a workbook."""
+        maps = tmp_path / "maps"
+        shutil.copytree(project_folder / "mappings", maps)
+        path = maps / "survey_columns.csv"
+        table = wrangle.read_csv_text(path)
+        table.loc[0, "column"] = "Full Name"
+        table.to_csv(path, index=False)
+        with pytest.raises(wrangle.InputError, match="personal columns"):
+            wrangle.load_survey(
+                settings["survey"],
+                tmp_path,
+                maps,
+                {},
+                {},
+                wrangle.Report(),
+                ["Full Name"],
             )

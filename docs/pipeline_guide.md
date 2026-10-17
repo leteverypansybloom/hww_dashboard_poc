@@ -333,6 +333,7 @@ this way) and **Gotchas** (what can trip you up).
   - every section and setting in `REQUIRED_SETTINGS` is present with its expected type;
   - headers and session numbers are positive integers; session numbers are unique;
   - the free-text switch is a boolean, and column names and paths are nonblank text;
+  - configured personal source headings cannot be selected as business fields;
   - each source has `file` or `file_pattern`;
   - each `[[was.sessions]]` entry has `number` and `date`;
   - `completed_rule` is a known rule;
@@ -509,6 +510,7 @@ Each `load_*` function follows the same pattern:
   off by default.
 
 #### `load_survey(cfg, folder, maps, lookups, overrides, report)` (with inner `column_for`)
+- Personal source headings may only have the `drop` mapping role.
 - Translation keys must reference a known question and have one nonblank target per cleaned raw answer.
 - **What:**
   1. Read `survey_columns.csv` and find the export columns for the roles `response_id`, `date`,

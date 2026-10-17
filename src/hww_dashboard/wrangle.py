@@ -621,6 +621,35 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
                     raise InputError(
                         f"{name}: [{section}] {key} must be nonblank text."
                     )
+    privacy = cfg.get("privacy", {})
+    if not isinstance(privacy, dict) or not isinstance(
+        privacy.get("personal_columns", []), list
+    ):
+        raise InputError(
+            f"{name}: [privacy] personal_columns must be a list of names."
+        )
+    personal_columns = privacy.get("personal_columns", [])
+    if not all(isinstance(c, str) and c.strip() for c in personal_columns):
+        raise InputError(
+            f"{name}: [privacy] personal_columns must contain nonblank names."
+        )
+    personal = {clean_text(c).casefold() for c in personal_columns}
+    for source in SOURCES:
+        for key, value in cfg[source].items():
+            if key not in (
+                "file",
+                "file_pattern",
+                "completed_rule",
+                "topic_separator",
+            ):
+                if (
+                    isinstance(value, str)
+                    and clean_text(value).casefold() in personal
+                ):
+                    raise InputError(
+                        f"{name}: [{source}] {key} selects a personal column. "
+                        "Choose a non-personal business field."
+                    )
     numbers: set[int] = set()
     for number, session in enumerate(cfg["was"]["sessions"], start=1):
         if not isinstance(session, dict):
@@ -1472,6 +1501,7 @@ def load_survey(
     lookups: Mapping[str, Lookup],
     overrides: Lookup,
     report: Report,
+    personal_columns: Sequence[str] = (),
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Read the employer survey export.
 
@@ -1485,6 +1515,7 @@ def load_survey(
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
+        personal_columns: Source headings that may only have the drop role.
 
     Returns:
         (survey, answers, other_text, columns_map):
@@ -1503,6 +1534,15 @@ def load_survey(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
     )
 
+    personal = {clean_text(c).casefold() for c in personal_columns}
+    selected_personal = columns_map["column"].map(
+        lambda c: clean_text(c).casefold() in personal
+    ) & columns_map["role"].ne("drop")
+    if selected_personal.any():
+        raise InputError(
+            "mappings/survey_columns.csv: personal columns must use "
+            "the drop role. Correct the mapping before running again."
+        )
     validate_survey_columns(columns_map)
 
     def column_for(role: str) -> str:
@@ -2826,7 +2866,13 @@ def run(
         cfg["signups"], inputs, lookups, overrides, report, today
     )
     survey, answers, other_text, columns_map = load_survey(
-        cfg["survey"], inputs, maps, lookups, overrides, report
+        cfg["survey"],
+        inputs,
+        maps,
+        lookups,
+        overrides,
+        report,
+        cfg.get("privacy", {}).get("personal_columns", []),
     )
     was, sessions, topics = load_was(
         cfg["was"], inputs, lookups, overrides, report
