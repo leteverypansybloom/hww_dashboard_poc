@@ -383,7 +383,9 @@ class Report:
         lines.append("")
         lines.extend(f"- {a}" for a in ASSUMPTIONS)
         lines.append("")
-        path.write_text("\n".join(lines), encoding="utf-8")
+        text = "\n".join(lines)
+        check_public_text(text, path.name)
+        path.write_text(text, encoding="utf-8")
 
 
 def markdown_table(df: pd.DataFrame) -> str:
@@ -2588,6 +2590,30 @@ def reconcile(
         )
 
 
+def check_public_text(text: str, filename: str) -> None:
+    """Stop recognisable contact identifiers from reaching an output.
+
+    This guard catches email addresses, IPv4 addresses and web links.
+    It cannot identify arbitrary personal names in free-form text.
+
+    Args:
+        text: Text destined for an output table or report.
+        filename: Output name to identify the repair without echoing data.
+
+    Raises:
+        InputError: Text contains a recognisable personal identifier.
+    """
+    pattern = (
+        r"[\w.+-]+@[\w-]+\.[\w.]+|" r"\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://"
+    )
+    if re.search(pattern, text, flags=re.IGNORECASE):
+        raise InputError(
+            f"{filename}: personal identifiers found in retained text. "
+            "Remove contact details from source fields and mappings "
+            "before running again."
+        )
+
+
 def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
     """Write a table with its agreed columns. Dates come out as YYYY-MM-DD.
 
@@ -2605,6 +2631,7 @@ def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
         table[column] = table[column].map(
             lambda v: v.isoformat() if isinstance(v, (date, datetime)) else v
         )
+    check_public_text(table.to_csv(index=False), f"{name}.csv")
     table.to_csv(folder / f"{name}.csv", index=False, encoding="utf-8")
     return len(table)
 

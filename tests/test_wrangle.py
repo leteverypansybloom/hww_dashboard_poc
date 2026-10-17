@@ -541,3 +541,39 @@ class TestWriteOutputs:
         assert {p.name: p.read_bytes() for p in out.iterdir()} == before
         assert list(tables["badges"].columns) == ["badge"]
         assert not report.sections["Outputs"]
+
+
+class TestWriteCsv:
+    """Output schema filtering also checks retained values for identifiers."""
+
+    @pytest.mark.parametrize(
+        "value", ["person@example.org", "192.0.2.4", "https://example.org/p"]
+    )
+    def test_blocks_personal_values(self, tmp_path: Path, value: str) -> None:
+        """Stop personal text pasted into a retained output field.
+
+        Args:
+            tmp_path: Temporary output folder.
+            value: Reserved synthetic personal identifier.
+        """
+        with pytest.raises(wrangle.InputError, match="badges.csv") as error:
+            wrangle.write_csv(
+                pd.DataFrame({"badge": [value]}), tmp_path, "badges"
+            )
+        assert value not in str(error.value)
+        assert not (tmp_path / "badges.csv").exists()
+
+
+class TestReport:
+    """Reports must not leak personal text through warnings."""
+
+    def test_blocks_personal_values(
+        self, tmp_path: Path, run_time: datetime
+    ) -> None:
+        """Reject identifiers in report notes without echoing them."""
+        report = wrangle.Report()
+        report.add("Warnings", "bad value person@example.org")
+        path = tmp_path / "data_quality_report.md"
+        with pytest.raises(wrangle.InputError, match="data_quality_report.md"):
+            report.write(path, run_time)
+        assert not path.exists()

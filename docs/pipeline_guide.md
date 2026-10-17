@@ -262,6 +262,7 @@ this way) and **Gotchas** (what can trip you up).
   to change. Don't raise `SystemExit` or `print` and continue.
 
 #### `class Report` — `__init__`, `add`, `dropped`, `write`
+- Before writing, report text is checked for recognisable contact identifiers.
 - **What:** collects markdown lines for `data_quality_report.md`, grouped into the sections in
   `Report.ORDER`. `unmapped` is a `Counter` keyed by `(dimension, source, raw value)`.
   `dropped()` adds a "Rows dropped" line only if the count is non-zero. `write()` adds the
@@ -680,6 +681,9 @@ Each `load_*` function follows the same pattern:
 - **Gotchas:**
   - `reindex` drops every column not in `COLUMNS`. This is the main privacy guard: raw columns
     such as names or emails can't leak out by accident.
+  - Retained values and report text are checked for email, IPv4 and URL identifiers.
+    A match stops the run without echoing the value. Arbitrary personal names still
+    require source governance; this pattern guard is not general anonymisation.
   - Booleans are written as `True`/`False`, and `None` as an empty cell.
   - When free text is off, `write_outputs()` removes an old `survey_other_text.csv` only
     when the new generation has been written successfully. Unmanaged files are preserved.
