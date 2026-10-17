@@ -833,3 +833,45 @@ class TestCheckPublicText:
         wrangle.check_public_text("Ordinary business text", "output.csv")
         with pytest.raises(wrangle.InputError, match="output.csv"):
             wrangle.check_public_text("HTTPS://example.org", "output.csv")
+
+
+class TestRun:
+    """The pipeline handles a generation with no source records."""
+
+    def test_header_only_sources(
+        self,
+        tmp_path: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """Header-only workbooks still produce every agreed empty table."""
+        inputs = tmp_path / "inputs"
+        inputs.mkdir()
+        original = fixture_config.parent / "inputs"
+        for source in wrangle.SOURCES:
+            cfg = settings[source]
+            path = wrangle.input_file(original, cfg, source)
+            with pd.ExcelFile(path) as book:
+                sheet = cfg["sheet"]
+                name = (
+                    book.sheet_names[sheet]
+                    if isinstance(sheet, int)
+                    else sheet
+                )
+                raw = book.parse(sheet_name=sheet, header=None, dtype=object)
+            save_xlsx(
+                inputs / path.name,
+                {str(name): raw.head(cfg["header_row"]).values.tolist()},
+            )
+        config = write_config(settings)
+        settings["paths"]["input_folder"] = inputs.as_posix()
+        config.write_text(to_toml(settings), encoding="utf-8")
+        tables = wrangle.run(config, now=run_time)
+        assert set(tables) == set(wrangle.COLUMNS) - {"survey_other_text"}
+        for name, table in tables.items():
+            assert list(table.columns) == wrangle.COLUMNS[name]
+            if name != "question_catalogue":
+                assert table.empty, name
+        assert not tables["question_catalogue"].empty
