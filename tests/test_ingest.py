@@ -1,33 +1,47 @@
-"""Checks on reading the input files: newest survey export and clear errors."""
+"""Checks on reading the input files: newest survey export, clear errors.
+
+Grouped by the function under test. Bad configs are made by changing a
+copy of the frozen fixture config, so no test reads the real data.
+"""
 
 import os
+import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+from hww_dashboard import wrangle
 
-import wrangle
-
-CONFIG = ROOT / "config.toml"
-
-
-def real_config() -> wrangle.Config:
-    """Return the project's config.toml as a dict."""
-    with open(CONFIG, "rb") as f:
-        return tomllib.load(f)
+ConfigWriter = Callable[[wrangle.Config], Path]
 
 
 def to_toml(cfg: wrangle.Config) -> str:
-    """Write a config dict back as TOML (enough for the settings used here)."""
+    """Write a config dict back as TOML.
+
+    Handles only what config.toml uses: sections of strings, numbers,
+    booleans and lists, and arrays of tables such as [[was.sessions]].
+
+    Args:
+        cfg: The config, as from ``tomllib.load``.
+
+    Returns:
+        The TOML text.
+    """
 
     def value(v: object) -> str:
-        """Format one TOML value."""
+        """Format one TOML value.
+
+        Args:
+            v: The value.
+
+        Returns:
+            The value as TOML.
+        """
         if isinstance(v, bool):
             return "true" if v else "false"
         if isinstance(v, str):
@@ -52,147 +66,315 @@ def to_toml(cfg: wrangle.Config) -> str:
     return "\n".join(lines) + "\n"
 
 
-def config_in(tmp_path: Path, cfg: wrangle.Config) -> Path:
-    """Write a config to tmp_path that reads the real inputs and mappings."""
-    cfg["paths"]["input_folder"] = str((ROOT / real_config()["paths"]["input_folder"]).resolve())
-    cfg["paths"]["mappings_folder"] = str(ROOT / "mappings")
-    cfg["paths"]["output_folder"] = str(tmp_path / "out")
-    path = tmp_path / "config.toml"
-    path.write_text(to_toml(cfg), encoding="utf-8")
-    return path
-
-
 def save_xlsx(path: Path, sheets: dict[str, list[list[object]]]) -> Path:
-    """Write a small workbook: sheet name -> rows (the first row holds the headings)."""
+    """Write a small workbook.
+
+    Args:
+        path: Where to save it.
+        sheets: Sheet name -> rows; the first row holds the headings.
+
+    Returns:
+        The path, for chaining.
+    """
     with pd.ExcelWriter(path) as writer:
         for name, rows in sheets.items():
-            pd.DataFrame(rows).to_excel(writer, sheet_name=name, header=False, index=False)
+            pd.DataFrame(rows).to_excel(
+                writer, sheet_name=name, header=False, index=False
+            )
     return path
 
 
-# ---------------------------------------------------------------- newest survey export
+@pytest.fixture
+def settings(fixture_config: Path) -> wrangle.Config:
+    """A fresh copy of the frozen fixture config, safe to change.
+
+    Returns:
+        tests/data/config.toml as nested dicts.
+    """
+    with open(fixture_config, "rb") as f:
+        return tomllib.load(f)
 
 
-def test_newest_match_uses_the_date_in_the_name(tmp_path: Path) -> None:
-    """The latest YYYY-MM-DD in the name wins, whatever order the files were saved in."""
-    for day in ("2026-09-23", "2026-10-01", "2025-12-31"):
-        (tmp_path / f"hww-employer-survey-tool-{day}.xlsx").write_bytes(b"")
-    (tmp_path / "~$hww-employer-survey-tool-2027-01-01.xlsx").write_bytes(b"")  # Excel lock file
-    (tmp_path / "other.xlsx").write_bytes(b"")
-    chosen = wrangle.newest_match(tmp_path, "*employer-survey-tool-*.xlsx", "Survey")
-    assert chosen.name == "hww-employer-survey-tool-2026-10-01.xlsx"
+@pytest.fixture
+def write_config(tmp_path: Path, fixture_config: Path) -> ConfigWriter:
+    """Make configs in tmp_path that read the synthetic inputs.
+
+    Returns:
+        A function that writes a config dict to tmp_path/config.toml and
+        returns its path. It first points the dict's [paths] at the
+        synthetic inputs, the live mappings and tmp_path/out.
+    """
+    with open(fixture_config, "rb") as f:
+        paths = tomllib.load(f)["paths"]
+    base = fixture_config.parent
+
+    def write(cfg: wrangle.Config) -> Path:
+        """Write one config.
+
+        Args:
+            cfg: The config dict (its [paths] are changed).
+
+        Returns:
+            The config file.
+        """
+        cfg["paths"]["input_folder"] = str(
+            (base / paths["input_folder"]).resolve()
+        )
+        cfg["paths"]["mappings_folder"] = str(
+            (base / paths["mappings_folder"]).resolve()
+        )
+        cfg["paths"]["output_folder"] = str(tmp_path / "out")
+        path = tmp_path / "config.toml"
+        path.write_text(to_toml(cfg), encoding="utf-8")
+        return path
+
+    return write
 
 
-def test_newest_match_breaks_ties_by_save_time(tmp_path: Path) -> None:
-    """Two exports from the same day: the one saved last wins."""
-    first = tmp_path / "survey-2026-10-01.xlsx"
-    second = tmp_path / "survey-2026-10-01 (1).xlsx"
-    for path, saved in ((first, 2_000_000_000), (second, 1_000_000_000)):
-        path.write_bytes(b"")
-        os.utime(path, (saved, saved))
-    assert wrangle.newest_match(tmp_path, "survey-*.xlsx", "Survey") == first
+class TestNewestMatch:
+    """``newest_match``: pick the latest survey export in a folder."""
+
+    def test_uses_the_date_in_the_name(self, tmp_path: Path) -> None:
+        """The latest YYYY-MM-DD in the name wins, whatever the save order."""
+        for day in ("2026-09-23", "2026-10-01", "2025-12-31"):
+            name = f"hww-employer-survey-tool-{day}.xlsx"
+            (tmp_path / name).write_bytes(b"")
+        lock_file = "~$hww-employer-survey-tool-2027-01-01.xlsx"
+        (tmp_path / lock_file).write_bytes(b"")  # Excel's lock file
+        (tmp_path / "other.xlsx").write_bytes(b"")
+        chosen = wrangle.newest_match(
+            tmp_path, "*employer-survey-tool-*.xlsx", "Survey"
+        )
+        assert chosen.name == "hww-employer-survey-tool-2026-10-01.xlsx"
+
+    def test_breaks_ties_by_save_time(self, tmp_path: Path) -> None:
+        """Two exports from the same day: the one saved last wins."""
+        first = tmp_path / "survey-2026-10-01.xlsx"
+        second = tmp_path / "survey-2026-10-01 (1).xlsx"
+        for path, saved in ((first, 2_000_000_000), (second, 1_000_000_000)):
+            path.write_bytes(b"")
+            os.utime(path, (saved, saved))
+        chosen = wrangle.newest_match(tmp_path, "survey-*.xlsx", "Survey")
+        assert chosen == first
+
+    def test_no_match_names_the_pattern(self, tmp_path: Path) -> None:
+        """The message gives the pattern and the Excel files that exist."""
+        (tmp_path / "something else.xlsx").write_bytes(b"")
+        with pytest.raises(
+            wrangle.InputError,
+            match=r"no file matching '\*survey\*.xlsx'.*something",
+        ):
+            wrangle.newest_match(tmp_path, "*survey*.xlsx", "Survey")
 
 
-def test_newest_match_with_no_file_names_the_pattern(tmp_path: Path) -> None:
-    """No match: the message gives the pattern and the Excel files that are there."""
-    (tmp_path / "something else.xlsx").write_bytes(b"")
-    with pytest.raises(wrangle.InputError, match=r"no file matching '\*survey\*.xlsx'.*something"):
-        wrangle.newest_match(tmp_path, "*survey*.xlsx", "Survey")
+class TestShippedConfig:
+    """The project's own config.toml, the one ``python wrangle.py`` uses."""
+
+    @pytest.fixture
+    def shipped(self, project_folder: Path) -> wrangle.Config:
+        """The shipped config, which points at the real inputs.
+
+        Returns:
+            config.toml as nested dicts. No input file is read.
+        """
+        with open(project_folder / "config.toml", "rb") as f:
+            return tomllib.load(f)
+
+    def test_passes_the_checks(self, shipped: wrangle.Config) -> None:
+        """Every required setting is there, with a valid value."""
+        wrangle.check_config(shipped)
+
+    def test_finds_the_survey_by_pattern(
+        self, shipped: wrangle.Config
+    ) -> None:
+        """A new survey download needs no config change."""
+        assert "file_pattern" in shipped["survey"]
 
 
-def test_config_uses_a_pattern_for_the_survey() -> None:
-    """The survey export is found by pattern, so a new download needs no config change."""
-    assert "file_pattern" in real_config()["survey"]
+class TestInputFile:
+    """``input_file``: find one source's spreadsheet."""
+
+    def test_missing_file_is_reported_with_a_suggestion(
+        self, tmp_path: Path
+    ) -> None:
+        """A misspelt file name points at the closest file in the folder."""
+        (tmp_path / "dummy_was_database.xlsx").write_bytes(b"")
+        with pytest.raises(
+            wrangle.InputError,
+            match=r"file not found.*Did you mean 'dummy_was_database",
+        ):
+            wrangle.input_file(
+                tmp_path, {"file": "dummy_was_databse.xlsx"}, "WAS database"
+            )
 
 
-# ---------------------------------------------------------------- clear errors
+class TestReadSheet:
+    """``read_sheet``: read one sheet, with clear errors for bad files."""
+
+    def test_missing_sheet_lists_the_sheets(self, tmp_path: Path) -> None:
+        """A wrong sheet name or number names the sheets there are."""
+        path = save_xlsx(
+            tmp_path / "signups.xlsx", {"Account signups": [["Org"], ["A"]]}
+        )
+        with pytest.raises(
+            wrangle.InputError,
+            match=r"no sheet 'Account signup'.*Did you mean",
+        ):
+            wrangle.read_sheet(path, "Account signup", 1)
+        with pytest.raises(wrangle.InputError, match=r"no sheet number 3"):
+            wrangle.read_sheet(path, 3, 1)
+
+    def test_missing_column_is_caught_as_the_file_is_read(
+        self, tmp_path: Path
+    ) -> None:
+        """Missing headings are reported with file, sheet and heading row."""
+        path = save_xlsx(
+            tmp_path / "was.xlsx",
+            {"query": [["Title", "Sector"], ["Org 1", "Public"]]},
+        )
+        with pytest.raises(
+            wrangle.InputError,
+            match=(
+                r"was.xlsx, sheet 'query'.*\['Sectr'\]. "
+                r"Did you mean 'Sector'"
+            ),
+        ):
+            wrangle.read_sheet(path, 0, 1, "WAS", ["Title", "Sectr"])
+        df = wrangle.read_sheet(path, 0, 1, "WAS", ["Title", "Sector"])
+        assert list(df.columns) == ["Title", "Sector", "excel_row"]
+
+    def test_header_row_past_the_end_of_the_sheet(
+        self, tmp_path: Path
+    ) -> None:
+        """A header_row beyond the data says how many rows the sheet has."""
+        path = save_xlsx(tmp_path / "small.xlsx", {"Sheet1": [["Org"], ["A"]]})
+        with pytest.raises(
+            wrangle.InputError, match=r"header_row is 5 .* only 2 row"
+        ):
+            wrangle.read_sheet(path, 0, 5)
+
+    def test_file_that_is_not_excel(self, tmp_path: Path) -> None:
+        """A file with the wrong content gets a plain message."""
+        path = tmp_path / "broken.xlsx"
+        path.write_text("not a workbook", encoding="utf-8")
+        with pytest.raises(
+            wrangle.InputError, match="not a readable .xlsx file"
+        ):
+            wrangle.read_sheet(path, 0, 1)
 
 
-def test_missing_file_is_reported_with_a_suggestion(tmp_path: Path) -> None:
-    """A misspelt file name points at the closest file in the folder."""
-    (tmp_path / "dummy_was_database.xlsx").write_bytes(b"")
-    with pytest.raises(
-        wrangle.InputError, match=r"file not found.*Did you mean 'dummy_was_database"
-    ):
-        wrangle.input_file(tmp_path, {"file": "dummy_was_databse.xlsx"}, "WAS database")
+class TestLoadLookup:
+    """``load_lookup``: read a raw_value -> agreed_value mapping."""
+
+    def test_mapping_file_missing_a_column(self, tmp_path: Path) -> None:
+        """Mapping CSVs are checked for their headings too."""
+        path = tmp_path / "sector.csv"
+        path.write_text("raw,agreed_value\nPublic,Public\n", encoding="utf-8")
+        with pytest.raises(
+            wrangle.InputError, match=r"mappings/sector.csv.*\['raw_value'\]"
+        ):
+            wrangle.load_lookup(path)
 
 
-def test_missing_sheet_lists_the_sheets(tmp_path: Path) -> None:
-    """A wrong sheet name lists the real sheets and suggests the closest."""
-    path = save_xlsx(tmp_path / "signups.xlsx", {"Account signups": [["Org"], ["A"]]})
-    with pytest.raises(wrangle.InputError, match=r"no sheet 'Account signup'.*Did you mean"):
-        wrangle.read_sheet(path, "Account signup", 1)
-    with pytest.raises(wrangle.InputError, match=r"no sheet number 3"):
-        wrangle.read_sheet(path, 3, 1)
+class TestCheckConfig:
+    """``check_config``: bad settings stop before any file is read."""
+
+    @pytest.mark.parametrize(
+        ("change", "message"),
+        [
+            (
+                lambda c: c["was"].pop("org"),
+                r"\[was\] is missing setting\(s\) \['org'\]",
+            ),
+            (lambda c: c.pop("peer"), r"section \[peer\] is missing"),
+            (
+                lambda c: c["was"].update(completed_rule="whenever"),
+                "completed_rule 'whenever'",
+            ),
+            (
+                lambda c: c["employers"].update(source_priority=["was"]),
+                "source_priority",
+            ),
+            (
+                lambda c: [
+                    c["survey"].pop(k, None) for k in ("file", "file_pattern")
+                ],
+                r"\[survey\] needs 'file' or 'file_pattern'",
+            ),
+        ],
+    )
+    def test_problem_is_named(
+        self,
+        settings: wrangle.Config,
+        change: Callable[[wrangle.Config], object],
+        message: str,
+    ) -> None:
+        """Each bad config gives a message naming the section and setting.
+
+        Args:
+            settings: A copy of the fixture config.
+            change: Breaks the config in one way.
+            message: A pattern the error message must match.
+        """
+        change(settings)
+        with pytest.raises(wrangle.InputError, match=message):
+            wrangle.check_config(settings)
 
 
-def test_missing_column_is_caught_as_the_file_is_read(tmp_path: Path) -> None:
-    """Missing headings are reported with the file, sheet and heading row."""
-    path = save_xlsx(tmp_path / "was.xlsx", {"query": [["Title", "Sector"], ["Org 1", "Public"]]})
-    with pytest.raises(
-        wrangle.InputError, match=r"was.xlsx, sheet 'query'.*\['Sectr'\]. Did you mean 'Sector'"
-    ):
-        wrangle.read_sheet(path, 0, 1, "WAS", ["Title", "Sectr"])
-    df = wrangle.read_sheet(path, 0, 1, "WAS", ["Title", "Sector"])
-    assert list(df.columns) == ["Title", "Sector", "excel_row"]
+class TestMain:
+    """``main``: the command line, ``python wrangle.py [config.toml]``."""
+
+    def test_input_problem_exits_with_1_and_a_message(
+        self,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A bad survey pattern: no traceback, exit 1, nothing written."""
+        settings["survey"]["file_pattern"] = "no-such-export-*.xlsx"
+        code = wrangle.main([str(write_config(settings))])
+        assert code == 1
+        assert (
+            "Stopped: Survey export: no file matching 'no-such-export-*.xlsx'"
+            in caplog.text
+        )
+        assert not list((tmp_path / "out").glob("*.csv"))
 
 
-def test_header_row_past_the_end_of_the_sheet(tmp_path: Path) -> None:
-    """A header_row beyond the data says how many rows the sheet has."""
-    path = save_xlsx(tmp_path / "small.xlsx", {"Sheet1": [["Org"], ["A"]]})
-    with pytest.raises(wrangle.InputError, match=r"header_row is 5 .* only 2 row"):
-        wrangle.read_sheet(path, 0, 5)
+class TestWriteConfig:
+    """The ``write_config`` fixture that the tests above rely on."""
+
+    def test_unchanged_copy_runs(
+        self,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """An unchanged copy of the fixture config runs normally."""
+        tables = wrangle.run(write_config(settings), now=run_time)
+        assert len(tables["dim_employer"]) > 0
 
 
-def test_file_that_is_not_excel(tmp_path: Path) -> None:
-    """A file with the wrong content gets a plain message, not a zipfile traceback."""
-    path = tmp_path / "broken.xlsx"
-    path.write_text("not a workbook", encoding="utf-8")
-    with pytest.raises(wrangle.InputError, match="not a readable .xlsx file"):
-        wrangle.read_sheet(path, 0, 1)
+class TestLauncher:
+    """``python wrangle.py [config.toml]``: the launcher script."""
 
-
-def test_mapping_file_missing_a_column(tmp_path: Path) -> None:
-    """Mapping CSVs are checked for their headings too."""
-    path = tmp_path / "sector.csv"
-    path.write_text("raw,agreed_value\nPublic,Public\n", encoding="utf-8")
-    with pytest.raises(wrangle.InputError, match=r"mappings/sector.csv.*\['raw_value'\]"):
-        wrangle.load_lookup(path)
-
-
-@pytest.mark.parametrize(
-    "change, message",
-    [
-        (lambda c: c["was"].pop("org"), r"\[was\] is missing setting\(s\) \['org'\]"),
-        (lambda c: c.pop("peer"), r"section \[peer\] is missing"),
-        (lambda c: c["was"].update(completed_rule="whenever"), "completed_rule 'whenever'"),
-        (lambda c: c["employers"].update(source_priority=["was"]), "source_priority"),
-        (lambda c: c["survey"].pop("file_pattern"), r"\[survey\] needs 'file' or 'file_pattern'"),
-    ],
-)
-def test_config_problems_stop_before_any_file_is_read(
-    change: Callable[[wrangle.Config], object], message: str
-) -> None:
-    """Each bad config gives a message naming the section and setting."""
-    cfg = real_config()
-    change(cfg)
-    with pytest.raises(wrangle.InputError, match=message):
-        wrangle.check_config(cfg)
-
-
-def test_command_line_exits_with_1_and_a_message(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Command line with a bad survey pattern: no traceback, exit code 1, nothing written."""
-    cfg = real_config()
-    cfg["survey"]["file_pattern"] = "no-such-export-*.xlsx"
-    code = wrangle.main([str(config_in(tmp_path, cfg))])
-    assert code == 1
-    assert "Stopped: Survey export: no file matching 'no-such-export-*.xlsx'" in caplog.text
-    assert not list((tmp_path / "out").glob("*.csv"))
-
-
-def test_config_written_by_these_tests_runs(tmp_path: Path) -> None:
-    """Sanity check for the helpers above: an unchanged copy of the config runs normally."""
-    tables = wrangle.run(config_in(tmp_path, real_config()))
-    assert len(tables["dim_employer"]) > 0
+    def test_runs_the_pipeline_with_a_config_argument(
+        self,
+        project_folder: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        tmp_path: Path,
+    ) -> None:
+        """The script runs in its own process and writes every table."""
+        config = write_config(settings)
+        result = subprocess.run(
+            [sys.executable, str(project_folder / "wrangle.py"), str(config)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        written = {p.stem for p in (tmp_path / "out").glob("*.csv")}
+        assert {"dim_employer", "fact_engagement", "dim_date"} <= written

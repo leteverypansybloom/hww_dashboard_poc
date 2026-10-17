@@ -1,10 +1,12 @@
-# Frozen copy of config.toml used ONLY by tests/test_golden.py.
-# It pins the dummy input files the snapshot in this folder was made from, so the golden test
-# keeps working after config.toml is switched to the real data. Paths are relative to this file.
+# Frozen copy of config.toml for the tests. It reads the synthetic
+# inputs in tests/data/inputs/, which the snapshot in tests/golden/ was
+# made from, so no test reads files outside this project, and the tests
+# keep working after config.toml is switched to the real data. It does
+# use the live mappings/ folder. Paths are relative to this file.
 
 [paths]
-input_folder = "../../.."
-output_folder = "out"   # not used: the test writes to a temporary folder
+input_folder = "inputs"
+output_folder = "out"   # not used: the tests write to temporary folders
 mappings_folder = "../../mappings"
 
 [signups]

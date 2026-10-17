@@ -1,12 +1,56 @@
-# Tool settings only. This is not an installable package: run the scripts directly
-# (python wrangle.py, streamlit run dashboard.py). Pipeline settings live in config.toml.
+# The HWW dashboard prototype: an installable package (src/hww_dashboard)
+# plus the project files it runs on (config.toml, mappings/, output/).
+# Install it with  pip install -e ".[dev]"  and run the checks with:
 #
-#   ruff check .        lint (PEP 8, imports, docstrings)
-#   ruff format .       layout (line length 100)
-#   mypy                type check
+#   black --check .     layout (PEP 8, 79-character lines)
+#   ruff check .        lint (PEP 8, imports, naming, Google docstrings)
+#   mypy                type check (strict)
+#   pytest              tests, golden outputs and page smoke tests
+
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hww-dashboard"
+version = "0.1.0"
+description = "Healthy Working Wales prototype: CSV tables and a dashboard"
+readme = "README.md"
+requires-python = ">=3.11"
+# Upper bounds stop a fresh install pulling in a major version the code
+# has not been tested against.
+dependencies = [
+    "pandas>=2.1,<4",
+    "openpyxl>=3.1,<4",
+    # 1.63 is the first release whose st.pills() takes wrap=.
+    "streamlit>=1.63,<2",
+    "plotly>=5.24,<8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    # Exact pins, the same as py-common's, so both projects are formatted
+    # and linted alike. Bump them together.
+    "black==26.10.1",
+    "ruff==0.17.0",
+    "mypy==2.4.0",
+    "pandas-stubs",
+    "types-openpyxl",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hww_dashboard = ["py.typed"]
+
+[tool.black]
+line-length = 79
+target-version = ["py311"]
 
 [tool.ruff]
-line-length = 100
+line-length = 79
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -17,23 +61,20 @@ select = [
     "N",        # PEP 8 naming
     "D",        # docstrings
     "UP",       # modern syntax for the target Python version
-    "B",        # likely bugs (mutable defaults, loop variables in closures, ...)
+    "B",        # likely bugs (mutable defaults, closures in loops, ...)
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ruff.lint.per-file-ignores]
-# Tests add the project folder to sys.path before importing it.
-"tests/*" = ["E402"]
+[tool.ruff.lint.isort]
+known-first-party = ["hww_dashboard"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["wrangle.py", "dashboard_data.py", "dashboard.py", "tests"]
+files = ["src", "tests", "wrangle.py", "dashboard.py"]
+mypy_path = "src"
 strict = true
-# Tests import wrangle / dashboard_data from the folder above.
-mypy_path = "."
-explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 # plotly ships without type information.
@@ -42,3 +83,6 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Import test modules without putting their folder on sys.path: the code
+# under test is imported from the installed package, as users import it.
+addopts = ["--import-mode=importlib"]

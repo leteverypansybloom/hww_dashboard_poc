@@ -1,16 +1,37 @@
 # HWW dashboard
 
+A prototype of the Healthy Working Wales (HWW) monitoring dashboard.
 Two steps:
 
-1. `wrangle.py` turns the HWW spreadsheets into tidy CSV tables in `output/`.
-2. `dashboard.py` is a Streamlit app that draws the mockup pages from those tables.
+1. `python wrangle.py` turns the HWW spreadsheets into tidy CSV tables in `output/`.
+2. `streamlit run dashboard.py` is a Streamlit app that draws the mockup pages from those tables.
+
+The code is the installable package `hww_dashboard` in `src/`. This
+folder holds what it runs on: `config.toml`, `mappings/` and `output/`.
+How the prototype relates to the production route (py-common →
+BigQuery → Dataform → Power BI) is in
+[docs/architecture.md](docs/architecture.md).
+
+## Set up
+
+Needs Python 3.11 or newer. From this folder:
+
+```
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+(On macOS or Linux, activate with `source .venv/bin/activate`.)
+`requirements.txt` installs the package, in editable mode, with the
+dependencies listed in `pyproject.toml`. For the developer tools, install
+`requirements-dev.txt` instead (the same as `pip install -e ".[dev]"`).
 
 ## Run
 
-Needs Python 3.11 or newer. Run these from this folder (the dashboard's colours are in `.streamlit/config.toml`, which Streamlit only finds from here).
+Run these from this folder (the dashboard's colours are in `.streamlit/config.toml`, which Streamlit only finds from here).
 
 ```
-pip install -r requirements.txt
 python wrangle.py
 streamlit run dashboard.py
 python -m pytest
@@ -24,22 +45,52 @@ saying which one (exit code 1) before writing anything.
 Tables and `data_quality_report.md` are written to `output/`. Read the report after every run.
 The dashboard picks up new tables automatically after `wrangle.py` runs again (refresh the browser).
 
+`python wrangle.py other.toml` uses another config, and
+`python -m hww_dashboard.wrangle [config.toml]` does the same as
+`python wrangle.py`. To show the tables in another folder, set the
+`HWW_OUTPUT` environment variable to it before starting the dashboard.
+
 How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md).
+
+## Project layout
+
+| Path | What it is |
+|---|---|
+| `wrangle.py`, `dashboard.py` | The two commands: small launchers that call the package. |
+| `src/hww_dashboard/wrangle.py` | The pipeline: reads, cleans and links the inputs, writes the tables and the report. |
+| `src/hww_dashboard/dashboard_data.py` | Every sum the dashboard shows. No Streamlit code, so it is tested on its own. |
+| `src/hww_dashboard/dashboard.py` | The Streamlit pages, charts and branding. It only draws. |
+| `config.toml`, `mappings/` | Settings and lookup tables (below). |
+| `output/` | The tables `wrangle.py` writes (dummy data for now). |
+| `tests/` | Tests grouped by the function under test, the golden-output check and page smoke tests. |
+| `tests/data/` | Synthetic input workbooks and the frozen config the tests use ([README](tests/data/README.md)). |
+| `docs/` | The pipeline guide and the architecture notes. |
 
 ## Checks for developers
 
 ```
 pip install -r requirements-dev.txt
-ruff format --check .
+black --check .
 ruff check .
 mypy
 python -m pytest
 ```
 
-Settings are in `pyproject.toml` (line length 100, Google-style docstrings, mypy strict).
-`tests/test_golden.py` compares every output CSV with a saved copy in `tests/golden/`, so a tidy-up
-that changes any output fails. When an output change is intended, check the diff, then refresh the
-copy with `HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py` and commit it with the change.
+Settings are in `pyproject.toml`: PEP 8 with 79-character lines, the same
+Black, Ruff and mypy versions as py-common, Google-style docstrings
+(checked by Ruff) and mypy in strict mode. GitHub Actions runs the same
+four checks on Python 3.11, 3.12 and 3.13
+(`.github/workflows/tests.yml`).
+
+The tests are self-contained: they read the synthetic workbooks in
+`tests/data/inputs/` through `tests/data/config.toml`, never the real
+inputs, and treat 12:00 on 10 October 2026 as now, so they give the
+same result on any day. `tests/test_golden.py` compares every output
+CSV and the data quality report with a saved copy in `tests/golden/`,
+so a tidy-up that changes any output fails. When an output change is
+intended, check the diff, then refresh the copy with
+`HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py` and commit
+it with the change.
 
 ## Dashboard pages
 
@@ -52,11 +103,11 @@ copy with `HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py` and commit
 | Survey findings | page 1 | % of respondents choosing each answer (Figure 13 style), with filters. Answers nobody chose show as 0%. |
 
 All filters start with everything selected. Events and survey responses with no linked employer count as "Unknown" for sector, industry, size and sites.
-A warning appears when a chart rests on fewer than 10 respondents or records (`SMALL_N` at the top of `dashboard.py`).
+A warning appears when a chart rests on fewer than 10 respondents or records (`SMALL_N` at the top of `src/hww_dashboard/dashboard.py`).
 Every chart has a "Show data table" box with the numbers behind it.
 
-To show the HWW logo instead of the text name, save it as `assets/logo.png`.
-`dashboard_data.py` does all the sums (and is what the tests check); `dashboard.py` only draws.
+To show the HWW logo instead of the text name, save it as `assets/logo.png` in this folder.
+`hww_dashboard.dashboard_data` does all the sums (and is what the unit tests check); `hww_dashboard.dashboard` only draws.
 
 ## Using the real data
 
@@ -66,6 +117,10 @@ To show the HWW logo instead of the text name, save it as `assets/logo.png`.
    - **Survey checks** – new or missing survey columns mean the form changed; update `mappings/survey_columns.csv`.
    - **Answer not in survey_answers.csv** – add the option, or a Welsh translation to `survey_answer_translations.csv`.
 3. Run again until the report is clean, then `python -m pytest`.
+
+The tests never read the real data, so they keep passing whatever `config.toml` points at.
+Before the real files arrive, add `output/` to `.gitignore`: with real data its tables hold
+organisation names and survey answers.
 
 ## Mappings (`mappings/`)
 

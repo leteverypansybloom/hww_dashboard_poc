@@ -16,22 +16,29 @@ Contents
 8. [Design decisions and why](#8-design-decisions-and-why)
 9. [Questions another developer is likely to ask](#9-questions-another-developer-is-likely-to-ask)
 
-Numbers in this guide come from the dummy input files in the folder above `hww_poc_code`.
+Numbers in this guide come from the dummy input files in the folder above `hww_poc_code`. The
+synthetic copies the tests use, in `tests/data/inputs/`, give exactly the same numbers.
+
+How the prototype relates to the production route (py-common → BigQuery → Dataform → Power BI)
+is in [architecture.md](architecture.md).
 
 ---
 
 ## 1. The 5-minute version
 
-There are two programs and a set of settings files.
+There are two programs and a set of settings files. The programs are modules of the installable
+package `hww_dashboard` in `src/`; the scripts `wrangle.py` and `dashboard.py` in the project
+folder are small launchers that keep the commands `python wrangle.py` and
+`streamlit run dashboard.py` working.
 
 | Piece | Job |
 |---|---|
-| [`wrangle.py`](../wrangle.py) | Reads the four spreadsheets, cleans them, links rows to organisations and writes 11 tidy CSV tables plus `data_quality_report.md` to `output/`. |
-| [`dashboard_data.py`](../dashboard_data.py) | Reads those CSVs and does every sum the dashboard shows. It has no Streamlit code, so it can be tested on its own. |
-| [`dashboard.py`](../dashboard.py) | The Streamlit app. It only draws what `dashboard_data.py` returns. |
+| [`wrangle.py`](../src/hww_dashboard/wrangle.py) | Reads the four spreadsheets, cleans them, links rows to organisations and writes 11 tidy CSV tables plus `data_quality_report.md` to `output/`. |
+| [`dashboard_data.py`](../src/hww_dashboard/dashboard_data.py) | Reads those CSVs and does every sum the dashboard shows. It has no Streamlit code, so it can be tested on its own. |
+| [`dashboard.py`](../src/hww_dashboard/dashboard.py) | The Streamlit app. It only draws what `dashboard_data.py` returns. |
 | [`config.toml`](../config.toml) | Where the files are, which sheet and heading row to read, which column is which. |
 | [`mappings/`](../mappings) | CSV lookup tables: messy value → agreed value (e.g. `Private Sector` → `Private`), and what each survey column means. |
-| [`tests/`](../tests) | `pytest` checks: privacy, keys, sums, error messages, and a byte-for-byte snapshot of the output. |
+| [`tests/`](../tests) | `pytest` checks, grouped by the function under test: privacy, keys, sums, error messages, a byte-for-byte snapshot of the output, and a smoke test of every page. They read synthetic inputs in `tests/data/`, never the real files. |
 
 The four inputs:
 
@@ -177,7 +184,8 @@ name, such as the dummy survey response with a blank Company. Blank ids are allo
 
 ## 4. What happens when you run `python wrangle.py`
 
-`main()` sets up logging and calls `run()`. `run()` is short on purpose: it reads like a table of
+The launcher calls `main()` with the `config.toml` next to it (or the config you name). `main()`
+sets up logging and calls `run()`. `run()` is short on purpose: it reads like a table of
 contents, and each numbered comment matches a step below.
 
 | Step | Code | What it produces |
@@ -225,8 +233,8 @@ Steps 0 and 1 are where the checking happens:
 
 ## 5. Function by function: wrangle.py
 
-The file is in sections (`# ---- report`, `# ---- cleaning helpers`, …) in roughly the order
-`run()` uses them. Each function below gets **What** (what it does), **Why** (why it exists or works
+The module is in sections (`# ---- report`, `# ---- cleaning`, `# ---- reading`, …) in roughly
+the order `run()` uses them. Each function below gets **What** (what it does), **Why** (why it exists or works
 this way) and **Gotchas** (what can trip you up).
 
 ### Constants at the top
@@ -240,7 +248,9 @@ this way) and **Gotchas** (what can trip you up).
 - `UNKNOWN = "Unknown"` is the value for "no usable answer" in sector, industry, size and sites.
   An empty string `""` means "no value at all" (e.g. no `employer_id`, no duration).
 - `MONTHS`, `SOURCES`, `COMPLETED_RULES` and `DATE_IN_NAME` are small lookup constants.
-- The tables are wrapped in `# fmt: off` / `# fmt: on` so `ruff format` keeps them compact.
+- `DEFAULT_CONFIG` is the config used when none is given: `config.toml` in the current folder.
+  The `wrangle.py` launcher passes the one next to it instead.
+- Black lays the tables out one name per line, so adding a column is a one-line change.
 
 ### Errors and the report
 
@@ -259,8 +269,9 @@ this way) and **Gotchas** (what can trip you up).
 - **Why:** each function adds notes as it goes, so the report says exactly what happened in this run.
   The fixed section order makes two reports easy to compare.
 - **Gotchas:** `write()` adds lines to "Unmapped values" itself, so call it once. The first lines
-  contain the run time, which is why the golden test only compares CSVs. Some warnings depend on
-  today's date ("dated after today"), so the report can change from day to day even when the data doesn't.
+  contain the run time (`write(path, run_at)`), and some warnings depend on the run date ("dated
+  after today"), so the report can change from day to day even when the data doesn't. `run()`
+  takes `now=` so the tests can fix both, which is how the golden test compares the report too.
 
 #### `markdown_table(df)`
 - **What:** turns a small DataFrame into a markdown table, replacing `|` in cells with `/`.
@@ -268,6 +279,13 @@ this way) and **Gotchas** (what can trip you up).
   this isn't worth it.
 - **Gotcha:** this is where `Private | Public` in `attribute_conflicts` becomes `Private / Public`
   in the report. The CSV keeps the `|`.
+
+#### `count_values(values)`
+- **What:** counts each value, most common first. Tied counts keep the order in which the values
+  first appear.
+- **Why:** pandas' own `value_counts` puts tied counts in a different order in pandas 2 and
+  pandas 3. The report's Duplicates list, its event-type table and the date warnings use this
+  instead, so the report is the same whichever pandas is installed.
 
 ### Cleaning helpers
 
@@ -448,7 +466,7 @@ Each `load_*` function follows the same pattern:
 6. map the bands;
 7. add the source's own id.
 
-#### `load_signups(cfg, folder, lookups, overrides, report)`
+#### `load_signups(cfg, folder, lookups, overrides, report, today)`
 - **What, in order:**
   1. Read the sheet with headings on row 2.
   2. Read the month column (`B`) as dates and **forward-fill** it, because the month is a merged
@@ -459,7 +477,7 @@ Each `load_*` function follows the same pattern:
   6. Map the bands.
   7. Set `signup_id = "SU" + Excel row`, e.g. `SU0012`.
   8. Parse the two flag columns into `survey_flag/dates/raw` and `was_flag/dates/raw`, noting
-     unreadable or future dates.
+     unreadable dates and dates after `today` (the run date).
 - **Why:** each row is one user, so duplicate organisations are **kept** here. They are merged only
   in `dim_employer`. The signup id is the Excel row number, so anyone can find the row.
 - **Gotchas:** the forward-fill runs before blank rows are dropped, so a month on a blank row still
@@ -603,7 +621,7 @@ Each `load_*` function follows the same pattern:
   renumbers the options after it. Nothing outside the output files stores these ids, so that's fine.
   Don't hard-code an `answer_id` anywhere.
 
-#### `build_engagement(signups, survey, was, sessions, peer, completed_rule, report)` (with inner `add`)
+#### `build_engagement(signups, survey, was, sessions, peer, completed_rule, report, today)` (with inner `add`)
 - **What:** one row per event, of six types:
 
   | event_type | date |
@@ -616,7 +634,7 @@ Each `load_*` function follows the same pattern:
   | `peer_mentoring_interest` | expression of interest date |
 
   `engagement_id = event_type + "-" + source id`. Events with no date, and events dated after
-  today, are reported.
+  `today` (the run date), are reported.
 - **Why:** pages 2 and 3 of the dashboard only need "who did what, when". One long table makes
   every engagement chart a filter plus a count.
 - **Gotcha:** `completed_rule` changes what "completed" means:
@@ -647,7 +665,7 @@ Each `load_*` function follows the same pattern:
   holds `True`, `False` and `None` objects, and the comparison treats `None` as not flagged.
   Using the column directly as a mask fails because of the `None` values.
 
-#### `write_csv(df, folder, name)` and `write_outputs(tables, out, engagement, report)`
+#### `write_csv(df, folder, name)` and `write_outputs(tables, out, engagement, report, run_at)`
 - **What:** `write_csv` reindexes the table to `COLUMNS[name]`, writes dates as `YYYY-MM-DD`, and
   writes UTF-8 without the index. `write_outputs` writes every table, adds the row counts and
   event-type counts to the report, and writes the report.
@@ -659,15 +677,19 @@ Each `load_*` function follows the same pattern:
 
 ### Entry points
 
-#### `run(config_path=..., output_folder=None)`
+#### `run(config_path=DEFAULT_CONFIG, output_folder=None, now=None)`
 - **What:** the 7 steps above. It returns the tables as a dict, which the tests use.
-  `output_folder` overrides the config so tests can write to a temporary folder.
+  `output_folder` overrides the config so tests can write to a temporary folder. `now` is the
+  time of the run (the real time unless given): it is shown in the report, and its date is the
+  "today" that future dates are checked against. The tests pass 12:00 on 10 October 2026.
 - **Gotcha:** folder paths in the config are relative to the **config file**, not to where you
   run the command from.
 
 #### `main(argv=None)`
 - **What:** sets up logging (`INFO`, message only), runs, turns `InputError` into a log line and
-  exit code 1, and returns 0 on success. `if __name__ == "__main__": sys.exit(main())`.
+  exit code 1, and returns 0 on success. The `wrangle.py` launcher calls it with the
+  `config.toml` next to it when no config is named; `python -m hww_dashboard.wrangle` uses
+  `config.toml` in the current folder.
 - **Why:** `python wrangle.py` and `python wrangle.py other.toml` keep working. Any other exception
   still shows a full traceback, because that is a bug to fix.
 
@@ -679,8 +701,8 @@ Each `load_*` function follows the same pattern:
 
 | Function | What | Why / gotchas |
 |---|---|---|
-| `data_stamp(folder)` | Latest modification time of the CSVs. | Passed to the cached loader. When `wrangle.py` rewrites the files the stamp changes, so the cache reloads. |
-| `load_tables(folder)` | Reads each table in `DATE_COLUMNS` as text, converts the listed date columns to `Timestamp`, and makes `answer_order` an int. | Raises `FileNotFoundError` with "Run python wrangle.py first". Reading as text keeps ids like `0011` intact. |
+| `data_stamp(folder)` | Latest modification time of the CSVs in `folder`. | Passed to the cached loader. When `wrangle.py` rewrites the files the stamp changes, so the cache reloads. |
+| `load_tables(folder)` | Reads each table in `DATE_COLUMNS` from `folder` as text, converts the listed date columns to `Timestamp`, and makes `answer_order` an int. | Raises `FileNotFoundError` with "Run python wrangle.py first". Reading as text keeps ids like `0011` intact. The only place the dashboard reads data, so the one to change if the tables ever come from BigQuery instead. |
 | `ordered_options(column, *lists)` | Every distinct filter value: preferred order first (`OPTION_ORDER`), then A–Z, then `Unknown`. | Sizes sort as 0-9, 10-49, … rather than alphabetically. |
 | `apply_filters(df, filters)` | Keeps rows whose value is in each chosen list. | An empty list keeps nothing, matching what the user sees when every pill is off. |
 | `with_employer_attributes(rows, dim_employer)` | Left-joins the four bands from `dim_employer`. Unmatched rows get `Unknown`. | Engagement events have no bands of their own, so they are filtered by their employer's values. |
@@ -695,19 +717,19 @@ Each `load_*` function follows the same pattern:
 
 | Function | What |
 |---|---|
-| `load(stamp)` | `@st.cache_data` wrapper around `load_tables`. |
-| `header(title)` | Page title, plus the logo (`assets/logo.png`) or the bilingual name. |
+| `load(folder, stamp)` | `@st.cache_data` wrapper around `load_tables`. |
+| `header(title, logo)` | Page title, plus the logo (`assets/logo.png`) or the bilingual name. |
 | `style(fig, height)` | Shared quiet Plotly styling. |
 | `whole_number_ticks(largest)` | Count axes with no 0.5 ticks. |
 | `show_chart(fig)` | `st.plotly_chart` with the app's own theme. |
-| `date_range(dates, key)` | Start and end pickers, defaulting to the data's range (never later than today). |
+| `date_range(dates, key, today)` | Start and end pickers, defaulting to the data's range (never later than today). |
 | `choice_filter(label, options, key)` | Pills for up to 6 options, otherwise a collapsed box of checkboxes. All options start selected. |
 | `employer_filters(tables, key, include_size)` | The sector, industry, (size) and sites filters. `Unknown` is always offered. |
 | `small_numbers_warning(n, what)` | Warns when a chart is based on fewer than `SMALL_N` (10). |
-| `page_home`, `page_employer`, `page_engagement`, `page_events`, `page_survey` | One function per page: read inputs, call `dashboard_data`, draw. |
+| `page_home`, `page_employer`, `page_engagement`, `page_events`, `page_survey` | One function per page: read inputs, call `dashboard_data`, draw. The pages that use dates take `today`. |
 | `engagement_chart(...)` | Monthly bars above a cumulative line (two panels, not two y-axes). |
 | `survey_chart(...)` | Horizontal % bars. Multi-choice questions are sorted by size; single-choice keep the form's order. |
-| `main()` | Sidebar menu, loads the data, calls the chosen page. Called at import, because Streamlit runs the file from top to bottom. |
+| `main(root, today=None)` | Page set-up and styles, sidebar menu, loads the data from `root/output` (or `HWW_OUTPUT`), draws the header and the chosen page. Streamlit runs the launcher `dashboard.py` from top to bottom on every interaction, and the launcher calls `main` with its own folder as `root`. The tests pass a fixed `today`. |
 
 ---
 
@@ -901,7 +923,7 @@ to follow. If the data ever gets 100× bigger, these are the places to vectorise
 
 **`dashboard_data.py` has no Streamlit.** All arithmetic is plain functions on DataFrames, tested
 with hand-sized tables whose answers you can work out on paper. `dashboard.py` only draws.
-A smoke test still opens every page using Streamlit's `AppTest`.
+Smoke tests still open every page using Streamlit's `AppTest`, with today fixed.
 
 **Two panels instead of a dual-axis chart.** The mockup overlays monthly bars and a cumulative line
 on two y-axes. Two stacked panels sharing the month axis avoid inviting a comparison between two
@@ -911,25 +933,35 @@ unrelated scales.
 survey uses a pattern, because it is the only file that is downloaded again for each refresh. The
 others are working spreadsheets edited in place.
 
-**One `wrangle.py` file, not a package.** After this tidy-up the file is longer, mostly because of
-docstrings. Splitting it was considered and not done:
-- `run()` is already a table of contents, and the file reads top to bottom in run order.
+**An installable package, with one `wrangle` module.** The code is the package `hww_dashboard`
+in `src/`, installed with `pip install -e .`, so the tests and tools import it like any other
+library and nothing edits `sys.path`. The project folder keeps what the code runs on
+(`config.toml`, `mappings/`, `output/`) and two launchers, so the commands didn't change.
+Splitting `wrangle` into several modules was considered and not done:
+- `run()` is already a table of contents, and the module reads top to bottom in run order.
 - Almost every stage uses the same helpers (`clean_text`, `map_value`, `Report`, `COLUMNS`). Split
   modules would all import from a shared "utils" module, so you'd jump between files without
   getting real separation.
-- `python wrangle.py` and the tests' `import wrangle` stay exactly as they were.
 
 A natural split point, if one is needed later, is a separate module per source once a fifth
 source (events, badges) adds its own loader.
 
-**Golden-output test.** `tests/test_golden.py` runs the pipeline on the dummy files, using a frozen
-config in `tests/golden/config.toml`, and compares every CSV byte for byte (line endings aside) with
-the snapshot. Style changes, refactors and dependency upgrades can't change the numbers without the
-test failing.
+**No py-common in the prototype.** py-common, the shared ingestion library, lands files in
+BigQuery for the production route. The prototype's own reading (a local folder, the newest
+survey export, sheets by position, pandas-style column names) doesn't match it, and using it
+would change the names in `config.toml` and `mappings/`. The comparison, and what to share
+instead, is in [architecture.md](architecture.md).
 
-**Tooling.** `ruff format` (layout, line length 100), `ruff check` (PEP 8, import order, naming,
-Google-style docstrings, likely bugs) and `mypy --strict`, all configured in `pyproject.toml`.
-`pandas-stubs` gives mypy pandas types. Plotly has no types and is excluded.
+**Golden-output test.** `tests/test_golden.py` runs the pipeline on synthetic copies of the dummy
+files (`tests/data/inputs/`), using a frozen config in `tests/data/config.toml` and a fixed run
+time, and compares every CSV and the data quality report byte for byte (line endings aside) with
+the snapshot. Style changes, refactors and dependency upgrades can't change the numbers or the
+report without the test failing.
+
+**Tooling.** Black (layout, PEP 8 with 79-character lines), Ruff (PEP 8, import order, naming,
+Google-style docstrings, likely bugs) and `mypy --strict`, all configured in `pyproject.toml` and
+pinned to the same versions as py-common. `pandas-stubs` gives mypy pandas types. Plotly has no
+types and is excluded. GitHub Actions runs all four checks on Python 3.11 to 3.13.
 
 ---
 
@@ -988,34 +1020,38 @@ changes the output, so the golden test will fail. That is intended: refresh the 
 and commit it with the change.
 
 #### Q: The golden test failed. What now?
-It means a CSV changed. If you didn't mean to change output, the failure shows the first lines of
-the diff, so find the cause. If you did, check the diff by eye, then:
+It means a CSV or the data quality report changed. If you didn't mean to change output, the
+failure shows the first lines of the diff, so find the cause. If you did, check the diff by eye,
+then:
 
 ```
 HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
 ```
 
 (In PowerShell: `$env:HWW_UPDATE_GOLDEN=1; python -m pytest tests/test_golden.py`, then
-`Remove-Item Env:HWW_UPDATE_GOLDEN`.) Commit `tests/golden/*.csv` together with the code change.
-The snapshot uses the live `mappings/` folder, so a new mapping that changes the dummy output also
-needs a refresh.
+`Remove-Item Env:HWW_UPDATE_GOLDEN`.) Commit the files in `tests/golden/` together with the code
+change. The snapshot uses the live `mappings/` folder, so a new mapping that changes the
+synthetic output also needs a refresh.
 
 #### Q: How do I add the events data (page 4) or badges?
 Write a `load_events` like the other loaders: find the file, call `read_sheet` with the required
 columns, clean the organisation and attach `employer_id`. Then produce a DataFrame with the
 `fact_event` columns in `COLUMNS` and put it in `tables` in `run()` in place of the empty one. Add
-its settings to `config.toml` and `REQUIRED_SETTINGS`. The dashboard's Events page already charts
-whatever is in `fact_event.csv`. Add a test, and refresh the golden snapshot.
+its settings to `config.toml`, `tests/data/config.toml` and `REQUIRED_SETTINGS`, and a synthetic
+copy of the file to `tests/data/inputs/` (see the README there). The dashboard's Events page
+already charts whatever is in `fact_event.csv`. Add a test, and refresh the golden snapshot.
 
 #### Q: Where does "today" affect results?
-In the report (future-dated warnings), on the employer page (future events aren't counted as
-engagement yet) and in the date picker defaults. The CSVs never depend on today's date, which is
-why the golden test is stable.
+In the report (the run time and future-dated warnings), on the employer page (future events aren't
+counted as engagement yet) and in the date picker defaults. The CSVs never depend on today's date.
+The tests fix the date anyway, through `run(now=...)` for the pipeline and `main(root, today)` for
+the dashboard, so the report and the pages are tested exactly too.
 
 #### Q: Can I run it from another folder or with another config?
-Yes: `python path/to/wrangle.py other.toml`. Folder paths are relative to the config file. Run the
-dashboard from `hww_poc_code`, because Streamlit only finds `.streamlit/config.toml` (the colours)
-in the folder you start it from.
+Yes: `python path/to/wrangle.py other.toml`, or `python -m hww_dashboard.wrangle other.toml` once
+the package is installed. Folder paths are relative to the config file. Run the dashboard from
+`hww_poc_code`, because Streamlit only finds `.streamlit/config.toml` (the colours) in the folder
+you start it from.
 
 #### Q: Why `== True` with a `# noqa`?
 The flag column holds `True`, `False` and `None` objects. `col == True` gives a clean True/False
@@ -1029,14 +1065,14 @@ latest should win. That would be an output change.
 #### Q: Is it safe to commit `output/`?
 With the dummy data, yes. It is committed so the dashboard runs straight after cloning. With real
 data, **no**: the outputs hold real organisation names and survey answers. Add `output/` to
-`.gitignore` before the real files arrive. The golden snapshot only ever holds dummy data, because
-its config pins the dummy files.
+`.gitignore` before the real files arrive. The golden snapshot only ever holds synthetic data,
+because its config reads the synthetic inputs in `tests/data/`.
 
 #### Q: How do I run all the checks?
 
 ```
 pip install -r requirements-dev.txt
-ruff format --check .
+black --check .
 ruff check .
 mypy
 python -m pytest
