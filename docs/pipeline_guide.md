@@ -262,7 +262,8 @@ this way) and **Gotchas** (what can trip you up).
   to change. Don't raise `SystemExit` or `print` and continue.
 
 #### `class Report` — `__init__`, `add`, `dropped`, `write`
-- Before writing, report text is checked for recognisable contact identifiers.
+- Before writing, report text is checked for recognisable contact identifiers. Rendering
+  leaves the stored sections unchanged, so repeated writes produce identical bytes.
 - **What:** collects markdown lines for `data_quality_report.md`, grouped into the sections in
   `Report.ORDER`. `unmapped` is a `Counter` keyed by `(dimension, source, raw value)`.
   `dropped()` adds a "Rows dropped" line only if the count is non-zero. `write()` adds the

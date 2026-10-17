@@ -578,6 +578,19 @@ class TestReport:
             report.write(path, run_time)
         assert not path.exists()
 
+    def test_repeated_write_is_identical(
+        self, tmp_path: Path, run_time: datetime
+    ) -> None:
+        """Rendering a report twice must not duplicate unmapped notes."""
+        report = wrangle.Report()
+        report.unmapped[("sector", "signups", "New band")] = 2
+        path = tmp_path / "report.md"
+        report.write(path, run_time)
+        first = path.read_bytes()
+        report.write(path, run_time)
+        assert path.read_bytes() == first
+        assert report.sections["Unmapped values"] == []
+
 
 class TestBuildQuestionCatalogue:
     """Catalogue keys must not drop or multiply survey answers."""

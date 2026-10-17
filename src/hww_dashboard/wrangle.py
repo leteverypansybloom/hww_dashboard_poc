@@ -355,6 +355,7 @@ class Report:
             f"Run at {run_at:%Y-%m-%d %H:%M}.",
             "",
         ]
+        sections = deepcopy(self.sections)
         if self.unmapped:
             table = pd.DataFrame(
                 [
@@ -363,21 +364,19 @@ class Report:
                 ],
                 columns=["dimension", "source", "raw value", "rows"],
             )
-            self.add(
-                "Unmapped values",
+            sections["Unmapped values"].append(
                 "These were set to Unknown (bands) or kept as-is "
                 "(topics, durations).",
             )
-            self.add(
-                "Unmapped values",
+            sections["Unmapped values"].append(
                 "Add them to the matching CSV in mappings/ to fix.",
             )
-            self.add("Unmapped values", "")
-            self.add("Unmapped values", markdown_table(table))
+            sections["Unmapped values"].append("")
+            sections["Unmapped values"].append(markdown_table(table))
         for name in self.ORDER:
             lines.append(f"## {name}")
             lines.append("")
-            lines.extend(self.sections[name] or ["None."])
+            lines.extend(sections[name] or ["None."])
             lines.append("")
         lines.append("## Assumptions")
         lines.append("")
