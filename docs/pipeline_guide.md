@@ -343,7 +343,7 @@ this way) and **Gotchas** (what can trip you up).
 #### `date_in_name(path)`, `newest_match(folder, pattern, source)` (with inner `newness`)
 - **What:** `newest_match` globs the input folder for the pattern and skips Excel's `~$` lock
   files. It picks the file with the latest `YYYY-MM-DD` in its name, and on a tie the one saved
-  most recently. It logs the choice and any files it ignored. If nothing matches, it raises
+  most recently, then the lexicographically greatest filename. It logs the choice and any files it ignored. If nothing matches, it raises
   `InputError` and lists the `.xlsx` files that are there.
 - **Why:** the survey tool is downloaded again for each refresh, with the export date in the
   file name. Matching by pattern means a new download needs no config edit. The date in the name

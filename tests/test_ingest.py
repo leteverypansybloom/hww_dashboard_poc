@@ -166,6 +166,14 @@ class TestNewestMatch:
         ):
             wrangle.newest_match(tmp_path, "*survey*.xlsx", "Survey")
 
+    def test_equal_timestamps_use_filename(self, tmp_path: Path) -> None:
+        """Resolve full timestamp ties without filesystem iteration order."""
+        paths = [tmp_path / f"survey-2026-10-01-{c}.xlsx" for c in "az"]
+        for path in paths:
+            path.write_bytes(b"")
+            os.utime(path, (2_000_000_000, 2_000_000_000))
+        assert wrangle.newest_match(tmp_path, "*.xlsx", "Survey") == paths[1]
+
 
 class TestShippedConfig:
     """The project's own config.toml, the one ``python wrangle.py`` uses."""

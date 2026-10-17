@@ -714,9 +714,14 @@ def newest_match(folder: Path, pattern: str, source: str) -> Path:
             "Check file_pattern in config.toml."
         )
 
-    def newness(path: Path) -> tuple[date, float]:
+    def newness(path: Path) -> tuple[date, float, str, str]:
         """Sort key: date in the name, then last-saved time."""
-        return date_in_name(path) or date.min, path.stat().st_mtime
+        return (
+            date_in_name(path) or date.min,
+            path.stat().st_mtime,
+            path.name.casefold(),
+            path.name,
+        )
 
     chosen = max(matches, key=newness)
     others = sorted(p.name for p in matches if p != chosen)
