@@ -254,6 +254,33 @@ class TestUnpivotSurvey:
         q14 = answers[answers["question_id"] == "Q14"]
         assert list(q14["answer"]) == ["Yes", "Sometimes", "No"]
 
+    @pytest.mark.parametrize(
+        ("role", "qid", "option"),
+        [("tci k", "Q01", "A"), ("tick", "", "A"), ("tick", "Q01", "")],
+    )
+    def test_rejects_invalid_mapping(
+        self, role: str, qid: str, option: str
+    ) -> None:
+        """Reject mapping typos rather than silently dropping answers.
+
+        Args:
+            role: Mapping role, possibly misspelt.
+            qid: Question identifier, possibly blank.
+            option: Tick option, possibly blank.
+        """
+        specs = pd.DataFrame(
+            [["A", role, qid, option]],
+            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
+        )
+        with pytest.raises(wrangle.InputError, match="survey_columns.csv"):
+            wrangle.unpivot_survey(
+                pd.DataFrame({"response_id": ["R1"], "A": ["yes"]}),
+                specs,
+                {},
+                {},
+                False,
+            )
+
 
 class TestSurveyPercentages:
     """``survey_percentages``: Figure 13 numbers for one question."""

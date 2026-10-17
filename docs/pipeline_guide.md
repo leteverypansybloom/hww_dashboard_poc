@@ -488,6 +488,7 @@ Each `load_*` function follows the same pattern:
   the signup ids.
 
 #### `unpivot_survey(df, columns_map, answer_lookup, translations, keep_other_text)`
+- Mapping roles, column uniqueness, question IDs and tick options are validated before reading answers.
 - **What:** turns the wide export (one column per question or tick box) into long rows
   `(response_id, question_id, answer)`. For each response and each mapped column:
   - **`tick`**: any value means the box is ticked. The answer is the option named in

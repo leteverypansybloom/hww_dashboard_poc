@@ -1330,6 +1330,34 @@ def load_signups(
     return df
 
 
+def validate_survey_columns(columns_map: pd.DataFrame) -> None:
+    """Reject ambiguous or incomplete survey column specifications.
+
+    Args:
+        columns_map: The records from survey_columns.csv.
+
+    Raises:
+        InputError: A column is repeated, or a role/question is invalid.
+    """
+    allowed = {*SURVEY_ROLES, "single", "tick", "other_text", "drop"}
+    invalid = (
+        ~columns_map["role"].isin(allowed)
+        | columns_map["column"].map(clean_text).eq("")
+        | columns_map["column"].duplicated(keep=False)
+    )
+    questions = columns_map["role"].isin(["single", "tick", "other_text"])
+    invalid |= questions & columns_map["question_id"].map(clean_text).eq("")
+    invalid |= columns_map["role"].eq("tick") & columns_map[
+        "option_or_note"
+    ].map(clean_text).eq("")
+    if invalid.any():
+        raise InputError(
+            "mappings/survey_columns.csv: invalid column mapping. "
+            "Use a known role, unique nonblank column names, question IDs "
+            "for answer columns and an option for each tick."
+        )
+
+
 def unpivot_survey(
     df: pd.DataFrame,
     columns_map: pd.DataFrame,
@@ -1358,6 +1386,7 @@ def unpivot_survey(
           new_answers  (question_id, answer) pairs not found in
                        survey_answers.csv
     """
+    validate_survey_columns(columns_map)
     answer_rows: list[dict[str, str]] = []
     other_rows: list[dict[str, str]] = []
     new_answers: Counter[tuple[str, str]] = Counter()
@@ -1445,6 +1474,8 @@ def load_survey(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
     )
 
+    validate_survey_columns(columns_map)
+
     def column_for(role: str) -> str:
         """Return the export column that survey_columns.csv gives a role.
 
@@ -1462,6 +1493,11 @@ def load_survey(
             raise InputError(
                 f"Survey: no column with role '{role}' in "
                 "mappings/survey_columns.csv."
+            )
+        if len(found) != 1:
+            raise InputError(
+                "mappings/survey_columns.csv: give each source role "
+                "exactly one column."
             )
         return str(found.iloc[0])
 
