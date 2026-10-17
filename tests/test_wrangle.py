@@ -577,3 +577,44 @@ class TestReport:
         with pytest.raises(wrangle.InputError, match="data_quality_report.md"):
             report.write(path, run_time)
         assert not path.exists()
+
+
+class TestBuildQuestionCatalogue:
+    """Catalogue keys must not drop or multiply survey answers."""
+
+    @pytest.mark.parametrize("problem", ["unknown", "questions", "options"])
+    def test_rejects_invalid_keys(self, tmp_path: Path, problem: str) -> None:
+        """Reject orphan and duplicate catalogue keys before joining.
+
+        Args:
+            tmp_path: Temporary mapping folder.
+            problem: Mapping defect to introduce.
+        """
+        question = "Q01,Question,Short,single\n"
+        option = "Q01,Yes,Yes,1\n"
+        (tmp_path / "survey_questions.csv").write_text(
+            "question_id,question,question_short,question_type\n"
+            + question
+            + (question if problem == "questions" else ""),
+            encoding="utf-8",
+        )
+        (tmp_path / "survey_answers.csv").write_text(
+            "question_id,answer,answer_short,answer_order\n"
+            + option
+            + (option if problem == "options" else ""),
+            encoding="utf-8",
+        )
+        specs = pd.DataFrame(
+            [
+                [
+                    "Choice",
+                    "tick",
+                    "Q99" if problem == "unknown" else "Q01",
+                    "Yes",
+                ]
+            ],
+            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
+        )
+        answers = pd.DataFrame(columns=["question_id", "answer"])
+        with pytest.raises(wrangle.InputError, match="survey_.*csv"):
+            wrangle.build_question_catalogue(tmp_path, specs, answers)

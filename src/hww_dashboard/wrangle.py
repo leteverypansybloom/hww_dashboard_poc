@@ -2426,6 +2426,40 @@ def build_question_catalogue(
     options = read_csv_text(
         maps / "survey_answers.csv", MAPPING_COLUMNS["survey_answers"]
     )
+    if (
+        questions["question_id"].eq("").any()
+        or questions["question_id"].duplicated().any()
+        or questions["question"].eq("").any()
+        or not questions["question_type"].isin(["single", "multi"]).all()
+    ):
+        raise InputError(
+            "mappings/survey_questions.csv: use unique nonblank question "
+            "IDs, nonblank questions and single/multi question types."
+        )
+    answer_keys = options.assign(answer=options["answer"].str.casefold())
+    if (
+        options["answer"].eq("").any()
+        or answer_keys.duplicated(["question_id", "answer"]).any()
+    ):
+        raise InputError(
+            "mappings/survey_answers.csv: give each question unique, "
+            "nonblank answers."
+        )
+    mapped_ids = columns_map.loc[
+        columns_map["role"].isin(["single", "tick", "other_text"]),
+        "question_id",
+    ]
+    known_ids = set(questions["question_id"])
+    for filename, ids in (
+        ("survey_answers.csv", options["question_id"]),
+        ("survey_columns.csv", mapped_ids),
+        ("survey_columns.csv", answers["question_id"]),
+    ):
+        if not set(ids).issubset(known_ids):
+            raise InputError(
+                f"mappings/{filename}: unknown question ID. "
+                "Use IDs defined in survey_questions.csv."
+            )
     try:
         options["answer_order"] = options["answer_order"].astype(int)
     except ValueError:

@@ -624,7 +624,8 @@ Each `load_*` function follows the same pattern:
   that turned up but isn't listed is added with `answer_order = 999`. The result is sorted, and
   each option gets `answer_id = question_id + "-" + 2-digit position` (e.g. `Q04-03`).
 - **Why:** the dashboard shows options nobody chose (0%), so it needs the full list of options, not
-  only the ones in the data.
+  only the ones in the data. Duplicate or blank question/answer keys, unsupported question
+  types and orphan question references are rejected before joining.
 - **Gotcha:** `answer_id` comes from the position, so inserting an option in `survey_answers.csv`
   renumbers the options after it. Nothing outside the output files stores these ids, so that's fine.
   Don't hard-code an `answer_id` anywhere.
