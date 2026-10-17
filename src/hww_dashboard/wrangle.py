@@ -871,10 +871,38 @@ def load_lookup(path: Path) -> Lookup:
         A dict keyed by tidied, lower-case raw value.
     """
     table = read_csv_text(path, MAPPING_COLUMNS["lookup"])
-    return {
-        clean_text(r).casefold(): clean_text(a)
-        for r, a in zip(table["raw_value"], table["agreed_value"], strict=True)
-    }
+    return mapping_pairs(table, "raw_value", "agreed_value", path)
+
+
+def mapping_pairs(
+    table: pd.DataFrame, raw: str, agreed: str, path: Path
+) -> Lookup:
+    """Validate and collect a two-column mapping.
+
+    Args:
+        table: CSV records in file order.
+        raw: Key column, matched after cleaning and case folding.
+        agreed: Target column, retaining display case.
+        path: Mapping file for diagnostic messages.
+
+    Returns:
+        Unambiguous mapping; identical duplicate rows are harmless.
+
+    Raises:
+        InputError: A key or target is blank, or targets conflict.
+    """
+    result: Lookup = {}
+    for number, (key, value) in enumerate(
+        zip(table[raw], table[agreed], strict=True), start=2
+    ):
+        key, value = clean_text(key).casefold(), clean_text(value)
+        if not key or not value or (key in result and result[key] != value):
+            raise InputError(
+                f"{path}: row {number} has a blank or conflicting mapping. "
+                "Fill both columns and give each raw value one target."
+            )
+        result[key] = value
+    return result
 
 
 def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
@@ -894,13 +922,25 @@ def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
     table = read_csv_text(
         maps / "org_overrides.csv", MAPPING_COLUMNS["org_overrides"]
     )
-    overrides = {
-        clean_text(r).casefold(): clean_text(c)
-        for r, c in zip(
-            table["raw_name"], table["canonical_name"], strict=True
-        )
-    }
-    return lookups, overrides
+    path = maps / "org_overrides.csv"
+    overrides = mapping_pairs(table, "raw_name", "canonical_name", path)
+    resolved: Lookup = {}
+    for key in overrides:
+        visited: set[str] = set()
+        current = key
+        while current in overrides:
+            if current in visited:
+                raise InputError(
+                    f"{path}: organisation overrides contain a cycle. "
+                    "Point each chain at one canonical name."
+                )
+            visited.add(current)
+            target = overrides[current]
+            if target.casefold() == current:
+                break
+            current = target.casefold()
+        resolved[key] = target
+    return lookups, resolved
 
 
 # ---------------------------------------------------------------- mapping

@@ -392,7 +392,8 @@ this way) and **Gotchas** (what can trip you up).
   (`keep_default_na=False`) and checks its heading columns. Opening it with `utf-8-sig` drops the
   byte-order mark Excel adds when it saves a CSV. `load_lookup` turns a `raw_value,agreed_value`
   file into a dict keyed by `clean_text(raw).casefold()`. `load_mappings` loads the six lookups
-  plus `org_overrides.csv`.
+  plus `org_overrides.csv`. Blank keys/targets and conflicting duplicate keys are rejected.
+  Organisation chains resolve to their final canonical name; cycles are rejected.
 - **Why:** keying on cleaned, case-folded text means the lookup ignores case and spacing, so
   `Private Sector`, `private sector` and ` Private  sector ` all match one row.
 - **Gotcha:** without `keep_default_na=False`, pandas turns the text `NA` or `None` into NaN. Use

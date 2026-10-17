@@ -378,3 +378,47 @@ class TestLauncher:
         assert result.returncode == 0, result.stderr
         written = {p.stem for p in (tmp_path / "out").glob("*.csv")}
         assert {"dim_employer", "fact_engagement", "dim_date"} <= written
+
+
+class TestLoadMappings:
+    """Reject ambiguous mappings and resolve organisation chains."""
+
+    @pytest.mark.parametrize("rows", ["A,B\na,C\n", "A,\n", ",B\n"])
+    def test_rejects_bad_lookup(self, tmp_path: Path, rows: str) -> None:
+        """Fail before a conflicting or blank mapping loses data.
+
+        Args:
+            tmp_path: Temporary mapping folder.
+            rows: Conflicting or incomplete CSV records.
+        """
+        path = tmp_path / "sector.csv"
+        path.write_text("raw_value,agreed_value\n" + rows, encoding="utf-8")
+        with pytest.raises(wrangle.InputError, match="sector.csv.*row"):
+            wrangle.load_lookup(path)
+
+    @pytest.mark.parametrize("cycle", [False, True])
+    def test_override_chains(
+        self, tmp_path: Path, project_folder: Path, cycle: bool
+    ) -> None:
+        """Resolve chains to one employer or reject a cycle.
+
+        Args:
+            tmp_path: Temporary mapping folder.
+            project_folder: Repository containing the non-personal mappings.
+            cycle: Whether the last override closes a cycle.
+        """
+        import shutil
+
+        shutil.copytree(project_folder / "mappings", tmp_path / "maps")
+        maps = tmp_path / "maps"
+        tail = "C,A\n" if cycle else "C,C\n"
+        (maps / "org_overrides.csv").write_text(
+            "raw_name,canonical_name\nA,B\nB,C\n" + tail,
+            encoding="utf-8",
+        )
+        if cycle:
+            with pytest.raises(wrangle.InputError, match="org_overrides.csv"):
+                wrangle.load_mappings(maps)
+        else:
+            _, overrides = wrangle.load_mappings(maps)
+            assert overrides == {"a": "C", "b": "C", "c": "C"}
