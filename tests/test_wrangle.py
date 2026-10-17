@@ -281,6 +281,21 @@ class TestUnpivotSurvey:
                 False,
             )
 
+    def test_tick_uses_catalogue_answer_case(self) -> None:
+        """Case differences in tick labels cannot break catalogue links."""
+        specs = pd.DataFrame(
+            [["A", "tick", "Q01", "yes"]],
+            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
+        )
+        answers, _, _ = wrangle.unpivot_survey(
+            pd.DataFrame({"response_id": ["R1"], "A": ["tick"]}),
+            specs,
+            {("Q01", "yes"): "Yes"},
+            {},
+            False,
+        )
+        assert list(answers["answer"]) == ["Yes"]
+
 
 class TestSurveyPercentages:
     """``survey_percentages``: Figure 13 numbers for one question."""

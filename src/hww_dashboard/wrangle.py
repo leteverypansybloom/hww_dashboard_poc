@@ -1464,7 +1464,8 @@ def unpivot_survey(
             if spec.role == "tick":
                 # Any value in a tick-box column means the box was ticked;
                 # the option comes from the mapping.
-                answer = str(spec.option_or_note)
+                option = clean_text(spec.option_or_note)
+                answer = answer_lookup.get((qid, option.casefold()), option)
             elif spec.role == "single":
                 answer = translations.get((qid, text.casefold()), text)
                 answer = answer_lookup.get((qid, answer.casefold()), answer)
