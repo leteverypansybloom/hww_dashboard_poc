@@ -1,26 +1,6 @@
-"""Safety net: the pipeline must write exactly the saved snapshot.
-
-The snapshot in tests/golden/ was taken before the code was tidied up:
-every output CSV, and the data quality report of a run at 12:00 on
-10 October 2026 (the report shows the run time, and warns about dates
-after it). A style change or refactor must not change a single byte of
-them. If an output change is intended, check the difference by hand,
-then refresh the snapshot with
-
-    HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
-
-(in PowerShell, run ``$env:HWW_UPDATE_GOLDEN=1`` first) and commit the
-new files in tests/golden/ together with the code change.
-
-The run reads the synthetic inputs through tests/data/config.toml, so
-this test is unaffected when config.toml moves to the real data. It does
-use the live mappings/ folder: adding a mapping that changes the
-synthetic output is an output change.
-"""
+"""Read-only checks against the frozen synthetic pipeline snapshot."""
 
 import difflib
-import os
-import shutil
 from pathlib import Path
 
 import pytest
@@ -55,24 +35,18 @@ def snapshot_files() -> list[str]:
 
 @pytest.fixture(scope="module")
 def fresh_output(pipeline_output: Path) -> Path:
-    """The pipeline's output, after refreshing the snapshot if asked to.
+    """Return pipeline output without ever refreshing golden files.
 
-    With ``HWW_UPDATE_GOLDEN=1`` the snapshot is replaced by this output
-    first, so the comparisons pass and git shows what changed.
+    Args:
+        pipeline_output: Shared output from the frozen synthetic run.
 
     Returns:
-        The folder written by one run on the synthetic inputs.
+        The generated output folder, leaving the snapshot untouched.
     """
-    if os.environ.get("HWW_UPDATE_GOLDEN") == "1":
-        for old in GOLDEN.glob("*.csv"):
-            old.unlink()
-        for new in pipeline_output.glob("*.csv"):
-            shutil.copy(new, GOLDEN / new.name)
-        shutil.copy(pipeline_output / REPORT, GOLDEN / REPORT)
     return pipeline_output
 
 
-class TestGoldenSnapshot:
+class TestRun:
     """The pipeline's output matches tests/golden/ exactly."""
 
     def test_same_set_of_csv_files(self, fresh_output: Path) -> None:

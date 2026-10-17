@@ -748,7 +748,14 @@ def newest_match(folder: Path, pattern: str, source: str) -> Path:
         )
 
     def newness(path: Path) -> tuple[date, float, str, str]:
-        """Sort key: date in the name, then last-saved time."""
+        """Rank exports by date, save time and filename.
+
+        Args:
+            path: Matching export file.
+
+        Returns:
+            A total ordering independent of directory iteration order.
+        """
         return (
             date_in_name(path) or date.min,
             path.stat().st_mtime,

@@ -40,6 +40,9 @@ def data_folder() -> Path:
 def fixture_config(data_folder: Path) -> Path:
     """The frozen config that reads the synthetic inputs.
 
+    Args:
+        data_folder: Folder containing synthetic workbooks and frozen settings.
+
     Returns:
         tests/data/config.toml.
     """
@@ -61,6 +64,9 @@ def run_time() -> datetime:
 def today(run_time: datetime) -> date:
     """The date that the tests treat as today.
 
+    Args:
+        run_time: Frozen run timestamp used throughout the pipeline tests.
+
     Returns:
         The day of ``run_time``.
     """
@@ -77,6 +83,11 @@ def pipeline_output(
 
     The folder is shared by every test that uses this fixture, so tests
     must copy it before changing anything in it.
+
+    Args:
+        tmp_path_factory: Factory for an isolated session output folder.
+        fixture_config: Frozen configuration pointing only to synthetic inputs.
+        run_time: Frozen run timestamp used throughout the pipeline tests.
 
     Returns:
         The folder holding the tables and data_quality_report.md.

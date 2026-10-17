@@ -35,6 +35,9 @@ def read_outputs(folder: Path) -> dict[str, pd.DataFrame]:
 def outputs(pipeline_output: Path) -> dict[str, pd.DataFrame]:
     """The tables written by one run on the synthetic inputs.
 
+    Args:
+        pipeline_output: Shared output from the synthetic pipeline run.
+
     Returns:
         Table name -> table, as text.
     """
@@ -44,6 +47,9 @@ def outputs(pipeline_output: Path) -> dict[str, pd.DataFrame]:
 @pytest.fixture(scope="module")
 def settings(fixture_config: Path) -> wrangle.Config:
     """The frozen config that the run used.
+
+    Args:
+        fixture_config: Frozen configuration pointing only to synthetic inputs.
 
     Returns:
         tests/data/config.toml as nested dicts.
@@ -55,6 +61,9 @@ def settings(fixture_config: Path) -> wrangle.Config:
 @pytest.fixture(scope="module")
 def input_cells(data_folder: Path) -> list[str]:
     """Every non-blank cell of every synthetic input workbook, as text.
+
+    Args:
+        data_folder: Folder containing synthetic workbooks and frozen settings.
 
     Returns:
         The cells' values, headings included.
@@ -199,6 +208,11 @@ class TestRun:
         key = ["response_id", "question_id", "answer"]
         assert not answers.duplicated(key).any()
 
+    def test_report_uses_frozen_clock(self, pipeline_output: Path) -> None:
+        """Shared pipeline reports carry only the injected timestamp."""
+        report = (pipeline_output / "data_quality_report.md").read_text()
+        assert "Run at 2026-10-10 12:00." in report
+
 
 class TestSyntheticInputs:
     """The committed inputs hold only reserved, synthetic personal data."""
@@ -295,6 +309,31 @@ class TestUnpivotSurvey:
             False,
         )
         assert list(answers["answer"]) == ["Yes"]
+
+    def test_explicit_free_text_opt_in(self) -> None:
+        """Opting in returns Other text separately from coded answers."""
+        specs = pd.DataFrame(
+            [["Other", "other_text", "Q01", ""]],
+            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
+        )
+        answers, other, new = wrangle.unpivot_survey(
+            pd.DataFrame(
+                {"response_id": ["R1"], "Other": ["Business suggestion"]}
+            ),
+            specs,
+            {},
+            {},
+            True,
+        )
+        assert answers.empty
+        assert not new
+        assert other.to_dict("records") == [
+            {
+                "response_id": "R1",
+                "question_id": "Q01",
+                "other_text": "Business suggestion",
+            }
+        ]
 
 
 class TestSurveyPercentages:
@@ -454,6 +493,13 @@ class TestAttachEmployerIds:
         assert list(frame.columns) == ["org", "employer_id"]
         assert frame.empty
 
+    def test_case_matching_and_blank_orgs(self) -> None:
+        """Known names link without case and unnamed responses stay blank."""
+        frame = pd.DataFrame({"org": ["ORG A", "", "Missing"]})
+        dim = pd.DataFrame({"employer_name": ["Org A"], "employer_id": ["E1"]})
+        wrangle.attach_employer_ids([frame], dim)
+        assert list(frame["employer_id"]) == ["E1", "", ""]
+
 
 class TestMakeUnique:
     """Repeated Excel headers remain unique beside literal suffixes."""
@@ -561,6 +607,29 @@ class TestWriteOutputs:
         assert list(tables["badges"].columns) == ["badge"]
         assert not report.sections["Outputs"]
 
+    def test_success_replaces_generation(
+        self, tmp_path: Path, run_time: datetime
+    ) -> None:
+        """Successful publication removes stale free text and keeps notes."""
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "notes.txt").write_text("keep", encoding="utf-8")
+        (out / "survey_other_text.csv").write_text("stale", encoding="utf-8")
+        tables = {"badges": pd.DataFrame({"badge": ["Award"]})}
+        report = wrangle.Report()
+        counts = wrangle.write_outputs(
+            tables, out, pd.DataFrame({"event_type": []}), report, run_time
+        )
+        assert counts == [("badges", 1)]
+        assert list(tables["badges"].columns) == wrangle.COLUMNS["badges"]
+        assert (out / "notes.txt").read_text() == "keep"
+        assert not (out / "survey_other_text.csv").exists()
+        assert (
+            "Run at 2026-10-10 12:00."
+            in (out / "data_quality_report.md").read_text()
+        )
+        assert list(tmp_path.iterdir()) == [out]
+
 
 class TestWriteCsv:
     """Output schema filtering also checks retained values for identifiers."""
@@ -581,6 +650,21 @@ class TestWriteCsv:
             )
         assert value not in str(error.value)
         assert not (tmp_path / "badges.csv").exists()
+
+    def test_schema_dates_and_private_columns(self, tmp_path: Path) -> None:
+        """Extra personal columns are dropped and dates use ISO format."""
+        frame = pd.DataFrame(
+            {
+                "employer_id": ["E1"],
+                "badge": ["Award"],
+                "awarded_date": [date(2026, 3, 4)],
+                "Email": ["person@example.org"],
+            }
+        )
+        assert wrangle.write_csv(frame, tmp_path, "badges") == 1
+        written = pd.read_csv(tmp_path / "badges.csv", dtype=str)
+        assert list(written.columns) == wrangle.COLUMNS["badges"]
+        assert written.iloc[0].tolist() == ["E1", "Award", "2026-03-04"]
 
 
 class TestReport:
@@ -609,6 +693,16 @@ class TestReport:
         report.write(path, run_time)
         assert path.read_bytes() == first
         assert report.sections["Unmapped values"] == []
+
+    def test_zero_drops_add_no_note(self) -> None:
+        """Report row drops only when at least one row is removed."""
+        report = wrangle.Report()
+        report.dropped("Survey", 0, "blank")
+        assert report.sections["Rows dropped"] == []
+        report.dropped("Survey", 2, "blank")
+        assert report.sections["Rows dropped"] == [
+            "- Survey: 2 row(s) dropped - blank"
+        ]
 
 
 class TestBuildQuestionCatalogue:
@@ -650,3 +744,413 @@ class TestBuildQuestionCatalogue:
         answers = pd.DataFrame(columns=["question_id", "answer"])
         with pytest.raises(wrangle.InputError, match="survey_.*csv"):
             wrangle.build_question_catalogue(tmp_path, specs, answers)
+
+
+class TestMarkdownTable:
+    """Render report tables without breaking Markdown columns."""
+
+    def test_empty_and_pipes(self) -> None:
+        """Empty tables use None and cell pipes become slashes."""
+        assert wrangle.markdown_table(pd.DataFrame()) == "None."
+        assert wrangle.markdown_table(pd.DataFrame({"A": ["x|y"]})) == (
+            "| A |\n|---|\n| x/y |"
+        )
+
+
+class TestMapValue:
+    """Map bands and count unknown values exactly once per cell."""
+
+    def test_known_blank_and_unmapped(self) -> None:
+        """Blank bands become Unknown while unknown topics remain text."""
+        report = wrangle.Report()
+        assert (
+            wrangle.map_value(" A ", {"a": "Agreed"}, "d", "s", report)
+            == "Agreed"
+        )
+        assert wrangle.map_value(None, {}, "d", "s", report) == "Unknown"
+        assert wrangle.map_value("New", {}, "d", "s", report, True) == "New"
+        assert wrangle.map_value("New", {}, "d", "s", report) == "Unknown"
+        assert report.unmapped == {("d", "s", "New"): 2}
+
+
+class TestMapBands:
+    """Add mapped attributes in place without copying personal columns."""
+
+    def test_maps_one_band(self) -> None:
+        """Two raw cells give one known band and one Unknown."""
+        frame = pd.DataFrame({"Raw": [" A ", None]})
+        wrangle.map_bands(
+            frame,
+            {"sector": "Raw"},
+            {"sector": {"a": "Public"}},
+            "s",
+            wrangle.Report(),
+        )
+        assert list(frame["sector"]) == ["Public", "Unknown"]
+
+
+class TestOrgName:
+    """Organisation overrides match cleaned, case-folded names."""
+
+    def test_override_and_blank(self) -> None:
+        """Spacing does not stop an override and blanks stay blank."""
+        assert wrangle.org_name("  ORG  A ", {"org a": "Org B"}) == "Org B"
+        assert wrangle.org_name(None, {}) == ""
+
+
+class TestEmployerIdFor:
+    """Employer keys are stable under case differences."""
+
+    def test_known_hash_and_case(self) -> None:
+        """The empty-string MD5 provides a fixed compatibility example."""
+        assert wrangle.employer_id_for("") == "Ed41d8cd9"
+        assert wrangle.employer_id_for("Org A") == wrangle.employer_id_for(
+            "ORG A"
+        )
+        assert wrangle.employer_id_for("Org A") != wrangle.employer_id_for(
+            "Org B"
+        )
+
+
+class TestIso:
+    """Format optional dates without textual missing values."""
+
+    def test_date_and_none(self) -> None:
+        """Only a real date produces a formatted string."""
+        assert wrangle.iso(date(2026, 3, 4)) == "2026-03-04"
+        assert wrangle.iso(None) == ""
+
+
+class TestFinYear:
+    """The financial year changes on 1 April."""
+
+    def test_year_boundary(self) -> None:
+        """31 March and 1 April belong to adjacent financial years."""
+        assert wrangle.fin_year(date(2026, 3, 31)) == "2025-26"
+        assert wrangle.fin_year(date(2026, 4, 1)) == "2026-27"
+
+
+class TestNearestYear:
+    """Resolve yearless flag months relative to the sign-up month."""
+
+    def test_exact_tie_prefers_later_year(self) -> None:
+        """July is six months from both January candidates."""
+        assert wrangle.nearest_year(1, date(2026, 7, 1)) == 2027
+
+
+class TestPickValue:
+    """Resolve employer attributes using each documented tie breaker."""
+
+    @pytest.mark.parametrize(
+        ("values", "sources", "positions", "expected"),
+        [
+            (["Unknown"], ["signups"], [0], "Unknown"),
+            (["A", "A", "B"], ["peer", "peer", "signups"], [0, 1, 2], "A"),
+            (["Other", "B"], ["signups", "peer"], [0, 1], "B"),
+            (["A", "B"], ["peer", "signups"], [2, 1], "B"),
+            (["A", "B"], ["signups", "signups"], [0, 1], "B"),
+        ],
+    )
+    def test_ranking(
+        self,
+        values: list[str],
+        sources: list[str],
+        positions: list[int],
+        expected: str,
+    ) -> None:
+        """Choose by frequency, specificity, source, then row position.
+
+        Args:
+            values: Candidate attributes including Unknown or Other.
+            sources: Source of each candidate.
+            positions: Combined input positions.
+            expected: Winning attribute.
+        """
+        chosen, distinct = wrangle.pick_value(
+            values, sources, positions, wrangle.SOURCES
+        )
+        assert chosen == expected
+        assert distinct == sorted(set(values) - {"Unknown"})
+
+
+class TestCombineOrgRows:
+    """Stack source attributes in an explicit order."""
+
+    def test_positions_follow_source_order(self) -> None:
+        """Two employers receive positions zero and one in source order."""
+        attrs = ["org", "sector", "industry", "size_band", "sites_band"]
+        frame = pd.DataFrame(
+            [["Org A", "Public", "Other", "0-9", "1"]], columns=attrs
+        )
+        combined = wrangle.combine_org_rows({"peer": frame, "was": frame})
+        assert list(combined["source"]) == ["peer", "was"]
+        assert list(combined["position"]) == [0, 1]
+        assert list(combined["org"]) == ["Org A", "Org A"]
+
+
+class TestBuildDimEmployer:
+    """Merge case variants and preserve attribute conflict evidence."""
+
+    def test_merges_names_and_reports_conflict(self) -> None:
+        """A tied band chooses the later row within the same source."""
+        frame = pd.DataFrame(
+            {
+                "org": ["Org A", "ORG A", ""],
+                "sector": ["Public", "Private", "Unknown"],
+                "industry": ["Unknown"] * 3,
+                "size_band": ["Unknown"] * 3,
+                "sites_band": ["Unknown"] * 3,
+                "source": ["signups"] * 3,
+                "position": [0, 1, 2],
+            }
+        )
+        report = wrangle.Report()
+        dim = wrangle.build_dim_employer(frame, wrangle.SOURCES, report)
+        assert len(dim) == 1
+        assert dim.iloc[0]["employer_name"] == "Org A"
+        assert dim.iloc[0]["sector"] == "Private"
+        assert dim.iloc[0]["attribute_conflicts"] == "sector: Private | Public"
+        assert dim.iloc[0]["in_signups"]
+        assert not dim.iloc[0]["in_was"]
+
+
+class TestBuildDimDate:
+    """Calendar bounds cover complete April-to-March financial years."""
+
+    def test_bounds_leap_day_and_empty(self) -> None:
+        """A leap day and following April span two full financial years."""
+        frame = wrangle.build_dim_date(
+            [date(2024, 2, 29), None], [date(2024, 4, 1)]
+        )
+        assert frame["date"].iloc[0] == date(2023, 4, 1)
+        assert frame["date"].iloc[-1] == date(2025, 3, 31)
+        assert len(frame) == 731
+        april = frame[frame["date"] == date(2024, 4, 1)].iloc[0]
+        assert april["fin_quarter"] == "Q1"
+        assert april["fin_year"] == "2024-25"
+        empty = wrangle.build_dim_date([None, pd.NaT])
+        assert empty.empty
+        assert list(empty.columns) == wrangle.COLUMNS["dim_date"]
+
+
+class TestCalendarDates:
+    """Calendar inputs include dates recorded only in summaries or flags."""
+
+    def test_includes_summary_and_flags(self) -> None:
+        """All four date sources contribute their literal dates."""
+        day = date(2026, 3, 4)
+        result = wrangle.calendar_dates(
+            pd.DataFrame({"date": [day]}),
+            pd.DataFrame({"date": [None]}),
+            pd.DataFrame({"session_date": [None], "summary_sent_date": [day]}),
+            pd.DataFrame(
+                {"survey_dates": ["2026-01-01;2026-02-01"], "was_dates": [""]}
+            ),
+        )
+        assert result == [
+            [day],
+            [None],
+            [None, day],
+            [date(2026, 1, 1), date(2026, 2, 1)],
+        ]
+
+
+class TestReconcile:
+    """Reconciliation counts employers rather than rows or blank keys."""
+
+    def test_counts_overlap_and_missing_flags(self) -> None:
+        """Repeated signups count once and None is not a positive flag."""
+        signups = pd.DataFrame(
+            {
+                "employer_id": ["E1", "E1", "E2"],
+                "survey_flag": [True, True, None],
+                "was_flag": [False, False, None],
+            }
+        )
+        report = wrangle.Report()
+        wrangle.reconcile(
+            signups,
+            pd.DataFrame({"employer_id": ["E1", "E2", ""]}),
+            pd.DataFrame({"employer_id": []}),
+            report,
+        )
+        assert (
+            "1 employer(s) flagged 'Y'" in report.sections["Reconciliation"][0]
+        )
+        assert (
+            "1 in both, 0 flagged with no record, 1 with a record but no flag"
+            in report.sections["Reconciliation"][0]
+        )
+
+
+class TestUnpivotWasSessions:
+    """Optional session details work independently of held dates."""
+
+    def test_optional_columns_and_topic_deduplication(self) -> None:
+        """A topic-only session is kept and repeated topics count once."""
+        frame = pd.DataFrame(
+            {
+                "was_request_id": ["WAS-1"],
+                "org": ["Org A"],
+                "D": [None],
+                "T": [" A;#A;#B"],
+            }
+        )
+        cfg: wrangle.Config = {
+            "sessions": [
+                {"number": 1, "date": "D", "topics": "T"},
+                {"number": 2, "date": "D"},
+            ],
+            "topic_separator": ";#",
+        }
+        sessions, topics = wrangle.unpivot_was_sessions(
+            frame,
+            cfg,
+            {"was_topic": {"a": "Alpha", "b": "Beta"}},
+            wrangle.Report(),
+        )
+        assert list(sessions["session_id"]) == ["WAS-1-S1"]
+        assert sessions.iloc[0]["session_date"] is None
+        assert sessions.iloc[0]["duration"] == ""
+        assert list(topics["topic"]) == ["Alpha", "Beta"]
+
+
+class TestCheckWasSessions:
+    """Warn about undated details and impossible session chronology."""
+
+    def test_undated_and_early_sessions(self) -> None:
+        """Both conditions produce distinct actionable warnings."""
+        was = pd.DataFrame(
+            {"was_request_id": ["WAS-1"], "enquiry_date": [date(2026, 3, 4)]}
+        )
+        sessions = pd.DataFrame(
+            {
+                "was_request_id": ["WAS-1", "WAS-1"],
+                "session_id": ["WAS-1-S1", "WAS-1-S2"],
+                "session_number": [1, 2],
+                "session_date": [None, date(2026, 3, 3)],
+            }
+        )
+        report = wrangle.Report()
+        wrangle.check_was_sessions(was, sessions, report)
+        assert (
+            "1 session row(s) have details but no date"
+            in report.sections["Warnings"][0]
+        )
+        assert (
+            "1 session(s) are dated before their enquiry date"
+            in report.sections["Warnings"][1]
+        )
+
+
+class TestReportDuplicates:
+    """Duplicate summaries use case-folded employer membership."""
+
+    def test_signup_counts_and_overlap(self) -> None:
+        """Two signups for one employer and a WAS-only employer are counted."""
+        dim = pd.DataFrame(
+            {
+                "employer_name": ["Org A", "Org B"],
+                "in_signups": [True, False],
+                "in_survey": [True, False],
+                "in_was": [False, True],
+                "in_peer": [False, False],
+            }
+        )
+        report = wrangle.Report()
+        wrangle.report_duplicates(
+            pd.DataFrame({"org": ["Org A", "ORG A"]}), dim, report
+        )
+        notes = "\n".join(report.sections["Duplicates"])
+        assert "2 sign-up rows for 1 organisations" in notes
+        assert "Org A: 2 rows" in notes
+        assert "1 found in more than one source" in notes
+        assert "['Org B']" in notes
+
+
+class TestBuildSurveyTables:
+    """Response attributes fall back to employers without losing answers."""
+
+    def test_fills_unknown_attributes(self, project_folder: Path) -> None:
+        """One known employer fills only Unknown response attributes."""
+        survey = pd.DataFrame(
+            {
+                "response_id": ["R1"],
+                "employer_id": ["E1"],
+                "date": [date(2026, 3, 4)],
+                "sector": ["Unknown"],
+                "industry": ["Known"],
+                "size_band": ["0-9"],
+                "sites_band": ["1"],
+            }
+        )
+        dim = pd.DataFrame(
+            {
+                "employer_id": ["E1"],
+                "sector": ["Public"],
+                "industry": ["Other"],
+                "size_band": ["50-249"],
+                "sites_band": ["6+"],
+            }
+        )
+        answers = pd.DataFrame(
+            {
+                "response_id": ["R1"],
+                "question_id": ["Q01"],
+                "answer": ["Known answer"],
+            }
+        )
+        specs = pd.DataFrame(columns=wrangle.MAPPING_COLUMNS["survey_columns"])
+        responses, facts, catalogue = wrangle.build_survey_tables(
+            survey,
+            answers,
+            specs,
+            dim,
+            project_folder / "mappings",
+            wrangle.Report(),
+        )
+        assert responses.iloc[0]["sector"] == "Public"
+        assert responses.iloc[0]["industry"] == "Known"
+        assert len(facts) == 1
+        assert facts.iloc[0]["answer_id"] in set(catalogue["answer_id"])
+
+
+class TestBuildEngagement:
+    """Each completion rule chooses its documented source date."""
+
+    @pytest.mark.parametrize(
+        ("rule", "expected"),
+        [
+            ("summary_1_sent", date(2026, 3, 5)),
+            ("session_1_held", date(2026, 3, 4)),
+            ("last_session_held", date(2026, 3, 6)),
+        ],
+    )
+    def test_completion_rules(
+        self, today: date, rule: str, expected: date
+    ) -> None:
+        """Build one held and one completed event per relevant date.
+
+        Args:
+            today: Frozen warning cutoff.
+            rule: WAS completion configuration.
+            expected: Expected completed event date.
+        """
+        empty = pd.DataFrame()
+        sessions = pd.DataFrame(
+            {
+                "was_request_id": ["WAS-1"] * 2,
+                "session_id": ["WAS-1-S1", "WAS-1-S2"],
+                "employer_id": ["E1"] * 2,
+                "session_number": [1, 2],
+                "session_date": [date(2026, 3, 4), date(2026, 3, 6)],
+                "summary_sent_date": [date(2026, 3, 5), None],
+            }
+        )
+        fact = wrangle.build_engagement(
+            empty, empty, empty, sessions, empty, rule, wrangle.Report(), today
+        )
+        assert list(
+            fact.loc[fact["event_type"] == "was_completed", "date"]
+        ) == [expected]
+        assert len(fact) == 3

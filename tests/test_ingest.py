@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -89,6 +89,9 @@ def save_xlsx(path: Path, sheets: dict[str, list[list[object]]]) -> Path:
 def settings(fixture_config: Path) -> wrangle.Config:
     """A fresh copy of the frozen fixture config, safe to change.
 
+    Args:
+        fixture_config: Frozen configuration pointing only to synthetic inputs.
+
     Returns:
         tests/data/config.toml as nested dicts.
     """
@@ -99,6 +102,10 @@ def settings(fixture_config: Path) -> wrangle.Config:
 @pytest.fixture
 def write_config(tmp_path: Path, fixture_config: Path) -> ConfigWriter:
     """Make configs in tmp_path that read the synthetic inputs.
+
+    Args:
+        tmp_path: Isolated folder for generated test inputs and outputs.
+        fixture_config: Frozen configuration pointing only to synthetic inputs.
 
     Returns:
         A function that writes a config dict to tmp_path/config.toml and
@@ -182,6 +189,9 @@ class TestShippedConfig:
     @pytest.fixture
     def shipped(self, project_folder: Path) -> wrangle.Config:
         """The shipped config, which points at the real inputs.
+
+        Args:
+            project_folder: Repository holding launchers and mappings.
 
         Returns:
             config.toml as nested dicts. No input file is read.
@@ -271,6 +281,17 @@ class TestReadSheet:
         ):
             wrangle.read_sheet(path, 0, 1)
 
+    def test_blank_duplicate_headers_and_empty_body(
+        self, tmp_path: Path
+    ) -> None:
+        """Header-only exports keep unique names and row metadata."""
+        path = save_xlsx(
+            tmp_path / "empty.xlsx", {"Sheet1": [["Org", None, "Org"]]}
+        )
+        table = wrangle.read_sheet(path, 0, 1)
+        assert table.empty
+        assert list(table.columns) == ["Org", "B", "Org.1", "excel_row"]
+
 
 class TestLoadLookup:
     """``load_lookup``: read a raw_value -> agreed_value mapping."""
@@ -282,6 +303,19 @@ class TestLoadLookup:
         with pytest.raises(
             wrangle.InputError, match=r"mappings/sector.csv.*\['raw_value'\]"
         ):
+            wrangle.load_lookup(path)
+
+    @pytest.mark.parametrize("rows", ["A,B\na,C\n", "A,\n", ",B\n"])
+    def test_rejects_bad_lookup(self, tmp_path: Path, rows: str) -> None:
+        """Fail before a conflicting or blank mapping loses data.
+
+        Args:
+            tmp_path: Temporary mapping folder.
+            rows: Conflicting or incomplete CSV records.
+        """
+        path = tmp_path / "sector.csv"
+        path.write_text("raw_value,agreed_value\n" + rows, encoding="utf-8")
+        with pytest.raises(wrangle.InputError, match="sector.csv.*row"):
             wrangle.load_lookup(path)
 
 
@@ -411,11 +445,27 @@ class TestLauncher:
         settings: wrangle.Config,
         write_config: ConfigWriter,
         tmp_path: Path,
+        run_time: datetime,
     ) -> None:
         """The script runs in its own process and writes every table."""
         config = write_config(settings)
+        harness = (
+            "from datetime import datetime; from functools import partial; "
+            "import runpy, sys; from hww_dashboard import wrangle; "
+            "stamp = datetime.fromisoformat(sys.argv.pop()); "
+            "wrangle.run = partial(wrangle.run, now=stamp); "
+            "sys.argv[0] = sys.argv.pop(1); "
+            "runpy.run_path(sys.argv[0], run_name='__main__')"
+        )
         result = subprocess.run(
-            [sys.executable, str(project_folder / "wrangle.py"), str(config)],
+            [
+                sys.executable,
+                "-c",
+                harness,
+                str(project_folder / "wrangle.py"),
+                str(config),
+                run_time.isoformat(),
+            ],
             cwd=tmp_path,
             capture_output=True,
             text=True,
@@ -428,19 +478,6 @@ class TestLauncher:
 
 class TestLoadMappings:
     """Reject ambiguous mappings and resolve organisation chains."""
-
-    @pytest.mark.parametrize("rows", ["A,B\na,C\n", "A,\n", ",B\n"])
-    def test_rejects_bad_lookup(self, tmp_path: Path, rows: str) -> None:
-        """Fail before a conflicting or blank mapping loses data.
-
-        Args:
-            tmp_path: Temporary mapping folder.
-            rows: Conflicting or incomplete CSV records.
-        """
-        path = tmp_path / "sector.csv"
-        path.write_text("raw_value,agreed_value\n" + rows, encoding="utf-8")
-        with pytest.raises(wrangle.InputError, match="sector.csv.*row"):
-            wrangle.load_lookup(path)
 
     @pytest.mark.parametrize("cycle", [False, True])
     def test_override_chains(
@@ -486,6 +523,15 @@ class TestReadCsvText:
         with pytest.raises(wrangle.InputError, match="sector.csv.*UTF-8"):
             wrangle.read_csv_text(path)
 
+    def test_bom_and_literal_null_strings(self, tmp_path: Path) -> None:
+        """A BOM is ignored while NA and None remain literal text."""
+        path = tmp_path / "map.csv"
+        path.write_text(
+            "raw_value,agreed_value\nNA,None\n", encoding="utf-8-sig"
+        )
+        table = wrangle.read_csv_text(path, ["raw_value", "agreed_value"])
+        assert table.iloc[0].tolist() == ["NA", "None"]
+
 
 class TestLoadWas:
     """WAS request identifiers must be unique before session expansion."""
@@ -510,7 +556,13 @@ class TestLoadWas:
         rows.extend([[1, "Org A", "", "", "", "", "", ""]] * 2)
         save_xlsx(tmp_path / "was.xlsx", {"Sheet1": rows})
         with pytest.raises(wrangle.InputError, match="was.xlsx.*duplicate"):
-            wrangle.load_was(cfg, tmp_path, {}, {}, wrangle.Report())
+            wrangle.load_was(
+                cfg,
+                tmp_path,
+                {n: {} for n in wrangle.LOOKUP_NAMES},
+                {},
+                wrangle.Report(),
+            )
 
 
 class TestLoadPeer:
@@ -527,7 +579,13 @@ class TestLoadPeer:
         rows.extend([[1, "Org A", "", "", "", ""]] * 2)
         save_xlsx(tmp_path / "peer.xlsx", {"Sheet1": rows})
         with pytest.raises(wrangle.InputError, match="peer.xlsx.*duplicate"):
-            wrangle.load_peer(cfg, tmp_path, {}, {}, wrangle.Report())
+            wrangle.load_peer(
+                cfg,
+                tmp_path,
+                {n: {} for n in wrangle.LOOKUP_NAMES},
+                {},
+                wrangle.Report(),
+            )
 
 
 class TestLoadSurvey:
@@ -580,3 +638,198 @@ class TestLoadSurvey:
                 wrangle.Report(),
                 ["Full Name"],
             )
+
+
+class TestLoadConfig:
+    """Read configuration without opening any real workbooks."""
+
+    def test_valid_fixture(self, fixture_config: Path) -> None:
+        """The frozen config keeps optional free text disabled."""
+        assert (
+            wrangle.load_config(fixture_config)["survey"][
+                "keep_other_free_text"
+            ]
+            is False
+        )
+
+    def test_missing_and_invalid_files(self, tmp_path: Path) -> None:
+        """Missing and malformed TOML are actionable input errors."""
+        path = tmp_path / "config.toml"
+        with pytest.raises(wrangle.InputError, match="Config file not found"):
+            wrangle.load_config(path)
+        path.write_text("[broken", encoding="utf-8")
+        with pytest.raises(wrangle.InputError, match="not valid TOML"):
+            wrangle.load_config(path)
+
+
+class TestDateInName:
+    """Export names use their last valid date."""
+
+    def test_last_valid_date(self) -> None:
+        """Ignore invalid calendar dates and files without a date."""
+        assert wrangle.date_in_name(
+            Path("2026-03-04-to-2026-04-05-2026-02-30.xlsx")
+        ) == date(2026, 4, 5)
+        assert wrangle.date_in_name(Path("survey.xlsx")) is None
+
+
+class TestFilesIn:
+    """Missing input directories provide an empty suggestion list."""
+
+    def test_existing_and_missing_folders(self, tmp_path: Path) -> None:
+        """Only direct children contribute file-name suggestions."""
+        (tmp_path / "A.xlsx").write_bytes(b"")
+        assert wrangle.files_in(tmp_path) == ["A.xlsx"]
+        assert wrangle.files_in(tmp_path / "missing") == []
+
+
+class TestRequire:
+    """Missing columns name the source, location and closest spelling."""
+
+    def test_suggests_column(self) -> None:
+        """An existing column passes and a typo gives a suggestion."""
+        frame = pd.DataFrame(columns=["Sector"])
+        wrangle.require(frame, ["Sector"], "WAS", "book.xlsx")
+        with pytest.raises(
+            wrangle.InputError, match="book.xlsx.*Did you mean 'Sector'"
+        ):
+            wrangle.require(frame, ["Sectr"], "WAS", "book.xlsx")
+
+
+class TestDropBlankRows:
+    """Ignore row metadata when deciding whether an input row is blank."""
+
+    def test_blank_cells_and_zero(self) -> None:
+        """Whitespace is blank but a numeric zero is a real value."""
+        frame = pd.DataFrame({"A": [None, "  ", 0], "excel_row": [2, 3, 4]})
+        result = wrangle.drop_blank_rows(frame)
+        assert list(result["excel_row"]) == [4]
+        assert len(frame) == 3
+
+
+class TestSuggest:
+    """Suggest close names without inventing matches."""
+
+    def test_close_and_unrelated_names(self) -> None:
+        """A plausible typo gets a suggestion; unrelated text does not."""
+        assert (
+            wrangle.suggest("Sectr", ["Sector"]) == " Did you mean 'Sector'?"
+        )
+        assert wrangle.suggest("zzz", ["Sector"]) == ""
+
+
+class TestLoadSignups:
+    """Merged month cells, repeated employers and flags retain row keys."""
+
+    def test_merged_month_and_role_cleanup(
+        self, tmp_path: Path, today: date
+    ) -> None:
+        """A blank month inherits the previous month before rows are linked."""
+        cfg: wrangle.Config = {
+            "file": "signups.xlsx",
+            "sheet": 0,
+            "header_row": 1,
+            "month": "Month",
+            "org": "Org",
+            "role": "Role",
+            "size": "Size",
+            "sector": "Sector",
+            "industry": "Industry",
+            "sites": "Sites",
+            "completed_survey": "Survey",
+            "requested_was": "WAS",
+        }
+        save_xlsx(
+            tmp_path / "signups.xlsx",
+            {
+                "Sheet1": [
+                    [
+                        "Month",
+                        "Org",
+                        "Role",
+                        "Size",
+                        "Sector",
+                        "Industry",
+                        "Sites",
+                        "Survey",
+                        "WAS",
+                    ],
+                    [
+                        date(2026, 1, 1),
+                        "Org A",
+                        "Org A",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "Y (Dec)",
+                        "N",
+                    ],
+                    [None, "Org A", "Manager", "", "", "", "", "N", "Y"],
+                ]
+            },
+        )
+        report = wrangle.Report()
+        frame = wrangle.load_signups(
+            cfg,
+            tmp_path,
+            {n: {} for n in wrangle.LOOKUP_NAMES},
+            {},
+            report,
+            today,
+        )
+        assert list(frame["signup_id"]) == ["SU0002", "SU0003"]
+        assert list(frame["signup_month"]) == [date(2026, 1, 1)] * 2
+        assert list(frame["role"]) == ["", "Manager"]
+        assert list(frame["survey_dates"]) == ["2025-12-01", ""]
+        assert list(frame["was_flag"]) == [False, True]
+
+
+class TestMappingPairs:
+    """Two-column mappings tolerate only identical cleaned duplicates."""
+
+    def test_identical_duplicates(self) -> None:
+        """Repeated rows with the same target do not introduce ambiguity."""
+        frame = pd.DataFrame({"raw": [" A ", "a"], "target": ["B", "B"]})
+        assert wrangle.mapping_pairs(
+            frame, "raw", "target", Path("map.csv")
+        ) == {"a": "B"}
+
+
+class TestRequireUniqueIds:
+    """Source key checks include generated fallback identifiers."""
+
+    def test_unique_and_duplicate_keys(self) -> None:
+        """Unique identifiers pass and duplicate keys name the workbook."""
+        wrangle.require_unique_ids(
+            pd.DataFrame({"id": ["A", "B"]}), "id", Path("book.xlsx")
+        )
+        with pytest.raises(
+            wrangle.InputError, match="book.xlsx.*duplicate id"
+        ):
+            wrangle.require_unique_ids(
+                pd.DataFrame({"id": ["A", "A"]}), "id", Path("book.xlsx")
+            )
+
+
+class TestValidateSurveyColumns:
+    """Validate answer mapping roles independently of survey data."""
+
+    def test_duplicate_columns(self) -> None:
+        """Two specifications cannot claim the same export column."""
+        specs = pd.DataFrame(
+            [["A", "single", "Q01", ""], ["A", "drop", "", ""]],
+            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
+        )
+        with pytest.raises(wrangle.InputError, match="unique nonblank column"):
+            wrangle.validate_survey_columns(specs)
+
+
+class TestCheckPublicText:
+    """Contact guards inspect values without echoing them in diagnostics."""
+
+    def test_case_insensitive_links(self) -> None:
+        """Ordinary business text passes while uppercase web links fail."""
+        wrangle.check_public_text("Ordinary business text", "output.csv")
+        with pytest.raises(wrangle.InputError, match="output.csv"):
+            wrangle.check_public_text("HTTPS://example.org", "output.csv")
