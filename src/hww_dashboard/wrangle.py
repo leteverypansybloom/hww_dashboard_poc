@@ -2007,7 +2007,7 @@ def attach_employer_ids(
     """Add an employer_id column to each table, matching on the org name.
 
     The match ignores case. Rows with no organisation get ''. Empty
-    tables are left unchanged.
+    tables receive an empty employer_id column.
 
     Args:
         frames: Tables with an ``org`` column (changed in place).
@@ -2021,10 +2021,7 @@ def attach_employer_ids(
         )
     )
     for frame in frames:
-        if not frame.empty:
-            frame["employer_id"] = (
-                frame["org"].str.casefold().map(ids).fillna("")
-            )
+        frame["employer_id"] = frame["org"].str.casefold().map(ids).fillna("")
 
 
 # ---------------------------------------------------------------- outputs

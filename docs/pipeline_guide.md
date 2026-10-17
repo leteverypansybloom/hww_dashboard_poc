@@ -593,8 +593,8 @@ Each `load_*` function follows the same pattern:
 #### `attach_employer_ids(frames, dim_employer)`
 - **What:** adds `employer_id` to each source table by matching the case-folded `org` against
   `dim_employer`. Rows with no organisation get `""`.
-- **Gotcha:** it changes the tables in place. It skips empty tables, which then have no
-  `employer_id` column. `write_csv`'s `reindex` adds an empty one later.
+- **Gotcha:** it changes the tables in place, including adding the key to empty tables so
+  downstream joins work for header-only sources.
 
 ### Output tables
 

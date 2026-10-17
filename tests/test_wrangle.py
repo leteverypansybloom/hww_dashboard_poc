@@ -395,3 +395,15 @@ class TestToDate:
             expected: The exact calendar date, or no date.
         """
         assert wrangle.to_date(value) == expected
+
+
+class TestAttachEmployerIds:
+    """Attach employer keys even when a source contains no records."""
+
+    def test_empty_frame_has_key_column(self) -> None:
+        """Downstream joins require the key on header-only sources."""
+        frame = pd.DataFrame(columns=["org"])
+        dim = pd.DataFrame(columns=wrangle.COLUMNS["dim_employer"])
+        wrangle.attach_employer_ids([frame], dim)
+        assert list(frame.columns) == ["org", "employer_id"]
+        assert frame.empty
