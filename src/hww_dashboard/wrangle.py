@@ -15,11 +15,14 @@ run writes the tables to the output folder plus data_quality_report.md.
 import hashlib
 import logging
 import re
+import shutil
 import sys
+import tempfile
 import tomllib
 import zipfile
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from copy import deepcopy
 from datetime import date, datetime
 from difflib import get_close_matches
 from pathlib import Path
@@ -2628,20 +2631,53 @@ def write_outputs(
     Returns:
         (table name, rows written) for each table.
     """
-    counts = []
-    for name, df in tables.items():
-        counts.append((name, write_csv(df, out, name)))
-        tables[name] = df.reindex(columns=COLUMNS[name])
-    report.add(
-        "Outputs",
-        markdown_table(pd.DataFrame(counts, columns=["table", "rows"])),
-    )
-    report.add("Outputs", "")
-    report.add("Outputs", "fact_engagement by event type:")
-    report.add("Outputs", "")
-    by_type = count_values(engagement["event_type"]).rename_axis("event_type")
-    report.add("Outputs", markdown_table(by_type.reset_index(name="rows")))
-    report.write(out / "data_quality_report.md", run_at)
+    staged_tables = tables.copy()
+    staged_report = deepcopy(report)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    scratch = Path(tempfile.mkdtemp(prefix=".hww-", dir=out.parent))
+    stage, backup = scratch / "tables", scratch / "previous"
+    try:
+        if out.exists():
+            shutil.copytree(out, stage)
+        else:
+            stage.mkdir()
+        counts = []
+        for name, df in staged_tables.items():
+            counts.append((name, write_csv(df, stage, name)))
+            staged_tables[name] = df.reindex(columns=COLUMNS[name])
+        staged_report.add(
+            "Outputs",
+            markdown_table(pd.DataFrame(counts, columns=["table", "rows"])),
+        )
+        staged_report.add("Outputs", "")
+        staged_report.add("Outputs", "fact_engagement by event type:")
+        staged_report.add("Outputs", "")
+        by_type = count_values(engagement["event_type"]).rename_axis(
+            "event_type"
+        )
+        staged_report.add(
+            "Outputs", markdown_table(by_type.reset_index(name="rows"))
+        )
+        staged_report.write(stage / "data_quality_report.md", run_at)
+        if "survey_other_text" not in staged_tables:
+            (stage / "survey_other_text.csv").unlink(missing_ok=True)
+        if out.exists():
+            out.rename(backup)
+        try:
+            stage.rename(out)
+        except OSError:
+            if backup.exists():
+                backup.rename(out)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
+    finally:
+        # Retain the old generation if restoration itself fails.
+        if not backup.exists():
+            shutil.rmtree(scratch)
+    tables.update(staged_tables)
+    report.sections = staged_report.sections
+    report.unmapped = staged_report.unmapped
     return counts
 
 
@@ -2758,10 +2794,6 @@ def run(
     }
     if cfg["survey"]["keep_other_free_text"]:
         tables["survey_other_text"] = other_text
-    else:
-        stale = out / "survey_other_text.csv"
-        if stale.exists():
-            stale.unlink()
     counts = write_outputs(tables, out, engagement, report, run_at)
 
     logger.info(

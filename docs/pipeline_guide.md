@@ -673,12 +673,16 @@ Each `load_*` function follows the same pattern:
 #### `write_csv(df, folder, name)` and `write_outputs(tables, out, engagement, report, run_at)`
 - **What:** `write_csv` reindexes the table to `COLUMNS[name]`, writes dates as `YYYY-MM-DD`, and
   writes UTF-8 without the index. `write_outputs` writes every table, adds the row counts and
-  event-type counts to the report, and writes the report.
+  event-type counts to the report, and writes the report. A sibling staging directory holds
+  the whole generation before publication. Rename failures restore the previous directory;
+  if restoration itself fails, the `.hww-*/previous` backup is retained for recovery.
+  This is rollback on ordinary errors, not a crash-safe or concurrent-reader transaction.
 - **Gotchas:**
   - `reindex` drops every column not in `COLUMNS`. This is the main privacy guard: raw columns
     such as names or emails can't leak out by accident.
   - Booleans are written as `True`/`False`, and `None` as an empty cell.
-  - When `keep_other_free_text` is off, `run()` deletes an old `survey_other_text.csv` if one is there.
+  - When free text is off, `write_outputs()` removes an old `survey_other_text.csv` only
+    when the new generation has been written successfully. Unmanaged files are preserved.
 
 ### Entry points
 

@@ -2,7 +2,7 @@
 
 import re
 import tomllib
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -447,3 +447,97 @@ class TestMakeUnique:
             "A.1",
             "A.3",
         ]
+
+
+class TestWriteOutputs:
+    """A failed generation preserves the last complete output set."""
+
+    @pytest.mark.parametrize("failure", ["csv", "report", "publish"])
+    def test_failure_keeps_previous_generation(
+        self,
+        tmp_path: Path,
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
+        failure: str,
+    ) -> None:
+        """Inject failures in rendering and publication.
+
+        Args:
+            tmp_path: Temporary output location.
+            run_time: Frozen pipeline clock.
+            monkeypatch: Scoped failure injection.
+            failure: Stage at which the run fails.
+        """
+        out = tmp_path / "out"
+        out.mkdir()
+        for name in (
+            "badges.csv",
+            "fact_event.csv",
+            "data_quality_report.md",
+            "survey_other_text.csv",
+            "notes.txt",
+        ):
+            (out / name).write_text("old " + name, encoding="utf-8")
+        before = {p.name: p.read_bytes() for p in out.iterdir()}
+        tables = {
+            "badges": pd.DataFrame({"badge": ["new"]}),
+            "fact_event": pd.DataFrame(columns=wrangle.COLUMNS["fact_event"]),
+        }
+        original = wrangle.write_csv
+        rename = Path.rename
+
+        def write(df: pd.DataFrame, folder: Path, name: str) -> int:
+            """Fail while writing the second table.
+
+            Args:
+                df: Output frame.
+                folder: Staging folder.
+                name: Table to write.
+
+            Returns:
+                Number of rows if successful.
+            """
+            if name == "fact_event":
+                raise OSError("disk full")
+            return original(df, folder, name)
+
+        def fail_report(
+            self: wrangle.Report, path: Path, run_at: datetime
+        ) -> None:
+            """Simulate a report write failure.
+
+            Args:
+                self: Report being rendered.
+                path: Staged report path.
+                run_at: Frozen run timestamp.
+            """
+            raise OSError("disk full")
+
+        def fail_publish(self: Path, target: str | Path) -> Path:
+            """Fail only when installing the staged generation.
+
+            Args:
+                self: Directory being renamed.
+                target: Destination directory.
+
+            Returns:
+                The renamed path when restoring the old generation.
+            """
+            if self.name == "tables":
+                raise OSError("publish failed")
+            return rename(self, target)
+
+        if failure == "csv":
+            monkeypatch.setattr(wrangle, "write_csv", write)
+        elif failure == "report":
+            monkeypatch.setattr(wrangle.Report, "write", fail_report)
+        else:
+            monkeypatch.setattr(Path, "rename", fail_publish)
+        report = wrangle.Report()
+        with pytest.raises(OSError):
+            wrangle.write_outputs(
+                tables, out, pd.DataFrame({"event_type": []}), report, run_time
+            )
+        assert {p.name: p.read_bytes() for p in out.iterdir()} == before
+        assert list(tables["badges"].columns) == ["badge"]
+        assert not report.sections["Outputs"]
