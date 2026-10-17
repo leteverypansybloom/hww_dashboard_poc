@@ -451,3 +451,22 @@ class TestLoadMappings:
         else:
             _, overrides = wrangle.load_mappings(maps)
             assert overrides == {"a": "C", "b": "C", "c": "C"}
+
+
+class TestReadCsvText:
+    """Mapping input errors identify the file and required repair."""
+
+    @pytest.mark.parametrize(
+        "content", [b"", b"a,b\n1,2\n3,4,5\n", b"a\n\xff"]
+    )
+    def test_unreadable_csv(self, tmp_path: Path, content: bytes) -> None:
+        """Translate CSV format and encoding errors to InputError.
+
+        Args:
+            tmp_path: Temporary mapping folder.
+            content: Empty, malformed or non-UTF-8 file bytes.
+        """
+        path = tmp_path / "sector.csv"
+        path.write_bytes(content)
+        with pytest.raises(wrangle.InputError, match="sector.csv.*UTF-8"):
+            wrangle.read_csv_text(path)

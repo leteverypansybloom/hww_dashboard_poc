@@ -913,6 +913,16 @@ def read_csv_text(path: Path, required: Sequence[str] = ()) -> pd.DataFrame:
         )
     except FileNotFoundError:
         raise InputError(f"Mapping file not found: {path}") from None
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeError):
+        raise InputError(
+            f"{path}: save a valid UTF-8 CSV with a header and "
+            "the same number of fields in every row."
+        ) from None
+    except PermissionError:
+        raise InputError(
+            f"{path}: cannot read mapping file. Close it in other "
+            "programs and check read permissions."
+        ) from None
     require(table, required, f"mappings/{path.name}")
     return table
 

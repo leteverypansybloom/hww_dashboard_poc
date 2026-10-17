@@ -391,7 +391,8 @@ this way) and **Gotchas** (what can trip you up).
 
 #### `read_csv_text(path, required=())`, `load_lookup(path)`, `load_mappings(maps)`
 - **What:** `read_csv_text` reads a mapping CSV with every value as text, keeps blanks as `""`
-  (`keep_default_na=False`) and checks its heading columns. Opening it with `utf-8-sig` drops the
+  (`keep_default_na=False`) and checks its heading columns. Empty, malformed, unreadable
+  and non-UTF-8 CSVs raise `InputError` naming the file and repair. Opening it with `utf-8-sig` drops the
   byte-order mark Excel adds when it saves a CSV. `load_lookup` turns a `raw_value,agreed_value`
   file into a dict keyed by `clean_text(raw).casefold()`. `load_mappings` loads the six lookups
   plus `org_overrides.csv`. Blank keys/targets and conflicting duplicate keys are rejected.
