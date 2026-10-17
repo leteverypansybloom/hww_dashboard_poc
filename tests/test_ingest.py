@@ -11,6 +11,7 @@ import sys
 import tomllib
 from collections.abc import Callable
 from datetime import date, datetime
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
@@ -181,33 +182,6 @@ class TestNewestMatch:
             path.write_bytes(b"")
             os.utime(path, (2_000_000_000, 2_000_000_000))
         assert wrangle.newest_match(tmp_path, "*.xlsx", "Survey") == paths[1]
-
-
-class TestShippedConfig:
-    """The project's own config.toml, the one ``python wrangle.py`` uses."""
-
-    @pytest.fixture
-    def shipped(self, project_folder: Path) -> wrangle.Config:
-        """The shipped config, which points at the real inputs.
-
-        Args:
-            project_folder: Repository holding launchers and mappings.
-
-        Returns:
-            config.toml as nested dicts. No input file is read.
-        """
-        with open(project_folder / "config.toml", "rb") as f:
-            return tomllib.load(f)
-
-    def test_passes_the_checks(self, shipped: wrangle.Config) -> None:
-        """Every required setting is there, with a valid value."""
-        wrangle.check_config(shipped)
-
-    def test_finds_the_survey_by_pattern(
-        self, shipped: wrangle.Config
-    ) -> None:
-        """A new survey download needs no config change."""
-        assert "file_pattern" in shipped["survey"]
 
 
 class TestInputFile:
@@ -400,6 +374,29 @@ class TestCheckConfig:
         with pytest.raises(wrangle.InputError, match="personal"):
             wrangle.check_config(settings)
 
+    @pytest.fixture
+    def shipped(self, project_folder: Path) -> wrangle.Config:
+        """The shipped config, which points at the real inputs.
+
+        Args:
+            project_folder: Repository holding launchers and mappings.
+
+        Returns:
+            config.toml as nested dicts. No input file is read.
+        """
+        with open(project_folder / "config.toml", "rb") as f:
+            return tomllib.load(f)
+
+    def test_passes_the_checks(self, shipped: wrangle.Config) -> None:
+        """Every required setting is there, with a valid value."""
+        wrangle.check_config(shipped)
+
+    def test_finds_the_survey_by_pattern(
+        self, shipped: wrangle.Config
+    ) -> None:
+        """A new survey download needs no config change."""
+        assert "file_pattern" in shipped["survey"]
+
 
 class TestMain:
     """``main``: the command line, ``python wrangle.py [config.toml]``."""
@@ -410,8 +407,11 @@ class TestMain:
         write_config: ConfigWriter,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A bad survey pattern: no traceback, exit 1, nothing written."""
+        monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
         settings["survey"]["file_pattern"] = "no-such-export-*.xlsx"
         code = wrangle.main([str(write_config(settings))])
         assert code == 1
