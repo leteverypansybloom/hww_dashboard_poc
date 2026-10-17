@@ -410,6 +410,10 @@ class TestCleanText:
             wrangle.clean_text(None) == wrangle.clean_text(float("nan")) == ""
         )
 
+    def test_nullable_scalar_is_blank(self) -> None:
+        """Pandas nullable scalars cannot become literal <NA> identifiers."""
+        assert wrangle.clean_text(pd.NA) == ""
+
 
 class TestToDate:
     """Read Excel and text dates without ambiguity."""

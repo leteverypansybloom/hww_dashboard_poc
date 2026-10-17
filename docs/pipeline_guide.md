@@ -292,7 +292,7 @@ this way) and **Gotchas** (what can trip you up).
 ### Cleaning helpers
 
 #### `clean_text(value)`
-- **What:** turns any cell into tidy text. `None`, `NaN` and `NaT` become `""`. `1.0` becomes `"1"`.
+- **What:** turns any cell into tidy text. `None`, `NaN`, `NaT` and `pd.NA` become `""`. `1.0` becomes `"1"`.
   Excel's `_x000D_` (an escaped carriage return) becomes a space. Runs of whitespace, including
   newlines, collapse to one space.
 - **Why:** this is the most important function in the file. Excel mixes types freely: the same

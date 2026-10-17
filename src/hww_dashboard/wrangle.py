@@ -440,7 +440,7 @@ def clean_text(value: object) -> str:
     Returns:
         The tidied text.
     """
-    if value is None:
+    if value is None or value is pd.NA:
         return ""
     if isinstance(value, float):
         if pd.isna(value):
