@@ -496,11 +496,21 @@ def make_unique(names: Iterable[str]) -> list[str]:
     Returns:
         The names with repeats numbered: ``Other, Other.1, Other.2 ...``
     """
+    names = list(names)
+    reserved = set(names)
+    used: set[str] = set()
     seen: Counter[str] = Counter()
     result = []
     for name in names:
-        result.append(f"{name}.{seen[name]}" if seen[name] else name)
-        seen[name] += 1
+        candidate = name
+        while candidate in used:
+            seen[name] += 1
+            candidate = f"{name}.{seen[name]}"
+            while candidate in reserved:
+                seen[name] += 1
+                candidate = f"{name}.{seen[name]}"
+        used.add(candidate)
+        result.append(candidate)
     return result
 
 

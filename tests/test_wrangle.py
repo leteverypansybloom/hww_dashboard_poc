@@ -434,3 +434,16 @@ class TestAttachEmployerIds:
         wrangle.attach_employer_ids([frame], dim)
         assert list(frame.columns) == ["org", "employer_id"]
         assert frame.empty
+
+
+class TestMakeUnique:
+    """Repeated Excel headers remain unique beside literal suffixes."""
+
+    def test_reserves_existing_suffixes(self) -> None:
+        """Generated names cannot overwrite an existing suffixed column."""
+        assert wrangle.make_unique(["A", "A", "A.1", "A"]) == [
+            "A",
+            "A.2",
+            "A.1",
+            "A.3",
+        ]

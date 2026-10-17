@@ -310,7 +310,8 @@ this way) and **Gotchas** (what can trip you up).
   the Windows 1900 epoch; exports using the Mac 1904 epoch must use real Excel date cells.
 
 #### `make_unique(names)`
-- **What:** numbers repeated headings the way pandas does: `Other`, `Other.1`, `Other.2`.
+- **What:** numbers repeated headings: `Other`, `Other.1`, `Other.2`. Literal suffixed
+  headings are reserved so generated names cannot collide with them.
 - **Why:** the survey export has several columns called "Other". The pipeline reads headings
   itself (see `read_sheet`), so it has to do this itself. `mappings/survey_columns.csv` refers
   to the numbered names.
