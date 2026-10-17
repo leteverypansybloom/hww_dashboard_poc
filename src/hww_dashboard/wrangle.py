@@ -1717,6 +1717,7 @@ def load_was(
             )
         ids.append(f"WAS-{text}")
     df["was_request_id"] = ids
+    require_unique_ids(df, "was_request_id", path)
 
     dates = []
     for value, fallback, excel_row in zip(
@@ -1881,6 +1882,24 @@ def check_was_sessions(
             )
 
 
+def require_unique_ids(df: pd.DataFrame, column: str, path: Path) -> None:
+    """Reject source keys that would duplicate downstream identifiers.
+
+    Args:
+        df: Cleaned source records, including generated fallback IDs.
+        column: Identifier column to validate.
+        path: Source workbook for the error message.
+
+    Raises:
+        InputError: Two records have the same identifier.
+    """
+    if df[column].duplicated().any():
+        raise InputError(
+            f"{path.name}: duplicate {column}. "
+            "Give each retained source row a unique participant ID."
+        )
+
+
 def load_peer(
     cfg: Config,
     folder: Path,
@@ -1923,6 +1942,7 @@ def load_peer(
         f"PM-{clean_text(v) or 'row' + str(r)}"
         for v, r in zip(df[cfg["id"]], df["excel_row"], strict=True)
     ]
+    require_unique_ids(df, "peer_id", path)
     df["interest_date"] = df[cfg["interest_date"]].map(to_date)
     bands = {
         "sector": cfg["sector"],

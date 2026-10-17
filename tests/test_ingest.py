@@ -478,3 +478,46 @@ class TestReadCsvText:
         path.write_bytes(content)
         with pytest.raises(wrangle.InputError, match="sector.csv.*UTF-8"):
             wrangle.read_csv_text(path)
+
+
+class TestLoadWas:
+    """WAS request identifiers must be unique before session expansion."""
+
+    def test_rejects_duplicate_ids(
+        self, tmp_path: Path, settings: wrangle.Config
+    ) -> None:
+        """Duplicate requests cannot produce duplicate session/event keys."""
+        cfg = settings["was"].copy()
+        cfg.update(file="was.xlsx", sheet=0, header_row=1, sessions=[])
+        keys = [
+            "id",
+            "org",
+            "enquiry_date",
+            "fallback_enquiry_date",
+            "size",
+            "sector",
+            "industry",
+            "sites",
+        ]
+        rows: list[list[object]] = [[cfg[k] for k in keys]]
+        rows.extend([[1, "Org A", "", "", "", "", "", ""]] * 2)
+        save_xlsx(tmp_path / "was.xlsx", {"Sheet1": rows})
+        with pytest.raises(wrangle.InputError, match="was.xlsx.*duplicate"):
+            wrangle.load_was(cfg, tmp_path, {}, {}, wrangle.Report())
+
+
+class TestLoadPeer:
+    """Peer identifiers must be unique before engagement expansion."""
+
+    def test_rejects_duplicate_ids(
+        self, tmp_path: Path, settings: wrangle.Config
+    ) -> None:
+        """Repeated source keys cannot silently double engagement counts."""
+        cfg = settings["peer"].copy()
+        cfg.update(file="peer.xlsx", sheet=0, header_row=1)
+        keys = ["id", "org", "interest_date", "size", "sector", "industry"]
+        rows: list[list[object]] = [[cfg[k] for k in keys]]
+        rows.extend([[1, "Org A", "", "", "", ""]] * 2)
+        save_xlsx(tmp_path / "peer.xlsx", {"Sheet1": rows})
+        with pytest.raises(wrangle.InputError, match="peer.xlsx.*duplicate"):
+            wrangle.load_peer(cfg, tmp_path, {}, {}, wrangle.Report())

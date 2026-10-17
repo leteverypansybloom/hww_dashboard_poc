@@ -525,6 +525,7 @@ Each `load_*` function follows the same pattern:
   monthly refresh.
 
 #### `load_was(cfg, folder, lookups, overrides, report)`
+- Duplicate final identifiers (including fallback IDs) stop the run; correct the participant IDs in the named workbook.
 - **What:**
   1. Read the sheet, requiring the request columns and every session column named in the config.
   2. Drop blank rows and rows with no organisation.
@@ -553,6 +554,7 @@ Each `load_*` function follows the same pattern:
   so the pipeline reports it and does not guess.
 
 #### `load_peer(cfg, folder, lookups, overrides, report)`
+- Duplicate final identifiers (including fallback IDs) stop the run; correct the participant IDs in the named workbook.
 - **What:** the same pattern again. `peer_id = "PM-" + Participant ID`. `sites_band` is always
   `Unknown` because this file doesn't collect it.
 - **Gotcha:** ids like `0011` keep their leading zeros because cells are read as they are, not as numbers.
