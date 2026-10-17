@@ -1154,3 +1154,19 @@ class TestBuildEngagement:
             fact.loc[fact["event_type"] == "was_completed", "date"]
         ) == [expected]
         assert len(fact) == 3
+
+    def test_invalid_rule_with_no_sessions(self, today: date) -> None:
+        """An invalid rule must fail even when there are no session rows."""
+        empty = pd.DataFrame()
+        sessions = pd.DataFrame(columns=wrangle.COLUMNS["fact_was_session"])
+        with pytest.raises(wrangle.InputError, match="completed_rule"):
+            wrangle.build_engagement(
+                empty,
+                empty,
+                empty,
+                sessions,
+                empty,
+                "typo",
+                wrangle.Report(),
+                today,
+            )

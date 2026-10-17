@@ -657,6 +657,7 @@ Each `load_*` function follows the same pattern:
   - `last_session_held`: the latest session date.
 
   Changing it changes the output, so agree it with the people who own the WAS process first.
+  Invalid rules raise `InputError` even when no sessions exist.
 
 #### `build_dim_date(*date_lists)` and `calendar_dates(...)`
 - **What:** `calendar_dates` gathers every date the outputs use: engagement, survey, session and

@@ -2334,6 +2334,10 @@ def build_engagement(
     Raises:
         InputError: completed_rule is not a known rule.
     """
+    if completed_rule not in COMPLETED_RULES:
+        raise InputError(
+            f"Unknown was.completed_rule '{completed_rule}' in " "config.toml."
+        )
     events = []
 
     def add(
