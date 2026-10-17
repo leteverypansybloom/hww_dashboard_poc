@@ -784,6 +784,43 @@ class TestLoadSignups:
         assert list(frame["survey_dates"]) == ["2025-12-01", ""]
         assert list(frame["was_flag"]) == [False, True]
 
+    def test_invalid_month_does_not_forward_fill(
+        self, tmp_path: Path, today: date
+    ) -> None:
+        """A nonblank invalid month cannot inherit the previous month."""
+        keys = [
+            "month",
+            "org",
+            "role",
+            "size",
+            "sector",
+            "industry",
+            "sites",
+            "completed_survey",
+            "requested_was",
+        ]
+        cfg: wrangle.Config = {key: key for key in keys}
+        cfg.update(file="signups.xlsx", sheet=0, header_row=1)
+        save_xlsx(
+            tmp_path / "signups.xlsx",
+            {
+                "Sheet1": [
+                    list(keys),
+                    [date(2026, 1, 1), "Org A", "", "", "", "", "", "", ""],
+                    ["not a date", "Org B", "", "", "", "", "", "", ""],
+                ]
+            },
+        )
+        with pytest.raises(wrangle.InputError, match="signups.xlsx.*month"):
+            wrangle.load_signups(
+                cfg,
+                tmp_path,
+                {n: {} for n in wrangle.LOOKUP_NAMES},
+                {},
+                wrangle.Report(),
+                today,
+            )
+
 
 class TestMappingPairs:
     """Two-column mappings tolerate only identical cleaned duplicates."""

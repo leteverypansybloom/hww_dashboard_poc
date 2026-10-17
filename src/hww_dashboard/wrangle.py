@@ -1315,7 +1315,16 @@ def load_signups(
 
     # The month is a merged cell, so only the first row of each month has
     # it.
-    df["month"] = df[cfg["month"]].map(to_date).ffill()
+    raw_months = df[str(cfg["month"])]
+    months = raw_months.map(to_date)
+    invalid_months = raw_months.map(clean_text).ne("") & months.isna()
+    if invalid_months.any():
+        rows = df.loc[invalid_months, "excel_row"].tolist()
+        raise InputError(
+            f"{path.name}: invalid sign-up month in Excel row(s) {rows}. "
+            "Use a valid date, or leave merged continuation cells blank."
+        )
+    df["month"] = months.ffill()
 
     df["org"] = df[cfg["org"]].map(lambda v: org_name(v, overrides))
     blank = df["org"] == ""

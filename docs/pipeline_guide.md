@@ -474,6 +474,8 @@ Each `load_*` function follows the same pattern:
 7. add the source's own id.
 
 #### `load_signups(cfg, folder, lookups, overrides, report, today)`
+- Only blank month cells inherit the previous month. A nonblank invalid date stops the
+  run with the workbook name and Excel row numbers to repair.
 - **What, in order:**
   1. Read the sheet with headings on row 2.
   2. Read the month column (`B`) as dates and **forward-fill** it, because the month is a merged
