@@ -509,6 +509,7 @@ Each `load_*` function follows the same pattern:
   off by default.
 
 #### `load_survey(cfg, folder, maps, lookups, overrides, report)` (with inner `column_for`)
+- Translation keys must reference a known question and have one nonblank target per cleaned raw answer.
 - **What:**
   1. Read `survey_columns.csv` and find the export columns for the roles `response_id`, `date`,
      `org`, `sector`, `industry`, `size` and `sites`.

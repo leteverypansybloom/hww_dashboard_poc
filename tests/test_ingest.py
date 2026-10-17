@@ -5,6 +5,7 @@ copy of the frozen fixture config, so no test reads the real data.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -444,8 +445,6 @@ class TestLoadMappings:
             project_folder: Repository containing the non-personal mappings.
             cycle: Whether the last override closes a cycle.
         """
-        import shutil
-
         shutil.copytree(project_folder / "mappings", tmp_path / "maps")
         maps = tmp_path / "maps"
         tail = "C,A\n" if cycle else "C,C\n"
@@ -521,3 +520,34 @@ class TestLoadPeer:
         save_xlsx(tmp_path / "peer.xlsx", {"Sheet1": rows})
         with pytest.raises(wrangle.InputError, match="peer.xlsx.*duplicate"):
             wrangle.load_peer(cfg, tmp_path, {}, {}, wrangle.Report())
+
+
+class TestLoadSurvey:
+    """Survey translations must not silently overwrite a competing target."""
+
+    def test_rejects_conflicting_translations(
+        self,
+        tmp_path: Path,
+        project_folder: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
+    ) -> None:
+        """Case-equivalent translation keys cannot disagree."""
+        maps = tmp_path / "maps"
+        shutil.copytree(project_folder / "mappings", maps)
+        (maps / "survey_answer_translations.csv").write_text(
+            "question_id,raw_answer,answer\nQ01,Raw,A\nQ01,RAW,B\n",
+            encoding="utf-8",
+        )
+        lookups, overrides = wrangle.load_mappings(maps)
+        with pytest.raises(
+            wrangle.InputError, match="survey_answer_translations.csv"
+        ):
+            wrangle.load_survey(
+                settings["survey"],
+                fixture_config.parent / "inputs",
+                maps,
+                lookups,
+                overrides,
+                wrangle.Report(),
+            )

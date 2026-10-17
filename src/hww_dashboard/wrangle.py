@@ -1621,15 +1621,27 @@ def load_survey(
         maps / "survey_answer_translations.csv",
         MAPPING_COLUMNS["survey_answer_translations"],
     )
-    translations = {
-        (q, clean_text(r).casefold()): a
-        for q, r, a in zip(
-            trans["question_id"],
-            trans["raw_answer"],
-            trans["answer"],
-            strict=True,
+    translations: dict[tuple[str, str], str] = {}
+    question_ids = set(
+        read_csv_text(
+            maps / "survey_questions.csv", MAPPING_COLUMNS["survey_questions"]
+        )["question_id"]
+    )
+    if not set(trans["question_id"]).issubset(question_ids):
+        raise InputError(
+            "mappings/survey_answer_translations.csv: unknown question ID. "
+            "Use IDs from survey_questions.csv."
         )
-    }
+    for qid, group in trans.groupby("question_id", sort=False):
+        pairs = mapping_pairs(
+            group,
+            "raw_answer",
+            "answer",
+            maps / "survey_answer_translations.csv",
+        )
+        translations.update(
+            {(str(qid), raw): answer for raw, answer in pairs.items()}
+        )
 
     answers, other_text, new_answers = unpivot_survey(
         df,
