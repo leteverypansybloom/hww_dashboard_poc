@@ -566,6 +566,8 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
     for section, keys in REQUIRED_SETTINGS.items():
         if section not in cfg:
             raise InputError(f"{name}: section [{section}] is missing.")
+        if not isinstance(cfg[section], dict):
+            raise InputError(f"{name}: [{section}] must be a table.")
         missing = [k for k in keys if k not in cfg[section]]
         if missing:
             raise InputError(
@@ -576,13 +578,65 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
             raise InputError(
                 f"{name}: [{section}] needs 'file' or 'file_pattern'."
             )
+    for section, keys in REQUIRED_SETTINGS.items():
+        for key in keys:
+            value = cfg[section][key]
+            valid = True
+            if key == "header_row":
+                valid = type(value) is int and value >= 1
+            elif key == "sheet":
+                valid = (type(value) is int and value >= 0) or (
+                    isinstance(value, str) and bool(value.strip())
+                )
+            elif key == "keep_other_free_text":
+                valid = type(value) is bool
+            elif key in ("sessions", "source_priority"):
+                valid = isinstance(value, list)
+            else:
+                valid = isinstance(value, str) and bool(value.strip())
+            if not valid:
+                raise InputError(
+                    f"{name}: [{section}] {key} has an invalid value. "
+                    "Use the type and nonblank value in the shipped config."
+                )
+    for section in SOURCES:
+        for key in ("file", "file_pattern"):
+            if key in cfg[section]:
+                value = cfg[section][key]
+                if not isinstance(value, str) or not value.strip():
+                    raise InputError(
+                        f"{name}: [{section}] {key} must be nonblank text."
+                    )
+    numbers: set[int] = set()
     for number, session in enumerate(cfg["was"]["sessions"], start=1):
+        if not isinstance(session, dict):
+            raise InputError(
+                f"{name}: [[was.sessions]] entry {number} must be a table."
+            )
         missing = [k for k in ("number", "date") if k not in session]
         if missing:
             raise InputError(
                 f"{name}: [[was.sessions]] entry {number} is missing "
                 f"{missing}."
             )
+        session_number = session["number"]
+        if (
+            type(session_number) is not int
+            or session_number < 1
+            or session_number in numbers
+        ):
+            raise InputError(
+                f"{name}: [[was.sessions]] number must be a unique "
+                "positive whole number."
+            )
+        numbers.add(session_number)
+        for key in ("date", "duration", "summary_sent", "topics"):
+            if key in session and (
+                not isinstance(session[key], str) or not session[key].strip()
+            ):
+                raise InputError(
+                    f"{name}: [[was.sessions]] {key} must be nonblank text."
+                )
     rule = cfg["was"]["completed_rule"]
     if rule not in COMPLETED_RULES:
         raise InputError(
@@ -590,7 +644,9 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
             f"{list(COMPLETED_RULES)}."
         )
     priority = cfg["employers"]["source_priority"]
-    if sorted(priority) != sorted(SOURCES):
+    if not all(isinstance(p, str) for p in priority) or (
+        sorted(priority) != sorted(SOURCES)
+    ):
         raise InputError(
             f"{name}: [employers] source_priority must list each of "
             f"{list(SOURCES)} once, got {priority}."

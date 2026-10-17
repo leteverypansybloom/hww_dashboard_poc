@@ -327,7 +327,9 @@ this way) and **Gotchas** (what can trip you up).
 #### `load_config(path)` and `check_config(cfg)`
 - **What:** `load_config` reads the TOML file and turns "file missing" and "bad TOML" into
   `InputError`. `check_config` then checks:
-  - every section and setting in `REQUIRED_SETTINGS` is present;
+  - every section and setting in `REQUIRED_SETTINGS` is present with its expected type;
+  - headers and session numbers are positive integers; session numbers are unique;
+  - the free-text switch is a boolean, and column names and paths are nonblank text;
   - each source has `file` or `file_pattern`;
   - each `[[was.sessions]]` entry has `number` and `date`;
   - `completed_rule` is a known rule;

@@ -320,6 +320,35 @@ class TestCheckConfig:
         with pytest.raises(wrangle.InputError, match=message):
             wrangle.check_config(settings)
 
+    @pytest.mark.parametrize(
+        ("section", "key", "value"),
+        [
+            ("survey", "keep_other_free_text", "false"),
+            ("survey", "sheet", True),
+            ("survey", "header_row", 0),
+            ("survey", "header_row", True),
+            ("paths", "input_folder", 4),
+            ("was", "topic_separator", ""),
+            ("was", "sessions", [1]),
+            ("was", "sessions", [{"number": 1, "date": "D"}] * 2),
+            ("employers", "source_priority", [1, "peer", "was", "survey"]),
+        ],
+    )
+    def test_rejects_wrong_types(
+        self, settings: wrangle.Config, section: str, key: str, value: object
+    ) -> None:
+        """Reject malformed settings before reading workbooks.
+
+        Args:
+            settings: Fresh fixture configuration.
+            section: Section to damage.
+            key: Setting to damage.
+            value: Invalid TOML value or shape.
+        """
+        settings[section][key] = value
+        with pytest.raises(wrangle.InputError, match="config.toml"):
+            wrangle.check_config(settings)
+
 
 class TestMain:
     """``main``: the command line, ``python wrangle.py [config.toml]``."""
