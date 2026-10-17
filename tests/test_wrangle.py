@@ -367,3 +367,31 @@ class TestCleanText:
         assert (
             wrangle.clean_text(None) == wrangle.clean_text(float("nan")) == ""
         )
+
+
+class TestToDate:
+    """Read Excel and text dates without ambiguity."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("2026-03-04", date(2026, 3, 4)),
+            ("04/03/2026", date(2026, 3, 4)),
+            (46085, date(2026, 3, 4)),
+            (46085.5, date(2026, 3, 4)),
+            (pd.NaT, None),
+            (pd.NA, None),
+            (True, None),
+            (float("inf"), None),
+            ("2026-02-30", None),
+            ("", None),
+        ],
+    )
+    def test_cell_types(self, value: object, expected: date | None) -> None:
+        """Read supported dates and reject missing or invalid values.
+
+        Args:
+            value: An Excel cell or text date.
+            expected: The exact calendar date, or no date.
+        """
+        assert wrangle.to_date(value) == expected

@@ -302,13 +302,12 @@ this way) and **Gotchas** (what can trip you up).
 
 #### `to_date(value)`
 - **What:** returns a `datetime.date` or `None`. Real Excel dates (`datetime`) are used directly.
-  Text is parsed with `pd.to_datetime(..., dayfirst=True)`, so `04/12/2025` is 4 December.
+  ISO text is year-first; other text is day-first, so `04/12/2025` is 4 December.
+  Numeric cells use the Windows Excel 1900 epoch, discarding the time fraction.
 - **Why:** UK spreadsheets write day first. Returning plain `date` objects (not pandas `Timestamp`)
   keeps comparisons and `isoformat()` simple.
-- **Gotchas:** see [Q: Are dates always read correctly?](#q-are-dates-always-read-correctly). Text
-  in ISO form (`2026-03-04`) is read day-first as **3 April**, and a date stored as a plain number
-  (an Excel serial like `45000`) becomes `None`. Neither happens with the current files, where every
-  date cell is a real Excel date. A fix is proposed but not applied, because it would change output.
+- **Gotchas:** blank, invalid and time-only cells return `None`. Bare numeric serials assume
+  the Windows 1900 epoch; exports using the Mac 1904 epoch must use real Excel date cells.
 
 #### `make_unique(names)`
 - **What:** numbers repeated headings the way pandas does: `Other`, `Other.1`, `Other.2`.

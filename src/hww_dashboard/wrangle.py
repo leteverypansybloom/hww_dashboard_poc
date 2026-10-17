@@ -27,6 +27,7 @@ from typing import Any
 
 import pandas as pd
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.datetime import from_excel
 
 logger = logging.getLogger(__name__)
 
@@ -451,8 +452,8 @@ def clean_text(value: object) -> str:
 def to_date(value: object) -> date | None:
     """Read a cell as a date.
 
-    Excel dates arrive as ``datetime``; text is parsed day-first
-    (``04/12/2025`` is 4 December).
+    Excel dates and serials use the Windows 1900 epoch. ISO text is
+    year-first; other text is day-first (04/12/2025 is 4 December).
 
     Args:
         value: A cell value of any type.
@@ -460,6 +461,16 @@ def to_date(value: object) -> date | None:
     Returns:
         The date, or None if the cell is blank or not a date.
     """
+    if value is pd.NaT or value is pd.NA or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            parsed_excel = from_excel(value)
+        except (ValueError, OverflowError):
+            return None
+        return (
+            parsed_excel.date() if isinstance(parsed_excel, datetime) else None
+        )
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -467,6 +478,11 @@ def to_date(value: object) -> date | None:
     text = clean_text(value)
     if not text:
         return None
+    if re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", text):
+        try:
+            return datetime.fromisoformat(text).date()
+        except ValueError:
+            return None
     parsed = pd.to_datetime(text, errors="coerce", dayfirst=True)
     return None if pd.isna(parsed) else parsed.date()
 
