@@ -51,7 +51,15 @@ The last one confirms that nothing rewrote the golden files.
 
 `tests/golden/` holds the output of one run on the synthetic inputs.
 It changes only when the project owner has agreed an output change,
-and never just to make a failing test pass.
+and never just to make a failing test pass. The tests never write to
+it. After an agreed change:
+
+1. Make the code change.
+2. Run `python scripts/refresh_golden.py`. It rewrites only the files
+   that differ, and lists them.
+3. Check every line of `git diff tests/golden`.
+4. Commit the snapshot with the code change, saying in the message
+   which output changed and who agreed it.
 
 ## Decisions and changes
 

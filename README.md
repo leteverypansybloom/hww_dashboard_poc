@@ -89,10 +89,11 @@ The tests are self-contained: they read the synthetic workbooks in
 inputs, and treat 12:00 on 10 October 2026 as now, so they give the
 same result on any day. `tests/test_golden.py` compares every output
 CSV and the data quality report with a saved copy in `tests/golden/`,
-so a tidy-up that changes any output fails. When an output change is
-intended, check the diff, then refresh the copy with
-`HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py` and commit
-it with the change.
+so a tidy-up that changes any output fails. The tests never rewrite
+that copy. When an output change has been agreed, run
+`python scripts/refresh_golden.py`, check every line of
+`git diff tests/golden`, and commit the copy with the change
+([CONTRIBUTING.md](CONTRIBUTING.md#golden-files)).
 
 ## Dashboard pages
 

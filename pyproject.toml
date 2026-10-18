@@ -72,7 +72,7 @@ known-first-party = ["hww_dashboard"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src", "tests", "wrangle.py", "dashboard.py"]
+files = ["src", "tests", "scripts", "wrangle.py", "dashboard.py"]
 mypy_path = "src"
 strict = true
 

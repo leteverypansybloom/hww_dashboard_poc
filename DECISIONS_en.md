@@ -39,6 +39,21 @@ for an interim period. Benefit: consumers are built on BigQuery from
 the start, and comparing this pipeline with Dataform is a SQL query
 within one warehouse.
 
+### The golden snapshot is refreshed by a script, never by a test
+
+The code-quality review made the golden test read-only, which left no
+documented way to update the snapshot after an agreed output change.
+`scripts/refresh_golden.py` does it on purpose: it runs the pipeline
+on the synthetic inputs at the tests' fixed time, rewrites only the
+files that differ and lists them.
+
+Not chosen: bringing back the environment switch that made the test
+rewrite the snapshot. A test that can change its own expected values
+can hide a mistake.
+
+**Trade-off**: one more file to keep. Benefit: refreshing is a
+separate, visible step that someone chooses to take.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)

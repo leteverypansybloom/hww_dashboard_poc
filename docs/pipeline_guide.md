@@ -1040,21 +1040,22 @@ notes and needs approval because it changes output for such files.
 
 #### Q: How do I change when a WAS request counts as "completed"?
 Set `completed_rule` in `[was]` to `summary_1_sent`, `session_1_held` or `last_session_held`. This
-changes the output, so the golden test will fail. That is intended: refresh the snapshot (below)
-and commit it with the change.
+changes the output, so the golden test will fail. That is intended: once the change is agreed,
+refresh the snapshot (below) and commit it with the change.
 
 #### Q: The golden test failed. What now?
 It means a CSV or the data quality report changed. If you didn't mean to change output, the
-failure shows the first lines of the diff, so find the cause. If you did, check the diff by eye,
-then:
+failure shows the first lines of the diff, so find the cause. If the change was intended and the
+project owner has agreed it, refresh the snapshot:
 
 ```
-HWW_UPDATE_GOLDEN=1 python -m pytest tests/test_golden.py
+python scripts/refresh_golden.py
 ```
 
-(In PowerShell: `$env:HWW_UPDATE_GOLDEN=1; python -m pytest tests/test_golden.py`, then
-`Remove-Item Env:HWW_UPDATE_GOLDEN`.) Commit the files in `tests/golden/` together with the code
-change. The snapshot uses the live `mappings/` folder, so a new mapping that changes the
+It runs the pipeline on the synthetic inputs at the tests' fixed time and rewrites only the files
+in `tests/golden/` that differ, listing them. Check every line of `git diff tests/golden`, then
+commit the snapshot together with the code change. The tests never rewrite the snapshot
+themselves. The snapshot uses the live `mappings/` folder, so a new mapping that changes the
 synthetic output also needs a refresh.
 
 #### Q: How do I add the events data (page 4) or badges?

@@ -49,7 +49,8 @@ Change a workbook only for a deliberate test change, and then:
 
 - keep every personal value synthetic (`example.org`, `192.0.2.x`);
 - clear the author from the file's properties if your editor added it;
-- refresh the snapshot as described in `tests/test_golden.py`.
+- refresh the snapshot with `python scripts/refresh_golden.py`, as
+  described in `CONTRIBUTING.md` (Golden files).
 
 `TestSyntheticInputs` in `tests/test_wrangle.py` fails if an email
 address, IP address or link that is not one of the reserved ones
