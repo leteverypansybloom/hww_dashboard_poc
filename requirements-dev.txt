@@ -1,4 +1,4 @@
-# The dashboard package plus the developer tools (pytest, Black, Ruff,
-# mypy and type stubs) from the dev extra in pyproject.toml. Run from
-# this folder.
+# The package, its extras and the developer tools (the dev extra in
+# pyproject.toml), at the tested versions. Run from this folder:
+#   pip install -r requirements-dev.txt -c constraints.txt
 -e .[dev]

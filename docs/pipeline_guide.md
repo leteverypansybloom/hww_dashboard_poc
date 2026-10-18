@@ -987,6 +987,12 @@ Google-style docstrings, likely bugs) and `mypy --strict`, all configured in `py
 pinned to the same versions as py-common. `pandas-stubs` gives mypy pandas types. Plotly has no
 types and is excluded. GitHub Actions runs all four checks on Python 3.11 to 3.13.
 
+**Pinned versions.** `pyproject.toml` gives each library a range, and `constraints.txt` pins one
+tested version of everything those ranges resolve to, for every supported Python on Linux and
+Windows. Laptops, CI and the GCP image install with `-c constraints.txt`, so they run the same
+libraries. The dashboard libraries (Streamlit, Plotly) and the BigQuery client are extras, so the
+pipeline alone needs only pandas and openpyxl.
+
 ---
 
 ## 9. Questions another developer is likely to ask
@@ -1096,7 +1102,7 @@ synthetic data, because its config reads the synthetic inputs in `tests/data/`.
 #### Q: How do I run all the checks?
 
 ```
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt -c constraints.txt
 black --check .
 ruff check .
 mypy

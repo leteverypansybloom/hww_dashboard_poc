@@ -1,6 +1,10 @@
 # The HWW dashboard prototype: an installable package (src/hww_dashboard)
 # plus the project files it runs on (config.toml, mappings/, output/).
-# Install it with  pip install -e ".[dev]"  and run the checks with:
+# Install it with
+#
+#   pip install -e ".[dev]" -c constraints.txt
+#
+# and run the checks with:
 #
 #   black --check .     layout (PEP 8, 79-character lines)
 #   ruff check .        lint (PEP 8, imports, naming, Google docstrings)
@@ -18,17 +22,27 @@ description = "Healthy Working Wales prototype: CSV tables and a dashboard"
 readme = "README.md"
 requires-python = ">=3.11"
 # Upper bounds stop a fresh install pulling in a major version the code
-# has not been tested against.
+# has not been tested against. The lower bounds are the oldest versions
+# CI tests. constraints.txt pins one tested version of everything.
 dependencies = [
-    "pandas>=2.1,<4",
-    "openpyxl>=3.1,<4",
+    "pandas>=2.2.3,<4",
+    "openpyxl>=3.1.5,<4",
+]
+
+[project.optional-dependencies]
+# The Streamlit dashboard (requirements.txt installs it).
+dashboard = [
     # 1.63 is the first release whose st.pills() takes wrap=.
     "streamlit>=1.63,<2",
     "plotly>=5.24,<8",
 ]
-
-[project.optional-dependencies]
+# Loading the tables into BigQuery. The same range as py-common's gcp
+# extra.
+bigquery = [
+    "google-cloud-bigquery>=3.13,<4",
+]
 dev = [
+    "hww-dashboard[dashboard,bigquery]",
     "pytest>=7.4",
     # Exact pins, the same as py-common's, so both projects are formatted
     # and linted alike. Bump them together.

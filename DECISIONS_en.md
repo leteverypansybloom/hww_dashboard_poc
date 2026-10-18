@@ -69,6 +69,32 @@ the tests write to temporary folders).
 shows anything. Benefit: real tables can't reach the repository by
 accident.
 
+### Installs are pinned by a constraints file, as in py-common
+
+`pyproject.toml` keeps compatible ranges, and `constraints.txt` pins
+one tested version of every runtime library for CPython 3.11 to 3.13
+on Linux and Windows. Laptops, CI and the GCP image install with
+`-c constraints.txt`. numpy is pinned per Python version, because its
+newest release no longer supports 3.11.
+`scripts/update_constraints.py` regenerates the file with pip's
+resolver for every platform, without installing anything. The lower
+bounds rose to the oldest versions actually tested (pandas 2.2.3,
+openpyxl 3.1.5).
+
+Not chosen: a hashed lock file (pip-tools or uv). It's stronger, but
+a different tool from py-common.
+
+### The dashboard and BigQuery libraries are extras
+
+Streamlit and Plotly moved to a `dashboard` extra and the BigQuery
+client to a `bigquery` extra, so the pipeline alone needs only pandas
+and openpyxl. `requirements.txt` installs both extras for laptops; the
+GCP image needs only `bigquery`.
+
+**Trade-off**: one more word in the install command. Benefit: a
+smaller image for the scheduled job, with fewer libraries to audit
+and patch.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)

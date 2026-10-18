@@ -19,13 +19,17 @@ Needs Python 3.11 or newer. From this folder:
 ```
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt
 ```
 
-(On macOS or Linux, activate with `source .venv/bin/activate`.)
-`requirements.txt` installs the package, in editable mode, with the
-dependencies listed in `pyproject.toml`. For the developer tools, install
-`requirements-dev.txt` instead (the same as `pip install -e ".[dev]"`).
+(On macOS or Linux, activate with `source .venv/bin/activate`. On
+Windows, keep the venv in a short path: Streamlit fails to install in
+long ones.) `requirements.txt` installs the package in editable mode
+with its `dashboard` and `bigquery` extras. `constraints.txt` pins every
+library to the versions CI tests, so every laptop, CI and GCP run the
+same code; `python scripts/update_constraints.py` regenerates it. For
+the developer tools, install `requirements-dev.txt` instead (the same
+as `pip install -e ".[dev]"`), with the same `-c constraints.txt`.
 
 ## Run
 
@@ -79,7 +83,7 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 ## Checks for developers
 
 ```
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt -c constraints.txt
 black --check .
 ruff check .
 mypy

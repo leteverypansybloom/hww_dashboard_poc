@@ -4,8 +4,9 @@ Everything in `CONTRIBUTING.md` applies. The points agents most often
 need:
 
 - **Environment.** The project venv is `.venv` in this folder
-  (`pip install -e ".[dev]"`). On Windows, keep any venv in a short
-  path; Streamlit fails to install in long paths (WinError 206).
+  (`pip install -e ".[dev]" -c constraints.txt`). On Windows, keep any
+  venv in a short path; Streamlit fails to install in long paths
+  (WinError 206).
 - **Before every commit**, run `black --check .`, `ruff check .`,
   `mypy`, `python -m pytest -W error` and
   `git diff --exit-code -- tests/golden`.

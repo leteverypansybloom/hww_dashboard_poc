@@ -12,8 +12,12 @@ paths (WinError 206).
 ```
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt -c constraints.txt
 ```
+
+`constraints.txt` pins every library to the versions CI tests. To move
+to newer versions, run `python scripts/update_constraints.py`, review
+the diff, and run the checks.
 
 ## Checks
 
