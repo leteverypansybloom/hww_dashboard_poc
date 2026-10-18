@@ -13,6 +13,15 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-10-18 — Reproducibility is tested across processes
+
+Tests compare table and report bytes on repeated runs at a fixed reference
+time, and in independent Python processes with different hash seeds. Run
+records are excluded because they describe executions and include completion
+times. The BigQuery writer's existing round-trip test checks the same golden
+rows after explicit conversion to warehouse types. CI runs these checks on
+Windows and Linux with pinned dependencies.
+
 ## 2026-10-18 — Operators get an action summary
 
 The report starts with a count of items needing attention and the action for
