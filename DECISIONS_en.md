@@ -1,0 +1,132 @@
+# Design Decisions
+
+When project decisions are made they can be added to the decision log.
+This records the thinking as the project evolves. Focus on recording
+decisions which someone joining the project might need to know.
+
+Order in reverse chronological order (most recent at top).
+
+Entries are not rewritten once made. When a decision changes, add a
+new dated entry saying which earlier entry it replaces, and mark the
+earlier entry as superseded.
+
+The format is the one py-common uses (`DECISIONS_en.md` in that
+repository).
+
+## 2026-10-18 — Production readiness
+
+The production-readiness review prepared the prototype for two jobs:
+running on real data until the Dataform models exist, and being the
+reference those models are checked against. Development runs on
+Windows laptops and in GCP; eventually everything runs in GCP.
+
+### Until Dataform exists, the pipeline writes its tables to BigQuery
+
+The CSV tables were a stand-in for BigQuery tables. Until the Dataform
+models exist, this pipeline loads its tables into an interim BigQuery
+dataset itself, with the table names and schemas the Dataform models
+are expected to produce. Power BI and the dashboard can then move to
+Dataform's tables by changing the dataset name. Laptops and tests keep
+writing CSV files.
+
+Not chosen: keeping CSV files until Dataform replaces them. Nothing
+could report from BigQuery in the meantime, and real data would sit
+in CSV files on laptops and in buckets rather than behind dataset
+permissions.
+
+**Trade-off**: a BigQuery client dependency, and a writer to maintain
+for an interim period. Benefit: consumers are built on BigQuery from
+the start, and comparing this pipeline with Dataform is a SQL query
+within one warehouse.
+
+## 2026-10-17 — Code-quality review
+
+A line-by-line review of `wrangle.py` (branch `review/code-quality`)
+changed what stops a run. These are decisions as well as fixes:
+
+- **More problems stop the run.** Blank or conflicting mapping rows,
+  override cycles, invalid survey column mappings, conflicting
+  translations, duplicate catalogue keys, duplicate WAS or peer
+  participant IDs and an unreadable sign-up month raise `InputError`,
+  where they used to produce quietly wrong tables.
+- **Outputs are staged, then swapped in.** The whole set is written to
+  a temporary folder, which then replaces the output folder; the
+  previous folder is restored if that fails.
+- **Contact identifiers are refused.** An email address, IPv4 address
+  or web link in any output, the report included, stops the run, and
+  the message never repeats the value.
+- **Dates.** Text in ISO form is read year first, and Excel serial
+  numbers are read as dates (1900 epoch).
+- **The golden test is read-only.** Tests never rewrite
+  `tests/golden/`.
+
+## 2026-10-17 — Package layout
+
+### An installable package with one `wrangle` module
+
+The code is the package `hww_dashboard` in `src/`, so tests and tools
+import it like any other library. The pipeline stays one module: it
+reads top to bottom in run order, and its stages share the same
+helpers, so splitting it would mostly add a "utils" module to jump
+to.
+
+**Trade-off**: a long module. Benefit: one place to read the rules
+that Dataform will reimplement.
+
+### No py-common in the prototype
+
+py-common lands files in BigQuery for the production route. The
+prototype's own reading (a local folder, the newest survey export,
+sheets by position, pandas-style column names) doesn't match it, and
+using it would change the names in `config.toml` and `mappings/`. An
+earlier attempt (branch `py-common-ingestion`) had to wrap py-common
+to undo those differences. See `docs/architecture.md`.
+
+### Golden-output test
+
+`tests/test_golden.py` compares every output table and the data
+quality report of a run on synthetic inputs, at a fixed time, with
+the snapshot in `tests/golden/`. A refactor or dependency upgrade
+can't change the numbers without the test failing.
+
+## 2026-10-10 — Prototype design
+
+Recorded on 2026-10-18 from `docs/pipeline_guide.md`, section 8, which
+has the reasoning in full.
+
+### Stop on structure, report on values
+
+A missing file, sheet, column, mapping or setting stops the run with
+an `InputError` that says what to fix, before anything is written. A
+messy value (an unmapped band, a missing date) is handled the same
+way every time and listed in the data quality report.
+
+**Trade-off**: the report must be read after every run. Benefit: one
+typo doesn't stop the monthly refresh, and nobody misses it either.
+
+### Privacy by allow-list
+
+Only the columns named in `COLUMNS` are written; survey columns with
+the `drop` role are never used; free text is off by default.
+
+### Employer ids are hashes of names
+
+`employer_id` is a short MD5 hash of the cleaned, case-folded name,
+so it is the same on every run and machine without an id table.
+
+**Trade-off**: renaming an organisation changes its id (an override
+keeps the old one), and the id can be reversed by anyone with a list
+of names. Benefit: nothing to maintain or lose.
+
+### Exact name matching plus manual overrides
+
+Rows for one organisation merge when their names match after
+cleaning and ignoring case, or through `mappings/org_overrides.csv`.
+There is no fuzzy matching: a wrong automatic merge is worse than a
+visible duplicate.
+
+### The flags on Account signups are not the source of truth
+
+Survey completions come from the survey export and WAS requests from
+the WAS database. The hand-typed flags are kept for reconciliation
+only, because they disagree with the records in most cases.
