@@ -151,10 +151,14 @@ A suggested order, each step useful on its own:
    in py-common's `docs/GCP_SETUP.md`.
 2. **Build the Dataform models** for the star schema, with the
    mappings as reference tables.
-3. **Check them against this prototype.** Land the synthetic inputs in
-   `tests/data/inputs/` through py-common, run the models, and compare
-   their tables with `tests/golden/*.csv`. The prototype then serves as
-   an executable specification.
+3. **Check them against this prototype.** The rules are numbered in
+   [rules.md](rules.md), each with the code and tests behind it. Land
+   the synthetic inputs in `tests/data/inputs/` and the scenario
+   workbooks (`tests/scenarios/`) through py-common, run the models, and
+   compare their tables with `tests/golden/*.csv` and the hand-worked
+   `tests/scenarios/expected/*.csv`, as in
+   [output_contract.md](output_contract.md). The prototype then serves
+   as an executable specification.
 4. **Point the dashboard at BigQuery, if it is kept.**
    `dashboard_data.load_tables` is the only place the dashboard reads
    data: swapping its CSV reads for queries against the Dataform tables

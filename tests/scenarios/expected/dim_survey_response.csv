@@ -1,0 +1,4 @@
+response_id,employer_id,date,sector,industry,size_band,sites_band
+101,E24670c7d,2026-01-10,Private,Education,10-49,1
+102,Ef3e086a3,2026-02-20,Charity or voluntary,Other,0-9,1
+103,,2026-03-05,Public,Education,0-9,1

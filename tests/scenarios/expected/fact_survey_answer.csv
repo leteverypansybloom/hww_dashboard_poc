@@ -1,0 +1,10 @@
+response_id,employer_id,date,question_id,question,answer_id,answer
+101,E24670c7d,2026-01-10,Q13,Does your organisation offer flexible working arrangements?,Q13-01,"Yes, widely available"
+101,E24670c7d,2026-01-10,Q14,Do employees have regular opportunities to provide feedback on organisational changes?,Q14-02,Sometimes
+101,E24670c7d,2026-01-10,Q04,What are the most common reasons for sickness absence in your organisation?,Q04-03,Fatigue or burnout
+101,E24670c7d,2026-01-10,Q04,What are the most common reasons for sickness absence in your organisation?,Q04-13,Other
+102,Ef3e086a3,2026-02-20,Q13,Does your organisation offer flexible working arrangements?,Q13-02,In some teams
+102,Ef3e086a3,2026-02-20,Q14,Do employees have regular opportunities to provide feedback on organisational changes?,Q14-04,Maybe
+102,Ef3e086a3,2026-02-20,Q04,What are the most common reasons for sickness absence in your organisation?,Q04-03,Fatigue or burnout
+102,Ef3e086a3,2026-02-20,Q04,What are the most common reasons for sickness absence in your organisation?,Q04-06,Headaches and migraines
+103,,2026-03-05,Q14,Do employees have regular opportunities to provide feedback on organisational changes?,Q14-03,No

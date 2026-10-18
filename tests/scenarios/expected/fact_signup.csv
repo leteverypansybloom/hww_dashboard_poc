@@ -1,0 +1,5 @@
+signup_id,employer_id,signup_month,survey_flag,survey_dates,was_flag,was_dates
+SU0003,E24670c7d,2025-11-01,True,2025-12-01,False,
+SU0004,E24670c7d,2025-11-01,False,,True,
+SU0005,Ef3e086a3,2025-12-01,False,,False,
+SU0006,E424f148e,2025-12-01,False,,True,2026-01-01

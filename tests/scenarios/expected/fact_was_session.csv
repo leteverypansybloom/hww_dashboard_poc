@@ -1,0 +1,6 @@
+session_id,was_request_id,employer_id,session_number,session_date,duration,summary_sent_date,topics
+WAS-1-S1,WAS-1,E24670c7d,1,2026-01-20,Under 90 minutes,2026-01-27,Physical activity; Mental health and wellbeing
+WAS-1-S2,WAS-1,E24670c7d,2,2026-02-15,Under 90 minutes,2026-02-20,Physical activity
+WAS-1-S3,WAS-1,E24670c7d,3,2026-03-10,,,
+WAS-2-S1,WAS-2,E424f148e,1,,Under 90 minutes,,
+WAS-row4-S1,WAS-row4,Ebbfdfab1,1,2026-03-15,,,Sleep hygiene

@@ -324,6 +324,29 @@ rejects blank and conflicting rows.
 Benefit: the bands are a decision someone makes once, and the
 dashboard and Dataform can read their order from the same file.
 
+### Rules are numbered, and checked by hand-worked scenarios
+
+The golden files check the code against its own earlier output, on one
+realistic dataset in which several rules never come up (overrides,
+case variants, two of the three completion rules, unknown answers).
+As a specification for Dataform, that would ask Dataform to copy
+whatever the code does, mistakes included. The Duck Book says expected
+outputs should be written independently.
+
+`docs/rules.md` now numbers every rule (R01 to R84) and links it to the
+function that implements it and the tests that check it, with a column
+for the Dataform model that will implement it. `tests/scenarios/`
+holds four tiny workbooks, built by code so each row's purpose is
+visible, and the tables they should produce, worked out by hand before
+the pipeline was run on them. They cover employer merging and
+tie-breaks, overrides and look-alike names, Welsh and unknown survey
+answers, the Figure 13 percentages, WAS sessions and all three
+completion rules. The pipeline matched every hand-worked table at the
+first run.
+
+Not chosen: growing the golden dataset. Its expected values would still
+come from the code, and every addition would change the golden files.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run

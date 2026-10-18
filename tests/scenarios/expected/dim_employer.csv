@@ -1,0 +1,5 @@
+employer_id,employer_name,sector,industry,size_band,sites_band,in_signups,in_survey,in_was,in_peer,attribute_conflicts
+E24670c7d,Alpha Ltd,Private,Education,50-249,2-5,True,True,True,True,sector: Private | Public; size_band: 10-49 | 250-999 | 50-249; sites_band: 1 | 2-5
+Ef3e086a3,Beta Café,Charity or voluntary,Other,0-9,1,True,True,False,True,sector: Charity or voluntary | Private
+E424f148e,Gamma Group,Public,Construction,1000+,6+,True,False,True,False,sector: Other | Public
+Ebbfdfab1,Epsilon Works,Other,Education,10-49,1,False,False,True,False,
