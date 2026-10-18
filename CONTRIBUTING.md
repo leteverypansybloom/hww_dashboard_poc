@@ -84,6 +84,13 @@ it. After an agreed change:
 4. Commit the snapshot with the code change, saying in the message
    which output changed and who agreed it.
 
+## Output tables
+
+Each output table has a schema in `src/hww_dashboard/schema/`
+(`docs/output_contract.md`). Adding, removing or retyping a column is an
+output change: change `COLUMNS` in `wrangle.py` and the schema file
+together, and get the project owner's approval.
+
 ## Decisions and changes
 
 - Record each design decision in `DECISIONS_en.md`, in its format.

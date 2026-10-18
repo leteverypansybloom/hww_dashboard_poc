@@ -1,0 +1,20 @@
+[
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "badge",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "awarded_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  }
+]

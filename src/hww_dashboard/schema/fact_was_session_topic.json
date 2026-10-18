@@ -1,0 +1,14 @@
+[
+  {
+    "name": "session_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The session (fact_was_session)."
+  },
+  {
+    "name": "topic",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Topic mapped by mappings/was_topic.csv, or as typed when unmapped. One row per session and topic."
+  }
+]

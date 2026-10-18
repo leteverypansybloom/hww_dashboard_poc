@@ -1,0 +1,44 @@
+[
+  {
+    "name": "date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "One row per day, in whole financial years (1 April to 31 March) covering every date in the other tables."
+  },
+  {
+    "name": "year",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Calendar year."
+  },
+  {
+    "name": "month",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Calendar month, 1 to 12."
+  },
+  {
+    "name": "month_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Month name in English, e.g. April."
+  },
+  {
+    "name": "month_start",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "First day of the month."
+  },
+  {
+    "name": "fin_year",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "UK financial year (April to March), e.g. 2025-26."
+  },
+  {
+    "name": "fin_quarter",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Financial quarter: Q1 is April to June."
+  }
+]

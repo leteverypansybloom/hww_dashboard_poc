@@ -1,0 +1,50 @@
+[
+  {
+    "name": "session_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "was_request_id, '-S' and the session number, e.g. WAS-11-S2."
+  },
+  {
+    "name": "was_request_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "WAS- and the Participant ID, or WAS-row and the Excel row when the ID is blank."
+  },
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The employer (dim_employer), or NULL when the source row names none."
+  },
+  {
+    "name": "session_number",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "The session's number, from [[was.sessions]] in config.toml."
+  },
+  {
+    "name": "session_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "When the session was held. NULL when it has details but no date; such sessions don't count as held."
+  },
+  {
+    "name": "duration",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Duration mapped by mappings/was_duration.csv, or as typed when unmapped."
+  },
+  {
+    "name": "summary_sent_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "When the session summary was sent."
+  },
+  {
+    "name": "topics",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The session's mapped topics, joined with '; '."
+  }
+]

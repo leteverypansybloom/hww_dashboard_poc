@@ -1,0 +1,20 @@
+[
+  {
+    "name": "response_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The response (dim_survey_response)."
+  },
+  {
+    "name": "question_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The question the 'Other' box belongs to."
+  },
+  {
+    "name": "other_text",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Free text typed into an 'Other' box. Written only when keep_other_free_text is true; it may hold personal details."
+  }
+]

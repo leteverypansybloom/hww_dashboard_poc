@@ -1,0 +1,7 @@
+# Text files are stored with LF and checked out with LF on every system,
+# so the outputs, the golden snapshot and their checksums have the same
+# bytes on Windows laptops, in CI and in GCP.
+* text=auto eol=lf
+
+*.xlsx binary
+*.png binary

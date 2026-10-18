@@ -1,0 +1,68 @@
+[
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Employer key: E and the first 8 hex digits of the MD5 of the organisation's cleaned, case-folded name (docs/identifiers.md)."
+  },
+  {
+    "name": "employer_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The most common spelling of the organisation's name across the sources."
+  },
+  {
+    "name": "sector",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Agreed sector (mappings/sector.csv), or Unknown when no source gives a usable value. Chosen across all of the organisation's rows: the most common value, then a specific value over Other, then source priority, then the latest row."
+  },
+  {
+    "name": "industry",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Agreed industry (mappings/industry.csv), or Unknown when no source gives a usable value. Chosen across all of the organisation's rows: the most common value, then a specific value over Other, then source priority, then the latest row."
+  },
+  {
+    "name": "size_band",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Agreed size band (mappings/size_band.csv), or Unknown when no source gives a usable value. Chosen across all of the organisation's rows: the most common value, then a specific value over Other, then source priority, then the latest row."
+  },
+  {
+    "name": "sites_band",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Agreed sites band (mappings/sites_band.csv), or Unknown when no source gives a usable value. Chosen across all of the organisation's rows: the most common value, then a specific value over Other, then source priority, then the latest row."
+  },
+  {
+    "name": "in_signups",
+    "type": "BOOL",
+    "mode": "REQUIRED",
+    "description": "The organisation has a row on Account signups."
+  },
+  {
+    "name": "in_survey",
+    "type": "BOOL",
+    "mode": "REQUIRED",
+    "description": "The organisation has a survey response."
+  },
+  {
+    "name": "in_was",
+    "type": "BOOL",
+    "mode": "REQUIRED",
+    "description": "The organisation has a WAS request."
+  },
+  {
+    "name": "in_peer",
+    "type": "BOOL",
+    "mode": "REQUIRED",
+    "description": "The organisation has a peer mentoring expression of interest."
+  },
+  {
+    "name": "attribute_conflicts",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Where the organisation's rows disagree, e.g. 'sector: Private | Public; size_band: 1000+ | 50-249'. NULL when they agree."
+  }
+]

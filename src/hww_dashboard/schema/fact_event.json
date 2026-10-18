@@ -1,0 +1,44 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "event_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "event_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "action",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  },
+  {
+    "name": "action_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Placeholder table: no source yet. Tighten when one is added."
+  }
+]

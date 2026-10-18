@@ -40,6 +40,7 @@ from hww_dashboard.logs import (
     new_run_id,
     prune_logs,
 )
+from hww_dashboard.output_schema import check_cells, parse_csv
 
 logger = logging.getLogger(__name__)
 
@@ -444,7 +445,7 @@ class Report:
         lines.append("")
         text = "\n".join(lines)
         check_public_text(text, path.name)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def markdown_table(df: pd.DataFrame) -> str:
@@ -2807,8 +2808,32 @@ def check_public_text(text: str, filename: str) -> None:
         )
 
 
+def csv_text(df: pd.DataFrame, name: str) -> str:
+    """Render a table as the CSV text that every writer starts from.
+
+    Args:
+        df: The table. Missing columns come out empty; extra columns are
+            left out.
+        name: Table name, a key of ``COLUMNS``.
+
+    Returns:
+        The agreed columns as CSV, dates as YYYY-MM-DD, with LF line
+        endings on every system, so a run gives the same bytes on
+        Windows and Linux.
+    """
+    table = df.reindex(columns=COLUMNS[name]).copy()
+    for column in table.columns:
+        table[column] = table[column].map(
+            lambda v: v.isoformat() if isinstance(v, (date, datetime)) else v
+        )
+    return table.to_csv(index=False, lineterminator="\n")
+
+
 def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
     """Write a table with its agreed columns. Dates come out as YYYY-MM-DD.
+
+    The text is checked for contact details and against the table's
+    schema (``hww_dashboard/schema/``) before anything is written.
 
     Args:
         df: The table. Missing columns are written empty; extra columns
@@ -2818,15 +2843,16 @@ def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
 
     Returns:
         Number of rows written.
+
+    Raises:
+        InputError: The table holds a contact identifier.
+        SchemaError: The table breaks its schema (a bug).
     """
-    table = df.reindex(columns=COLUMNS[name]).copy()
-    for column in table.columns:
-        table[column] = table[column].map(
-            lambda v: v.isoformat() if isinstance(v, (date, datetime)) else v
-        )
-    check_public_text(table.to_csv(index=False), f"{name}.csv")
-    table.to_csv(folder / f"{name}.csv", index=False, encoding="utf-8")
-    return len(table)
+    text = csv_text(df, name)
+    check_public_text(text, f"{name}.csv")
+    check_cells(parse_csv(text), name)
+    (folder / f"{name}.csv").write_bytes(text.encode("utf-8"))
+    return len(df)
 
 
 def write_outputs(

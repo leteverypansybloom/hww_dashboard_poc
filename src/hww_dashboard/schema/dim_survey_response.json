@@ -1,0 +1,44 @@
+[
+  {
+    "name": "response_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The survey tool's Entry Id."
+  },
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The employer named in Company, or NULL when Company is blank."
+  },
+  {
+    "name": "date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "The response's Entry Date."
+  },
+  {
+    "name": "sector",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The response's own sector, or its employer's when the response gave none, or Unknown."
+  },
+  {
+    "name": "industry",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The response's own industry, or its employer's when the response gave none, or Unknown."
+  },
+  {
+    "name": "size_band",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The response's own size band, or its employer's when the response gave none, or Unknown."
+  },
+  {
+    "name": "sites_band",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The response's own sites band, or its employer's when the response gave none, or Unknown."
+  }
+]

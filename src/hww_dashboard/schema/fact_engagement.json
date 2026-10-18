@@ -1,0 +1,44 @@
+[
+  {
+    "name": "engagement_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "event_type, '-' and source_ref, e.g. was_request-WAS-11."
+  },
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The employer (dim_employer), or NULL when the source row names none."
+  },
+  {
+    "name": "date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "When it happened. NULL when the source row has no date."
+  },
+  {
+    "name": "date_precision",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "day, or month for sign-ups (dated the first of the month). NULL when date is NULL."
+  },
+  {
+    "name": "event_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "account_signup, survey_completed, was_request, was_session_held, was_completed or peer_mentoring_interest."
+  },
+  {
+    "name": "source",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The source: signups, survey, was or peer."
+  },
+  {
+    "name": "source_ref",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The source row's own id: signup_id, Entry Id, was_request_id, session_id or peer_id."
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "question_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Question id, e.g. Q04 (mappings/survey_questions.csv)."
+  },
+  {
+    "name": "question",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The question's full text."
+  },
+  {
+    "name": "question_short",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Short name for pickers."
+  },
+  {
+    "name": "question_type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "single or multi."
+  },
+  {
+    "name": "answer_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "question_id, '-' and the option's 2-digit position, e.g. Q04-03. Positions change if options are inserted."
+  },
+  {
+    "name": "answer",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The option as written in mappings/survey_answers.csv. Options seen only in the data come last."
+  },
+  {
+    "name": "answer_short",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Short chart label."
+  },
+  {
+    "name": "answer_order",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Sort order from mappings/survey_answers.csv; 999 for options not listed there."
+  }
+]

@@ -166,6 +166,10 @@ or import them into Excel as Text columns.
 
 ## Output tables
 
+Each table's columns, types and which may be empty are fixed by a schema
+file in `src/hww_dashboard/schema/`, and checked before it is written:
+see [docs/output_contract.md](docs/output_contract.md).
+
 | Table | One row per | Used on |
 |---|---|---|
 | `dim_employer` | organisation (duplicates merged) | all pages: filters and employer picker |

@@ -62,7 +62,8 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-hww_dashboard = ["py.typed"]
+# The output contract: one BigQuery-style schema per table.
+hww_dashboard = ["py.typed", "schema/*.json"]
 
 [tool.black]
 line-length = 79

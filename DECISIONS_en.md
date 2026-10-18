@@ -149,6 +149,33 @@ The log was bare console text that vanished with the window. Now:
 Not chosen: py-common's `configure_json_logging()`. It would add the
 py-common dependency for a few lines of formatting.
 
+### The output contract is one BigQuery schema per table
+
+Types and empty values were implicit in the CSV text, so a comparison
+with BigQuery tables would flag differences that aren't real (`true`
+against `True`, `NULL` against `""`), and the BigQuery writer had
+nothing to type the tables from. Each table now has a schema file in
+`src/hww_dashboard/schema/`, in BigQuery's JSON format, with each
+column's type, whether it may be empty and what it holds. Every table
+is checked in its CSV text form before it is written; a mismatch is a
+bug (exit code 2). Dataform can create its tables from the same files,
+and `docs/output_contract.md` shows how to compare the two.
+
+The two placeholder tables, `fact_event` and `badges`, have every
+column optional until they have a source.
+
+Not chosen: changing the CSV files to BigQuery's style (`true`,
+`false`). That would be an output change for no gain, because
+BigQuery's CSV loader reads the current style with the schema.
+
+### Outputs have LF line endings on every system
+
+pandas and Python wrote CRLF on Windows and LF on Linux, so one run
+gave different bytes, and different checksums, on a laptop and in GCP.
+The CSV files and the report now always use LF, and `.gitattributes`
+keeps text files LF in every working copy. The content is unchanged,
+and so are the committed golden files.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)

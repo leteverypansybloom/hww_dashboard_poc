@@ -690,8 +690,10 @@ Each `load_*` function follows the same pattern:
   Using the column directly as a mask fails because of the `None` values.
 
 #### `write_csv(df, folder, name)` and `write_outputs(tables, out, engagement, report, run_at)`
-- **What:** `write_csv` reindexes the table to `COLUMNS[name]`, writes dates as `YYYY-MM-DD`, and
-  writes UTF-8 without the index. `write_outputs` writes every table, adds the row counts and
+- **What:** `write_csv` turns the table into CSV text with `csv_text` (reindexed to
+  `COLUMNS[name]`, dates as `YYYY-MM-DD`, LF line endings on every system), checks that text for
+  contact details and against the table's schema (`output_schema.check_cells`), then writes it as
+  UTF-8 without the index. `write_outputs` writes every table, adds the row counts and
   event-type counts to the report, and writes the report. A sibling staging directory holds
   the whole generation before publication. Rename failures restore the previous directory;
   if restoration itself fails, the `.hww-*/previous` backup is retained for recovery.

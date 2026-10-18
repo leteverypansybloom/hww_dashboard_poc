@@ -1,0 +1,44 @@
+[
+  {
+    "name": "response_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The response (dim_survey_response)."
+  },
+  {
+    "name": "employer_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The response's employer, or NULL when Company is blank."
+  },
+  {
+    "name": "date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "The response's Entry Date."
+  },
+  {
+    "name": "question_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The question (question_catalogue), e.g. Q04."
+  },
+  {
+    "name": "question",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The question's full text."
+  },
+  {
+    "name": "answer_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The answer option (question_catalogue)."
+  },
+  {
+    "name": "answer",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The option chosen, in the catalogue's spelling; Welsh answers are translated. One row per response and option."
+  }
+]
