@@ -83,17 +83,16 @@ COLUMNS = {
         "in_peer",
         "attribute_conflicts",
     ],
+    # Job roles and the flag columns' raw text are not output (data
+    # minimisation, DECISIONS_en.md 2026-10-18).
     "fact_signup": [
         "signup_id",
         "employer_id",
         "signup_month",
-        "role",
         "survey_flag",
         "survey_dates",
-        "survey_raw",
         "was_flag",
         "was_dates",
-        "was_raw",
     ],
     "fact_engagement": [
         "engagement_id",
@@ -280,8 +279,9 @@ ASSUMPTIONS = [
     "not output unless keep_other_free_text = true in config.toml.",
     "Peer mentoring 'relationships' = expressions of interest (no matching "
     "dates recorded yet).",
-    "The job role on Account signups is kept in fact_signup (it can tell "
-    "users apart within an employer).",
+    "Job roles, and the text typed into 'Completed survey?' and "
+    "'Requested WAS?', are not output; fact_signup keeps only the flags "
+    "and dates read from that text.",
 ]
 
 Config = dict[str, Any]  # one section of config.toml
@@ -2787,8 +2787,10 @@ def reconcile(
 def check_public_text(text: str, filename: str) -> None:
     """Stop recognisable contact identifiers from reaching an output.
 
-    This guard catches email addresses, IPv4 addresses and web links.
-    It cannot identify arbitrary personal names in free-form text.
+    This guard catches email addresses, UK phone numbers (0 or +44 and
+    10 more digits, spaces, dashes and brackets allowed), IPv4
+    addresses and web links. It cannot identify arbitrary personal
+    names in free-form text.
 
     Args:
         text: Text destined for an output table or report.
@@ -2798,7 +2800,9 @@ def check_public_text(text: str, filename: str) -> None:
         InputError: Text contains a recognisable personal identifier.
     """
     pattern = (
-        r"[\w.+-]+@[\w-]+\.[\w.]+|" r"\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://"
+        r"[\w.+-]+@[\w-]+\.[\w.]+|"
+        r"(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|"
+        r"\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://"
     )
     if re.search(pattern, text, flags=re.IGNORECASE):
         raise InputError(

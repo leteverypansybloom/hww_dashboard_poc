@@ -18,12 +18,6 @@
     "description": "First day of the sign-up month (the sheet records only the month). NULL when the row has no month."
   },
   {
-    "name": "role",
-    "type": "STRING",
-    "mode": "NULLABLE",
-    "description": "Job role typed on the row. NULL when blank, or when it repeated the organisation's name."
-  },
-  {
     "name": "survey_flag",
     "type": "BOOL",
     "mode": "NULLABLE",
@@ -36,12 +30,6 @@
     "description": "Months named in the 'Completed survey?' text, as first-of-month dates (YYYY-MM-DD) separated by ';'."
   },
   {
-    "name": "survey_raw",
-    "type": "STRING",
-    "mode": "NULLABLE",
-    "description": "The 'Completed survey?' cell as typed."
-  },
-  {
     "name": "was_flag",
     "type": "BOOL",
     "mode": "NULLABLE",
@@ -52,11 +40,5 @@
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "Months named in the 'Requested WAS?' text, as first-of-month dates (YYYY-MM-DD) separated by ';'."
-  },
-  {
-    "name": "was_raw",
-    "type": "STRING",
-    "mode": "NULLABLE",
-    "description": "The 'Requested WAS?' cell as typed."
   }
 ]

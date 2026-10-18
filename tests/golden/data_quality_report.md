@@ -161,4 +161,4 @@ Add them to the matching CSV in mappings/ to fix.
 - Survey % for a question = respondents who ticked the answer / respondents who gave any answer to that question.
 - Survey free text ('Other' boxes, 'What parts could be improved?') is not output unless keep_other_free_text = true in config.toml.
 - Peer mentoring 'relationships' = expressions of interest (no matching dates recorded yet).
-- The job role on Account signups is kept in fact_signup (it can tell users apart within an employer).
+- Job roles, and the text typed into 'Completed survey?' and 'Requested WAS?', are not output; fact_signup keeps only the flags and dates read from that text.

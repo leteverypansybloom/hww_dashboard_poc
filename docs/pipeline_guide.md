@@ -489,11 +489,13 @@ Each `load_*` function follows the same pattern:
      cell.
   3. Drop rows with no organisation. In the dummy file that is 15 blank rows.
   4. Warn about rows with no month.
-  5. Clear `role` when someone typed the organisation name into it.
+  5. Clear `role` when someone typed the organisation name into it (the report notes it; roles
+     are not output).
   6. Map the bands.
   7. Set `signup_id = "SU" + Excel row`, e.g. `SU0012`.
   8. Parse the two flag columns into `survey_flag/dates/raw` and `was_flag/dates/raw`, noting
-     unreadable dates and dates after `today` (the run date).
+     unreadable dates and dates after `today` (the run date). Only the flags and dates are
+     output; the raw text stays in memory, for the report's notes.
 - **Why:** each row is one user, so duplicate organisations are **kept** here. They are merged only
   in `dim_employer`. The signup id is the Excel row number, so anyone can find the row.
 - **Gotchas:** the forward-fill runs before blank rows are dropped, so a month on a blank row still
@@ -803,8 +805,9 @@ allocated 2025-11-27, `10-49` employees, sector `Private sector`, industry `Othe
     text `"1"`).
   - `Y (Jan)` next to November 2025 → flag True, date **2026-01-01** (`nearest_year`).
   - `signup_id = SU0012`.
-- **Sign-up row 136** gets `signup_month = 2026-07-01`. Its role is kept because it isn't the
-  organisation name. Bands: `Public`, `250-999`, `1`. `signup_id = SU0136`.
+- **Sign-up row 136** gets `signup_month = 2026-07-01`. Its role isn't the organisation name,
+  so it isn't cleared (roles aren't output either way). Bands: `Public`, `250-999`, `1`.
+  `signup_id = SU0136`.
 - **WAS** becomes `was_request_id = WAS-11` with enquiry date 2026-03-04. The "allocated" date is
   ignored because the enquiry date is there. Bands: `Private`, industry `Other..` → `Other`,
   size `10-49`, sites `Unknown`.

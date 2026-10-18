@@ -1033,6 +1033,45 @@ class TestCheckPublicText:
         with pytest.raises(wrangle.InputError, match="output.csv"):
             wrangle.check_public_text("HTTPS://example.org", "output.csv")
 
+    @pytest.mark.parametrize(
+        "phone",
+        [
+            "07700 900123",
+            "07700900123",
+            "+44 7700 900123",
+            "(029) 2018 0123",
+            "0161-496-0123",
+        ],
+    )
+    def test_uk_phone_numbers_are_caught(self, phone: str) -> None:
+        """UK phone numbers stop the run, and the message omits them.
+
+        Args:
+            phone: A phone number in one of the usual layouts (all in
+                Ofcom's ranges reserved for drama).
+        """
+        with pytest.raises(wrangle.InputError) as error:
+            wrangle.check_public_text(f"call {phone} today", "notes.csv")
+        assert phone not in str(error.value)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "2025-11-01;2026-08-01",
+            "E0016300d,Org 1,2026-04-01",
+            "PM-0011,WAS-10-S2,19460",
+            "answer_order 999, fin_year 2025-26",
+            "001234567890123",
+        ],
+    )
+    def test_ordinary_numbers_pass(self, text: str) -> None:
+        """Dates, ids and long reference numbers aren't phone numbers.
+
+        Args:
+            text: Text like the pipeline's own outputs.
+        """
+        wrangle.check_public_text(text, "output.csv")
+
 
 class TestRun:
     """The pipeline handles a generation with no source records."""

@@ -168,6 +168,23 @@ Not chosen: changing the CSV files to BigQuery's style (`true`,
 `false`). That would be an output change for no gain, because
 BigQuery's CSV loader reads the current style with the schema.
 
+### Job roles and flag text leave fact_signup; phone numbers are refused
+
+`fact_signup` kept each user's job role (free text such as "School
+nurse") and the raw text of the two flag columns. With the employer
+and the month, a role can identify a person at a small employer, and
+nothing used these columns. They are no longer written (data
+minimisation); the flags and the dates read from the text remain. The
+project owner agreed this output change.
+
+The contact-detail check on every output and the report now refuses UK
+phone numbers (0 or +44 and ten more digits) as well as emails, IPv4
+addresses and links. `docs/data_protection.md` describes what each
+output holds, for the DPIA.
+
+**Trade-off**: anyone who needs roles must ask for them back, with a
+DPIA note. Benefit: less personal data in every copy of the outputs.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run
