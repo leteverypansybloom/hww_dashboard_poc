@@ -1,0 +1,36 @@
+dimension,agreed_value
+sector,Public
+sector,Private
+sector,Charity or voluntary
+sector,Other
+industry,Accommodation & Food Services
+industry,"Agriculture, Forestry, & Fishing"
+industry,"Arts, Entertainment, Recreation, & Other Services"
+industry,Business Administration & Support Services
+industry,Construction
+industry,Education
+industry,Financial & Insurance
+industry,Human Health & Social Work Activities
+industry,Information & Communication
+industry,Manufacturing
+industry,"Mining, Quarrying, & Utilities"
+industry,Motor Trades
+industry,"Professional, Scientific, & Technical Activities"
+industry,Property & Real Estate Services
+industry,"Public Administration, Defence, & Social Security"
+industry,Retail
+industry,Transport & Storage (including postal)
+industry,Wholesale
+industry,Other
+size_band,0-9
+size_band,10-49
+size_band,50-249
+size_band,250-999
+size_band,1000+
+sites_band,1
+sites_band,2-5
+sites_band,6+
+sites_band,Not applicable (remote)
+was_duration,Under 90 minutes
+was_topic,Mental health and wellbeing
+was_topic,Physical activity

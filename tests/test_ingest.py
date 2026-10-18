@@ -1311,3 +1311,58 @@ class TestRun:
         assert "WAS database: 35 rows read, 65% fewer" in report
         record = json.loads((out / "run_record.json").read_text("utf-8"))
         assert record["attention"]["shrunk_sources"] == 1
+
+
+class TestCheckAgreedValues:
+    """``check_agreed_values``: mapping targets come from one list."""
+
+    @pytest.fixture
+    def agreed(self, tmp_path: Path) -> Path:
+        """Write a short list of agreed values.
+
+        Args:
+            tmp_path: Holds the file.
+
+        Returns:
+            The agreed_values.csv path.
+        """
+        path = tmp_path / "agreed_values.csv"
+        path.write_text(
+            "dimension,agreed_value\nsector,Public\nsector,Private\n", "utf-8"
+        )
+        return path
+
+    def test_targets_on_the_list_pass(self, agreed: Path) -> None:
+        """Mapping to an agreed value is fine.
+
+        Args:
+            agreed: The agreed values file.
+        """
+        wrangle.check_agreed_values(
+            {"sector": {"private sector": "Private"}}, agreed
+        )
+
+    def test_a_typo_in_a_target_is_named(self, agreed: Path) -> None:
+        """A target that isn't on the list names its file and value.
+
+        Args:
+            agreed: The agreed values file.
+        """
+        with pytest.raises(
+            wrangle.InputError, match=r"sector.csv: \['Privat'\]"
+        ):
+            wrangle.check_agreed_values(
+                {"sector": {"private sector": "Privat"}}, agreed
+            )
+
+    @pytest.mark.parametrize("row", ["sectr,Public", "sector,", ",Public"])
+    def test_bad_list_rows_are_refused(self, agreed: Path, row: str) -> None:
+        """Unknown dimensions and blank values in the list stop the run.
+
+        Args:
+            agreed: The agreed values file.
+            row: A bad row to add.
+        """
+        agreed.write_text(agreed.read_text("utf-8") + row + "\n", "utf-8")
+        with pytest.raises(wrangle.InputError, match="agreed_values.csv"):
+            wrangle.check_agreed_values({}, agreed)

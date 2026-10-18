@@ -168,6 +168,7 @@ The tests never read the real data, so they keep passing whatever `config.toml` 
 |---|---|
 | `sector.csv`, `industry.csv`, `size_band.csv`, `sites_band.csv` | Map every label used in any file to one agreed list. Matching ignores case and spaces. |
 | `org_overrides.csv` | Force two spellings to be the same organisation: `raw_name,canonical_name`. |
+| `agreed_values.csv` | The agreed values of each band, topic and duration, in the order people expect them. Every `agreed_value` in the files above must be listed here, so a typo stops the run instead of creating a new band. |
 | `was_duration.csv`, `was_topic.csv` | Tidy WAS session durations and topics. |
 | `survey_columns.csv` | What each survey export column is (question, tick-box option, employer field, or `drop`). Repeated headers are numbered like pandas: `Other`, `Other.1`, ... |
 | `survey_questions.csv` | Question id, full text, short name for the picker, single or multi. |

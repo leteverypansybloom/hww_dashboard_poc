@@ -246,6 +246,7 @@ MAPPING_COLUMNS = {
         "answer_order",
     ],
     "survey_answer_translations": ["question_id", "raw_answer", "answer"],
+    "agreed_values": ["dimension", "agreed_value"],
 }
 
 LOOKUP_NAMES = (
@@ -1323,6 +1324,43 @@ def mapping_pairs(
     return result
 
 
+def check_agreed_values(lookups: Mapping[str, Lookup], path: Path) -> None:
+    """Check every mapping target is on the agreed list for its dimension.
+
+    A typo in a mapping file's agreed_value would otherwise create a new
+    band without a word.
+
+    Args:
+        lookups: From ``load_lookup``, keyed by dimension.
+        path: ``mappings/agreed_values.csv``: one row per dimension and
+            agreed value, in the order people expect to see them.
+
+    Raises:
+        InputError: The list has a blank or unknown dimension, or a
+            mapping file targets a value that isn't on the list.
+    """
+    table = read_csv_text(path, MAPPING_COLUMNS["agreed_values"])
+    allowed: dict[str, set[str]] = {}
+    for dimension, value in zip(
+        table["dimension"], table["agreed_value"], strict=True
+    ):
+        dimension, value = clean_text(dimension), clean_text(value)
+        if dimension not in LOOKUP_NAMES or not value:
+            raise InputError(
+                f"mappings/{path.name}: every row needs a dimension from "
+                f"{list(LOOKUP_NAMES)} and a nonblank agreed_value."
+            )
+        allowed.setdefault(dimension, set()).add(value)
+    for name, lookup in lookups.items():
+        unknown = sorted(set(lookup.values()) - allowed.get(name, set()))
+        if unknown:
+            raise InputError(
+                f"mappings/{name}.csv: {unknown} is not an agreed {name} "
+                f"value in mappings/{path.name}. Fix the spelling, or add "
+                "the value there if it is a new band."
+            )
+
+
 def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
     """Read the band/topic lookups and the organisation-name overrides.
 
@@ -1337,6 +1375,7 @@ def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
     lookups = {
         name: load_lookup(maps / f"{name}.csv") for name in LOOKUP_NAMES
     }
+    check_agreed_values(lookups, maps / "agreed_values.csv")
     table = read_csv_text(
         maps / "org_overrides.csv", MAPPING_COLUMNS["org_overrides"]
     )

@@ -309,6 +309,21 @@ Not chosen: a permanent register of employers with assigned ids. It
 would survive renames, but someone must maintain it; that belongs in
 Dataform's employer model.
 
+### Mapping targets come from one agreed list
+
+People edit the mapping files, and a typo in an `agreed_value`
+("Privat") used to create a new band without a word; the only list of
+agreed bands lived in the dashboard's code. `mappings/agreed_values.csv`
+now lists each dimension's agreed values in the order people expect
+them, and every lookup's targets must be on it, or the run stops,
+naming the file and the value. Its rows were taken from the current
+mapping files, so no output changed. The code-quality review already
+rejects blank and conflicting rows.
+
+**Trade-off**: a new band needs two edits, the mapping and the list.
+Benefit: the bands are a decision someone makes once, and the
+dashboard and Dataform can read their order from the same file.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run
