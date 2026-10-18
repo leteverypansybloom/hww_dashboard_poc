@@ -222,7 +222,8 @@ What you see in the terminal (dummy data):
 ```
 
 The same lines are saved in `logs/<run id>.log` next to the config (the newest 20 are kept). The
-last line always says whether the report needs attention, so you know whether to open it.
+last line always says whether the report needs attention, so you know whether to open it; the
+report's first section, **Needs attention**, lists each item with what to do about it.
 
 And when something structural is wrong:
 
@@ -273,19 +274,26 @@ this way) and **Gotchas** (what can trip you up).
 - **Gotcha:** when you add a check, raise `InputError` with a message that names the file and what
   to change. Don't raise `SystemExit` or `print` and continue.
 
-#### `class Report` — `__init__`, `add`, `dropped`, `write`
-- Before writing, report text is checked for recognisable contact identifiers. Rendering
-  leaves the stored sections unchanged, so repeated writes produce identical bytes.
+#### `class Report` — `add`, `dropped`, `needs`, `to_act_on`, `render`, `write`
 - **What:** collects markdown lines for `data_quality_report.md`, grouped into the sections in
   `Report.ORDER`. `unmapped` is a `Counter` keyed by `(dimension, source, raw value)`.
-  `dropped()` adds a "Rows dropped" line only if the count is non-zero. `write()` adds the
-  unmapped-values table, writes every section (`None.` if it is empty) and appends `ASSUMPTIONS`.
+  `dropped()` adds a "Rows dropped" line only if the count is non-zero. `needs()` counts something
+  a person should act on, under a key of `ATTENTION`, and `to_act_on()` lists those counts,
+  counting each unmapped raw value once. `render()` builds the text: the run time, then **Needs
+  attention** (one line per item, saying what was found and what to do, or `None.`), then every
+  section in order (`None.` if it is empty) with the unmapped-values table, then `ASSUMPTIONS`.
+  It checks the text for recognisable contact identifiers and leaves the stored sections
+  unchanged, so rendering twice gives the same bytes. `write()` saves that text with LF line
+  endings; the BigQuery writer stores the same text in its `data_quality_report` table.
 - **Why:** each function adds notes as it goes, so the report says exactly what happened in this run.
-  The fixed section order makes two reports easy to compare.
-- **Gotchas:** `write()` adds lines to "Unmapped values" itself, so call it once. The first lines
-  contain the run time (`write(path, run_at)`), and some warnings depend on the run date ("dated
-  after today"), so the report can change from day to day even when the data doesn't. `run()`
-  takes `now=` so the tests can fix both, which is how the golden test compares the report too.
+  The fixed section order makes two reports easy to compare. Needs attention comes first so whoever
+  runs the pipeline sees at once whether there is anything to do; the run's last log line says the
+  same, and the run record keeps the counts (`attention`).
+- **Gotchas:** to add a kind of item to Needs attention, add its key, what was found and what to do
+  to `ATTENTION`, and call `report.needs(key, count)` where it is found. The first lines contain the
+  run time (`render(run_at)`), and some warnings depend on the run date ("dated after today"), so
+  the report can change from day to day even when the data doesn't. `run()` takes `now=` so the
+  tests can fix both, which is how the golden test compares the report too.
 
 #### `markdown_table(df)`
 - **What:** turns a small DataFrame into a markdown table, replacing `|` in cells with `/`.

@@ -156,11 +156,15 @@ To show the HWW logo instead of the text name, save it as `assets/logo.png` in t
 ## Using the real data
 
 1. Put the real files in the input folder and change the file names in `config.toml`.
-2. Run `python wrangle.py` and read `output/data_quality_report.md`:
-   - **Unmapped values** – add them to the CSVs in `mappings/`.
-   - **Survey checks** – new or missing survey columns mean the form changed; update `mappings/survey_columns.csv`.
-   - **Answer not in survey_answers.csv** – add the option, or a Welsh translation to `survey_answer_translations.csv`.
-3. Run again until the report is clean, then `python -m pytest`.
+2. Run `python wrangle.py` and read **Needs attention** at the top of
+   `output/data_quality_report.md`. Each line says what was found and what to do, for example:
+   - values not in the mapping files – add them to the CSVs in `mappings/`;
+   - new or missing survey columns – the form changed; update `mappings/survey_columns.csv`;
+   - answers not in `survey_answers.csv` – add the option, or a Welsh translation to
+     `survey_answer_translations.csv`.
+3. Run again until Needs attention says `None.`, then `python -m pytest`.
+
+[docs/runbook.md](docs/runbook.md) covers exit codes, recovery and support.
 
 The tests never read the real data, so they keep passing whatever `config.toml` points at.
 `output/` is ignored by git, so real tables can't be committed by accident.
