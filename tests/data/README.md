@@ -8,7 +8,7 @@ own settings.
 
 | Path | What it is |
 |---|---|
-| `config.toml` | Frozen copy of the project config. Reads `inputs/` and the live `mappings/`. |
+| `config.toml` | Frozen copy of the project config. Reads `inputs/` and the live `mappings/`. Also the demo config: `python wrangle.py tests/data/config.toml` writes the synthetic tables to the project's `output/` (the tests write to temporary folders instead). |
 | `inputs/*.xlsx` | Synthetic copies of the four dummy HWW workbooks. |
 
 ## How the inputs were made

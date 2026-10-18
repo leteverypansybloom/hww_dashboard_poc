@@ -5,3 +5,16 @@ __pycache__/
 .venv/
 build/
 *.egg-info/
+
+# Pipeline output. On a working laptop it holds real organisation names
+# and survey answers, so it is never committed. Rebuild the demo tables
+# with: python wrangle.py tests/data/config.toml
+output/
+# Temporary folders the pipeline stages outputs in (kept only if
+# restoring a previous output folder fails).
+.hww-*/
+
+# Local settings that may point at real data or hold credentials.
+*.local.toml
+.env
+.env.*

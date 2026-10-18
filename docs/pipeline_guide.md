@@ -1088,10 +1088,10 @@ The first one in the file. If the export ever contains edited resubmissions, dec
 latest should win. That would be an output change.
 
 #### Q: Is it safe to commit `output/`?
-With the dummy data, yes. It is committed so the dashboard runs straight after cloning. With real
-data, **no**: the outputs hold real organisation names and survey answers. Add `output/` to
-`.gitignore` before the real files arrive. The golden snapshot only ever holds synthetic data,
-because its config reads the synthetic inputs in `tests/data/`.
+No, and git won't: `output/` is in `.gitignore`. With real data it holds real organisation names
+and survey answers. To see the dashboard after cloning, build the demo tables from the synthetic
+inputs with `python wrangle.py tests/data/config.toml`. The golden snapshot only ever holds
+synthetic data, because its config reads the synthetic inputs in `tests/data/`.
 
 #### Q: How do I run all the checks?
 

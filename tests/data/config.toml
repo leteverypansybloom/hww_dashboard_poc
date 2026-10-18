@@ -3,10 +3,14 @@
 # made from, so no test reads files outside this project, and the tests
 # keep working after config.toml is switched to the real data. It does
 # use the live mappings/ folder. Paths are relative to this file.
+#
+# The tests always write to temporary folders. output_folder is used
+# only by the demo command, python wrangle.py tests/data/config.toml,
+# which builds the synthetic tables in the project's output/ folder.
 
 [paths]
 input_folder = "inputs"
-output_folder = "out"   # not used: the tests write to temporary folders
+output_folder = "../../output"
 mappings_folder = "../../mappings"
 
 [signups]

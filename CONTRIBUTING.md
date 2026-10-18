@@ -81,7 +81,9 @@ it. After an agreed change:
 
 ## Data protection
 
-- Never commit real data. Real workbooks stay outside the repository.
+- Never commit real data. Real workbooks stay outside the repository,
+  and `output/` is ignored by git. To see the dashboard on a fresh
+  clone, build the demo tables: `python wrangle.py tests/data/config.toml`.
 - Synthetic personal values use reserved examples (`example.org`,
   `192.0.2.x`); `tests/data/README.md` explains how the inputs were
   made.

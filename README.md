@@ -37,6 +37,14 @@ streamlit run dashboard.py
 python -m pytest
 ```
 
+`output/` is not kept in git, because on a working laptop it holds real
+data. After cloning, build the demo tables from the synthetic workbooks
+in `tests/data/inputs/` first:
+
+```
+python wrangle.py tests/data/config.toml
+```
+
 Inputs are read from the folder above this one (set in `config.toml`).
 The survey export is found by `file_pattern`: drop a new download in the input folder and the
 newest one (by the date in its name) is used. The other files are named exactly.
@@ -61,7 +69,7 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 | `src/hww_dashboard/dashboard_data.py` | Every sum the dashboard shows. No Streamlit code, so it is tested on its own. |
 | `src/hww_dashboard/dashboard.py` | The Streamlit pages, charts and branding. It only draws. |
 | `config.toml`, `mappings/` | Settings and lookup tables (below). |
-| `output/` | The tables `wrangle.py` writes (dummy data for now). |
+| `output/` | The tables `wrangle.py` writes. Not kept in git: with real data it holds organisation names and survey answers. |
 | `tests/` | Tests grouped by the function under test, the golden-output check and page smoke tests. |
 | `tests/data/` | Synthetic input workbooks and the frozen config the tests use ([README](tests/data/README.md)). |
 | `docs/` | The pipeline guide and the architecture notes. |
@@ -122,8 +130,7 @@ To show the HWW logo instead of the text name, save it as `assets/logo.png` in t
 3. Run again until the report is clean, then `python -m pytest`.
 
 The tests never read the real data, so they keep passing whatever `config.toml` points at.
-Before the real files arrive, add `output/` to `.gitignore`: with real data its tables hold
-organisation names and survey answers.
+`output/` is ignored by git, so real tables can't be committed by accident.
 
 ## Mappings (`mappings/`)
 

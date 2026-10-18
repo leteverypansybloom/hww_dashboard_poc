@@ -54,6 +54,21 @@ can hide a mistake.
 **Trade-off**: one more file to keep. Benefit: refreshing is a
 separate, visible step that someone chooses to take.
 
+### The output folder is not kept in git
+
+`output/` was committed so the dashboard ran straight after cloning.
+With real data, the next `git add .` would have committed
+organisation names and survey answers, and after a push only a
+history rewrite removes them. `output/` is now ignored and untracked.
+The committed tables were identical to `tests/golden/`, so nothing is
+lost: `python wrangle.py tests/data/config.toml` rebuilds them from
+the synthetic inputs (that config's output folder was unused, because
+the tests write to temporary folders).
+
+**Trade-off**: a fresh clone needs one command before the dashboard
+shows anything. Benefit: real tables can't reach the repository by
+accident.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)
