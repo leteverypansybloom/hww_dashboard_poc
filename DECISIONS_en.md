@@ -13,6 +13,15 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-10-18 — Operators get an action summary
+
+The report starts with a count of items needing attention and the action for
+each. A successful publication with warnings still exits 0; monitoring must
+match the warning log as well as failed executions. `docs/runbook.md` explains
+running, interpretation, recovery and the ownership needed before scheduling.
+This implements the report change approved by the project owner. The golden
+report gains only the four lines of the new summary.
+
 ## 2026-10-18 — Production readiness
 
 The production-readiness review prepared the prototype for two jobs:

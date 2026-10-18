@@ -694,6 +694,42 @@ class TestReport:
         assert path.read_bytes() == first
         assert report.sections["Unmapped values"] == []
 
+    def test_opens_with_what_needs_attention(self, run_time: datetime) -> None:
+        """The first section counts each item and says what to do.
+
+        Items come in the order of ``ATTENTION``, and unmapped values
+        count once per distinct raw value, however many rows hold it.
+
+        Args:
+            run_time: The tests' fixed run time.
+        """
+        report = wrangle.Report()
+        report.needs("new_columns", 2)
+        report.needs("flag_problems", 0)
+        report.unmapped[("sector", "signups", "New band")] = 3
+        report.unmapped[("sector", "was", "Other band")] = 1
+        top = report.render(run_time).split("## Inputs")[0]
+        assert top == (
+            "# Data quality report\n\n"
+            "Run at 2026-10-10 12:00.\n\n"
+            "## Needs attention\n\n"
+            "- 2 value(s) not in the mapping files: add each to the "
+            "matching CSV in mappings/ (see Unmapped values).\n"
+            "- 2 new survey column(s): add each to "
+            "mappings/survey_columns.csv (see Survey checks).\n\n"
+        )
+
+    def test_says_when_nothing_needs_attention(
+        self, run_time: datetime
+    ) -> None:
+        """A run with nothing to act on says so at the top.
+
+        Args:
+            run_time: The tests' fixed run time.
+        """
+        text = wrangle.Report().render(run_time)
+        assert "## Needs attention\n\nNone.\n\n## Inputs\n" in text
+
     def test_zero_drops_add_no_note(self) -> None:
         """Report row drops only when at least one row is removed."""
         report = wrangle.Report()

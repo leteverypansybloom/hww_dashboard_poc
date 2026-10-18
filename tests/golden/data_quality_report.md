@@ -2,6 +2,10 @@
 
 Run at 2026-10-10 12:00.
 
+## Needs attention
+
+- 1 value(s) not in the mapping files: add each to the matching CSV in mappings/ (see Unmapped values).
+
 ## Inputs
 
 - Account signups: 200 rows read (sheet 'Account signups') from dummy_HWW monitoring and reporting.xlsx (SHA-256 166334596127).

@@ -439,6 +439,18 @@ class Report:
         text = self.render(run_at, path.name)
         path.write_text(text, encoding="utf-8", newline="\n")
 
+    def attention_lines(self) -> list[str]:
+        """Say what needs attention, for the top of the report.
+
+        Returns:
+            One bullet per item in ``to_act_on``, with what to do about
+            it, or ``["None."]``.
+        """
+        return [
+            f"- {count} {ATTENTION[key][0]}: {ATTENTION[key][1]}."
+            for key, count in self.to_act_on().items()
+        ] or ["None."]
+
     def render(
         self, run_at: datetime, filename: str = "data_quality_report.md"
     ) -> str:
@@ -458,6 +470,10 @@ class Report:
             "# Data quality report",
             "",
             f"Run at {run_at:%Y-%m-%d %H:%M}.",
+            "",
+            "## Needs attention",
+            "",
+            *self.attention_lines(),
             "",
         ]
         sections = deepcopy(self.sections)

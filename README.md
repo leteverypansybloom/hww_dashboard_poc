@@ -81,6 +81,8 @@ names from the job's environment.
 `python wrangle.py`. To show the tables in another folder, set the
 `HWW_OUTPUT` environment variable to it before starting the dashboard.
 
+Operator instructions: [docs/runbook.md](docs/runbook.md).
+
 How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md).
 
 ## Project layout
