@@ -1,0 +1,14 @@
+[
+  {
+    "name": "run_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The run that wrote the report (runs.run_id)."
+  },
+  {
+    "name": "report",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The data quality report, as markdown. Replaced on every run, with the tables."
+  }
+]

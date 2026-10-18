@@ -16,13 +16,16 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from functools import cache
 from pathlib import Path
 
 import pandas as pd
 
 SCHEMA_FOLDER = Path(__file__).resolve().parent / "schema"
+#: Schemas of the tables that exist only in BigQuery: the report and the
+#: run records.
+BIGQUERY_FOLDER = SCHEMA_FOLDER / "bigquery"
 
 
 class SchemaError(Exception):
@@ -77,21 +80,40 @@ def is_date(text: str) -> bool:
     return True
 
 
+def is_timestamp(text: str) -> bool:
+    """Check text is an ISO 8601 time with a time zone.
+
+    Args:
+        text: A cell.
+
+    Returns:
+        True for text such as ``2026-10-18T09:15:02+00:00``.
+    """
+    try:
+        return datetime.fromisoformat(text).tzinfo is not None
+    except ValueError:
+        return False
+
+
 #: How each type looks in CSV text (empty cells are checked separately).
 VALID: dict[str, Callable[[str], bool]] = {
     "STRING": lambda text: True,
     "DATE": is_date,
     "BOOL": lambda text: text in ("True", "False"),
     "INT64": lambda text: re.fullmatch(r"-?\d+", text) is not None,
+    "TIMESTAMP": is_timestamp,
 }
 
 
 @cache
-def schema(table: str) -> tuple[Field, ...]:
+def schema(table: str, folder: Path = SCHEMA_FOLDER) -> tuple[Field, ...]:
     """Read one table's schema.
 
     Args:
         table: Table name, e.g. ``"dim_employer"``.
+        folder: Where to look: the output tables' schemas, or
+            ``BIGQUERY_FOLDER`` for the tables that exist only in
+            BigQuery.
 
     Returns:
         The table's fields, in column order.
@@ -100,7 +122,7 @@ def schema(table: str) -> tuple[Field, ...]:
         SchemaError: The table has no schema, or the schema names an
             unknown type or mode.
     """
-    path = SCHEMA_FOLDER / f"{table}.json"
+    path = folder / f"{table}.json"
     if not path.exists():
         raise SchemaError(f"No schema for table {table}.")
     fields = tuple(

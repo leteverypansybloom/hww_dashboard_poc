@@ -211,6 +211,48 @@ output change.
 Not chosen: the report alone. Versions and times change from run to
 run, which would make the report differ between identical runs.
 
+### BigQuery tables are replaced in one transaction, from staging tables
+
+`hww_dashboard.bigquery_output.publish` loads every table, the report
+and the run record into staging tables of the run's own, then runs one
+script that, in a single transaction, empties each final table and
+copies its staging table in, and appends the run record to `runs`. On
+any error the transaction rolls back and every table keeps its previous
+rows. Staging tables expire after a day if a run dies. This is
+py-common's pattern (staging, one commit script, errors reported by job
+id without BigQuery's message text, which can quote data). A final
+table that is missing is created from its schema; one whose columns
+differ stops the run, because changing a schema should be deliberate.
+
+Not chosen: overwriting each table in turn (a failure part-way mixes
+two runs, the old CSV problem again), and a new dataset per run with
+views on the latest (the views can't all switch at once, and old
+datasets pile up).
+
+### Rows are loaded as JSON lines typed by the schema
+
+Each table's CSV text, the same text the folder writer writes, is
+turned into newline-delimited JSON with the schema's types: empty
+cells become null, BOOL `True` becomes `true`, INT64 a number. The two
+writers therefore publish the same rows, and nothing is left for
+pandas to guess.
+
+Not chosen: loading straight from DataFrames, which needs pyarrow and
+lets pandas guess the type of mixed columns.
+
+### Tables are replaced; only run records accumulate
+
+Each run replaces every output table and the one-row
+`data_quality_report` table. Only `runs` keeps every run's record,
+which holds no cell values. The sources are cumulative workbooks, so
+the latest run has the full history anyway, and keeping old copies of
+the tables would mean more personal data to govern. BigQuery's time
+travel still holds replaced rows for a few days.
+
+Not chosen: appending every run's rows with a run id. That gives full
+history, but at the cost of more personal data and a "latest run"
+filter in every query.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run

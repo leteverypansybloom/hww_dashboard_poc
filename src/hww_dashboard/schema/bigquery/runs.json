@@ -1,0 +1,44 @@
+[
+  {
+    "name": "run_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The run's id: its UTC start time and six random hex digits."
+  },
+  {
+    "name": "started_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the run started."
+  },
+  {
+    "name": "finished_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the run's tables were staged for publishing."
+  },
+  {
+    "name": "outcome",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "published: the run replaced the tables."
+  },
+  {
+    "name": "git_commit",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The code's git commit, or unknown."
+  },
+  {
+    "name": "package_version",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The hww-dashboard version."
+  },
+  {
+    "name": "record",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The whole run record as JSON text, as in run_record.json: inputs, mappings, config, versions, outputs and what needs attention. No cell values. Read it with PARSE_JSON(record)."
+  }
+]

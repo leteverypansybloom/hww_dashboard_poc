@@ -63,7 +63,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # The output contract: one BigQuery-style schema per table.
-hww_dashboard = ["py.typed", "schema/*.json"]
+hww_dashboard = ["py.typed", "schema/*.json", "schema/bigquery/*.json"]
 
 [tool.black]
 line-length = 79
@@ -95,6 +95,9 @@ python_version = "3.11"
 files = ["src", "tests", "scripts", "wrangle.py", "dashboard.py"]
 mypy_path = "src"
 strict = true
+# google-api-core's exception classes have no type hints; the tests
+# construct them to stand in for BigQuery's errors.
+untyped_calls_exclude = ["google.api_core.exceptions"]
 
 [[tool.mypy.overrides]]
 # plotly ships without type information.
@@ -106,6 +109,9 @@ testpaths = ["tests"]
 # Import test modules without putting their folder on sys.path: the code
 # under test is imported from the installed package, as users import it.
 addopts = ["--import-mode=importlib"]
+markers = [
+    "integration: needs a real BigQuery test dataset (skipped without one)",
+]
 
 [tool.coverage.run]
 source = ["hww_dashboard"]
