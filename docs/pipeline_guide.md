@@ -203,17 +203,21 @@ contents, and each numbered comment matches a step below.
 What you see in the terminal (dummy data):
 
 ```
-Config: ...\hww_poc_code\config.toml
-Account signups: read 200 row(s) from dummy_HWW monitoring and reporting.xlsx (sheet 'Account signups')
-Survey export: using dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx (newest of 1 matching file(s))
-Survey export: read 1 row(s) from dummy-healthy-...-2026-09-23.xlsx (sheet 'in')
-WAS database: read 35 row(s) from dummy_was_database.xlsx (sheet 'query')
-Peer mentoring: read 11 row(s) from dummy_peer_montoring.xlsx (sheet 'query (1)')
-Wrote 11 tables and data_quality_report.md to ...\output
-  dim_employer                168 rows
+2026-10-18 13:53:13 INFO    Run 20261018T125313Z-1753c3
+2026-10-18 13:53:13 INFO    Config: ...\hww_poc_code\config.toml
+2026-10-18 13:53:13 INFO    Account signups: read 200 row(s) from dummy_HWW monitoring and reporting.xlsx (sheet 'Account signups')
+2026-10-18 13:53:13 INFO    Survey export: using dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx (newest of 1 matching file(s))
+2026-10-18 13:53:13 INFO    Survey export: read 1 row(s) from dummy-healthy-...-2026-09-23.xlsx (sheet 'in')
+2026-10-18 13:53:13 INFO    WAS database: read 35 row(s) from dummy_was_database.xlsx (sheet 'query')
+2026-10-18 13:53:13 INFO    Peer mentoring: read 11 row(s) from dummy_peer_montoring.xlsx (sheet 'query (1)')
+2026-10-18 13:53:14 INFO    Wrote 11 tables and data_quality_report.md to ...\output
+2026-10-18 13:53:14 INFO      dim_employer                168 rows
   ...
-1 value(s) are not in the mapping files - see 'Unmapped values' in the report.
+2026-10-18 13:53:14 WARNING Report needs attention: 1 value(s) not in the mapping files. See data_quality_report.md.
 ```
+
+The same lines are saved in `logs/<run id>.log` next to the config (the newest 20 are kept). The
+last line always says whether the report needs attention, so you know whether to open it.
 
 And when something structural is wrong:
 
@@ -907,8 +911,10 @@ shouldn't stop the monthly refresh, but nobody should miss it either.
 
 **Logging and the report do different jobs.** The log (terminal) says what this run did: which
 files, how many rows, where the output went. The report is about the data and is kept with it in
-`output/`. Moving from `print` to `logging` means a scheduler or wrapper can send the log to a file
-or change its level without code changes.
+`output/`. Each run's log is also saved in `logs/` (one file per run, the newest 20 kept), with the
+traceback of any unexpected error, which the console leaves out. In GCP, `HWW_LOG_FORMAT=json` turns
+each line into a JSON object for Cloud Logging, with `severity` and `run_id`; an error is logged
+by type and code location only, because its message could quote data.
 
 **Read every cell as-is, clean explicitly.** `dtype=object` plus `clean_text` instead of letting
 pandas guess types. Excel columns mix numbers, text and dates, and pandas' guesses differ from file

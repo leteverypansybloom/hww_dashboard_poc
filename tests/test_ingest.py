@@ -4,6 +4,7 @@ Grouped by the function under test. Bad configs are made by changing a
 copy of the frozen fixture config, so no test reads the real data.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -464,17 +465,21 @@ class TestMain:
         settings: wrangle.Config,
         write_config: ConfigWriter,
         caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
         run_time: datetime,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
-        """A bug: exit 2, naming the error and the line it came from.
+        """A bug: exit 2, its line on the console, details in the log.
 
         Args:
             settings: A copy of the fixture config.
             write_config: Writes a config that reads the synthetic inputs.
-            caplog: Captures the log.
+            caplog: Captures the log records.
+            capsys: Captures the console.
             run_time: The tests' fixed run time.
             monkeypatch: Breaks one step of the pipeline.
+            tmp_path: Holds the config, so the log folder too.
         """
 
         def broken(*args: object, **kwargs: object) -> None:
@@ -491,9 +496,78 @@ class TestMain:
 
         monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
         monkeypatch.setattr(wrangle, "reconcile", broken)
+        monkeypatch.delenv("HWW_LOG_FORMAT", raising=False)
         code = wrangle.main([str(write_config(settings))])
         assert code == 2
         assert "Unexpected error (KeyError at wrangle.py:" in caplog.text
+        assert "Traceback" not in capsys.readouterr().err
+        [log_file] = (tmp_path / "logs").glob("*.log")
+        assert "Traceback" in log_file.read_text("utf-8")
+
+    def test_saves_a_log_of_each_run(
+        self,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """A run's log is kept in logs/ next to the config.
+
+        Args:
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+            monkeypatch: Fixes the clock and the log format.
+            tmp_path: Holds the config, so the log folder too.
+        """
+        monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
+        monkeypatch.delenv("HWW_LOG_FORMAT", raising=False)
+        assert wrangle.main([str(write_config(settings))]) == 0
+        [log_file] = (tmp_path / "logs").glob("*.log")
+        text = log_file.read_text("utf-8")
+        assert f"Run {log_file.stem}" in text
+        assert "Wrote 11 tables" in text
+        assert "Report needs attention: 1 value(s) not in the" in text
+
+    def test_json_mode_logs_lines_of_json_and_no_file(
+        self,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        capsys: pytest.CaptureFixture[str],
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """With HWW_LOG_FORMAT=json each console line is a JSON object.
+
+        Args:
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            capsys: Captures the console.
+            run_time: The tests' fixed run time.
+            monkeypatch: Fixes the clock and the log format.
+            tmp_path: Holds the config, so the log folder too.
+        """
+        monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
+        monkeypatch.setenv("HWW_LOG_FORMAT", "json")
+        assert wrangle.main([str(write_config(settings))]) == 0
+        lines = capsys.readouterr().err.strip().splitlines()
+        entries = [json.loads(line) for line in lines]
+        assert {e["severity"] for e in entries} >= {"INFO", "WARNING"}
+        assert len({e["run_id"] for e in entries}) == 1
+        assert not (tmp_path / "logs").exists()
+
+    def test_unknown_log_format_stops_at_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An invalid HWW_LOG_FORMAT is an input problem: exit 1.
+
+        Args:
+            monkeypatch: Sets the log format.
+        """
+        monkeypatch.setenv("HWW_LOG_FORMAT", "xml")
+        assert wrangle.main(["no-config.toml"]) == 1
 
 
 class TestErrorLocation:

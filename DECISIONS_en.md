@@ -127,6 +127,28 @@ attention". A scheduled job would then fail every month over ordinary
 data-quality notes; a log line that an alert can match does that job
 instead.
 
+### Each run keeps a log; GCP gets JSON lines
+
+The log was bare console text that vanished with the window. Now:
+
+- Console lines carry the time and level, and every run starts with
+  its run id.
+- In text mode, each run's log is saved as `logs/<run id>.log` next to
+  the config (`[paths] log_folder`), with the traceback of any
+  unexpected error; the console shows only one line about it. The
+  newest 20 logs are kept, and git ignores them.
+- `HWW_LOG_FORMAT=json` (for GCP) writes one JSON object per line with
+  `severity`, `message` and `run_id`, field names as in py-common's
+  JSON logging, and no file. An unexpected error is logged by type and
+  stack but not its message, which could quote data.
+- The run ends with a WARNING listing what needs attention (unmapped
+  values, new or missing survey columns, unknown answers, unreadable
+  flags), or an INFO line saying nothing does, so an alert can match
+  it.
+
+Not chosen: py-common's `configure_json_logging()`. It would add the
+py-common dependency for a few lines of formatting.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)

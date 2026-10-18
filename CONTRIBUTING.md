@@ -111,4 +111,6 @@ it. After an agreed change:
   `192.0.2.x`); `tests/data/README.md` explains how the inputs were
   made.
 - Logs and error messages name files, sheets, columns and counts,
-  never cell values.
+  never cell values. The saved run logs in `logs/` may also hold the
+  traceback of an unexpected error, so git ignores them, like the
+  outputs.

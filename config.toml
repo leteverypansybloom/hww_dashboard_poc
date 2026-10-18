@@ -7,6 +7,9 @@
 input_folder = ".."
 output_folder = "output"
 mappings_folder = "mappings"
+# Run logs, one file per run; the newest 20 are kept. Not used when
+# HWW_LOG_FORMAT=json (in GCP), which logs to the console only.
+log_folder = "logs"
 
 [signups]
 file = "dummy_HWW monitoring and reporting.xlsx"

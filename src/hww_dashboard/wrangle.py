@@ -33,6 +33,14 @@ import pandas as pd
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.datetime import from_excel
 
+from hww_dashboard.logs import (
+    close_logging,
+    configure_logging,
+    log_format,
+    new_run_id,
+    prune_logs,
+)
+
 logger = logging.getLogger(__name__)
 
 #: The config used when none is given: config.toml in the current folder.
@@ -291,6 +299,33 @@ class InputError(Exception):
 # ---------------------------------------------------------------- report
 
 
+#: Things a person should act on after a run, in the order the report
+#: lists them: key -> (what was found, what to do about it).
+ATTENTION = {
+    "unmapped": (
+        "value(s) not in the mapping files",
+        "add each to the matching CSV in mappings/ (see Unmapped values)",
+    ),
+    "new_columns": (
+        "new survey column(s)",
+        "add each to mappings/survey_columns.csv (see Survey checks)",
+    ),
+    "missing_columns": (
+        "survey column(s) missing from the export",
+        "check whether the form changed, and update "
+        "mappings/survey_columns.csv (see Survey checks)",
+    ),
+    "new_answers": (
+        "survey answer(s) not in survey_answers.csv",
+        "add each option, or its Welsh translation (see Survey checks)",
+    ),
+    "flag_problems": (
+        "unreadable flag(s) on Account signups",
+        "correct the cell in the workbook (see Free-text flags)",
+    ),
+}
+
+
 class Report:
     """Collects notes for data_quality_report.md, grouped by section.
 
@@ -298,6 +333,8 @@ class Report:
         sections: Report lines for each section name in ``ORDER``.
         unmapped: Counts of raw values missing from a lookup, keyed by
             (dimension, source, raw value).
+        attention: Counts of other things to act on, keyed by the names
+            in ``ATTENTION``.
     """
 
     ORDER = [
@@ -317,6 +354,28 @@ class Report:
         """Start an empty report with every section present."""
         self.sections: dict[str, list[str]] = {name: [] for name in self.ORDER}
         self.unmapped: Counter[tuple[str, str, str]] = Counter()
+        self.attention: Counter[str] = Counter()
+
+    def needs(self, item: str, count: int = 1) -> None:
+        """Count something a person should act on.
+
+        Args:
+            item: A key of ``ATTENTION``.
+            count: How many were found (0 does nothing).
+        """
+        if count:
+            self.attention[item] += count
+
+    def to_act_on(self) -> dict[str, int]:
+        """List what needs attention, in the order of ``ATTENTION``.
+
+        Returns:
+            Key of ``ATTENTION`` -> count, for the non-zero ones. Unmapped
+            values count once per distinct raw value.
+        """
+        counts = Counter(self.attention)
+        counts["unmapped"] = len(self.unmapped)
+        return {key: counts[key] for key in ATTENTION if counts[key]}
 
     def add(self, section: str, line: str) -> None:
         """Append one markdown line to a section.
@@ -622,6 +681,9 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
                     raise InputError(
                         f"{name}: [{section}] {key} must be nonblank text."
                     )
+    folder = cfg["paths"].get("log_folder", "logs")
+    if not isinstance(folder, str) or not folder.strip():
+        raise InputError(f"{name}: [paths] log_folder must be nonblank text.")
     privacy = cfg.get("privacy", {})
     if not isinstance(privacy, dict) or not isinstance(
         privacy.get("personal_columns", []), list
@@ -1380,6 +1442,7 @@ def load_signups(
             where = f"- Account signups row {excel_row}, '{column}'"
             if problem:
                 report.add("Free-text flags", f"{where}: {problem}")
+                report.needs("flag_problems")
             for d in found:
                 if d > today:
                     report.add(
@@ -1622,6 +1685,7 @@ def load_survey(
             "Survey export has %d column(s) not in survey_columns.csv",
             len(unexpected),
         )
+        report.needs("new_columns", len(unexpected))
     if missing:
         report.add(
             "Survey checks",
@@ -1632,6 +1696,7 @@ def load_survey(
             "Survey export lacks %d column(s) in survey_columns.csv",
             len(missing),
         )
+        report.needs("missing_columns", len(missing))
     dropped = list(columns_map.loc[columns_map["role"] == "drop", "column"])
     report.add(
         "Survey checks",
@@ -1714,6 +1779,7 @@ def load_survey(
             "- Answer not in survey_answers.csv (kept, add it or a "
             f"translation): {qid} '{answer}' x{n}",
         )
+    report.needs("new_answers", len(new_answers))
     return df, answers, other_text, columns_map
 
 
@@ -2977,12 +3043,14 @@ def run(
     )
     for name, n in counts:
         logger.info("  %-24s %6d rows", name, n)
-    if report.unmapped:
+    attention = report.to_act_on()
+    if attention:
         logger.warning(
-            "%d value(s) are not in the mapping files - see "
-            "'Unmapped values' in the report.",
-            len(report.unmapped),
+            "Report needs attention: %s. See data_quality_report.md.",
+            ", ".join(f"{n} {ATTENTION[k][0]}" for k, n in attention.items()),
         )
+    else:
+        logger.info("Report: nothing needs attention.")
     return tables
 
 
@@ -3000,21 +3068,60 @@ def main(argv: Sequence[str] | None = None) -> int:
         do; 2 for an unexpected error, which is a bug to report.
     """
     args = list(sys.argv[1:] if argv is None else argv)
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    config_path = Path(args[0]) if args else DEFAULT_CONFIG
     try:
-        run(args[0] if args else DEFAULT_CONFIG)
+        mode = log_format()
+    except ValueError as error:
+        print(f"Stopped: {error}", file=sys.stderr)
+        return 1
+    run_id = new_run_id()
+    folder = log_folder(config_path) if mode == "text" else None
+    log_file = folder / f"{run_id}.log" if folder else None
+    try:
+        handlers = configure_logging(run_id, mode, log_file)
+    except OSError:
+        handlers = configure_logging(run_id, mode)
+        logger.warning("Cannot write the log file %s; console only.", log_file)
+        folder = log_file = None
+    try:
+        logger.info("Run %s", run_id)
+        run(config_path)
     except InputError as error:
         logger.error("Stopped: %s", error)
         return 1
     except Exception as error:
+        details = f" The details are in {log_file}." if log_file else ""
         logger.exception(
-            "Unexpected error (%s at %s). This is a bug: please report "
-            "it with the details below.",
+            "Unexpected error (%s at %s). This is a bug: please report it.%s",
             type(error).__name__,
             error_location(error),
+            details,
         )
         return 2
+    finally:
+        close_logging(handlers)
+        if folder is not None:
+            prune_logs(folder)
     return 0
+
+
+def log_folder(config_path: str | Path) -> Path | None:
+    """Find the folder for run logs: [paths] log_folder, or logs/.
+
+    Args:
+        config_path: The config file. The folder is relative to it.
+
+    Returns:
+        The log folder, or None if the config can't be read (the run
+        then stops and says why, on the console).
+    """
+    path = Path(config_path).resolve()
+    try:
+        cfg = load_config(path)
+    except InputError:
+        return None
+    folder = str(cfg["paths"].get("log_folder", "logs"))
+    return (path.parent / folder).resolve()
 
 
 def error_location(error: BaseException) -> str:
