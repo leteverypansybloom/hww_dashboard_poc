@@ -41,6 +41,15 @@ from hww_dashboard.logs import (
     prune_logs,
 )
 from hww_dashboard.output_schema import check_cells, parse_csv
+from hww_dashboard.run_record import (
+    RECORD_NAME,
+    Record,
+    file_facts,
+    sha256_file,
+    start_record,
+    utc_iso,
+    write_record,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +345,8 @@ class Report:
             (dimension, source, raw value).
         attention: Counts of other things to act on, keyed by the names
             in ``ATTENTION``.
+        inputs: One entry per input file read, for the run record: its
+            source, file name, size, time, checksum, sheet and rows.
     """
 
     ORDER = [
@@ -356,6 +367,7 @@ class Report:
         self.sections: dict[str, list[str]] = {name: [] for name in self.ORDER}
         self.unmapped: Counter[tuple[str, str, str]] = Counter()
         self.attention: Counter[str] = Counter()
+        self.inputs: list[dict[str, Any]] = []
 
     def needs(self, item: str, count: int = 1) -> None:
         """Count something a person should act on.
@@ -970,7 +982,33 @@ def read_sheet(
         path.name,
         sheet_name,
     )
-    return df.reset_index(drop=True)
+    table = df.reset_index(drop=True)
+    table.attrs["sheet_name"] = str(sheet_name)
+    return table
+
+
+def note_input(
+    report: Report, source: str, path: Path, df: pd.DataFrame, detail: str
+) -> None:
+    """Record an input file in the report and for the run record.
+
+    Args:
+        report: Data quality report.
+        source: Name of the source, e.g. ``"WAS database"``.
+        path: The file read.
+        df: The sheet as returned by ``read_sheet``.
+        detail: Words that follow the row count in the report line,
+            e.g. ``" (sheet 'Account signups')"``.
+    """
+    facts = file_facts(path)
+    sheet = str(df.attrs.get("sheet_name", ""))
+    report.inputs.append({"source": source, "sheet": sheet, "rows": len(df)})
+    report.inputs[-1].update(facts)
+    report.add(
+        "Inputs",
+        f"- {source}: {len(df)} rows read{detail} from {path.name} "
+        f"(SHA-256 {facts['sha256'][:12]}).",
+    )
 
 
 def require(
@@ -1371,10 +1409,8 @@ def load_signups(
         "Account signups",
         [cfg[k] for k in keys],
     )
-    report.add(
-        "Inputs",
-        f"- Account signups: {len(df)} rows read "
-        f"(sheet '{cfg['sheet']}').",
+    note_input(
+        report, "Account signups", path, df, f" (sheet '{cfg['sheet']}')"
     )
 
     # The month is a merged cell, so only the first row of each month has
@@ -1661,10 +1697,8 @@ def load_survey(
         "Survey export",
         list(role_columns.values()),
     )
-    report.add(
-        "Inputs",
-        f"- Survey export: {len(df)} rows read, "
-        f"{len(df.columns) - 1} columns.",
+    note_input(
+        report, "Survey export", path, df, f", {len(df.columns) - 1} columns,"
     )
 
     known = set(columns_map["column"])
@@ -1834,7 +1868,7 @@ def load_was(
         "WAS database",
         [cfg[k] for k in keys] + session_columns,
     )
-    report.add("Inputs", f"- WAS database: {len(df)} rows read.")
+    note_input(report, "WAS database", path, df, "")
 
     df = drop_blank_rows(df)
     df["org"] = df[cfg["org"]].map(lambda v: org_name(v, overrides))
@@ -2066,7 +2100,7 @@ def load_peer(
         "Peer mentoring",
         [cfg[k] for k in keys],
     )
-    report.add("Inputs", f"- Peer mentoring: {len(df)} rows read.")
+    note_input(report, "Peer mentoring", path, df, "")
 
     df = drop_blank_rows(df)
     df["org"] = df[cfg["org"]].map(lambda v: org_name(v, overrides))
@@ -2865,6 +2899,7 @@ def write_outputs(
     engagement: pd.DataFrame,
     report: Report,
     run_at: datetime,
+    record: Record | None = None,
 ) -> list[tuple[str, int]]:
     """Write every table and the data quality report.
 
@@ -2877,6 +2912,9 @@ def write_outputs(
         engagement: fact_engagement, for the event-type summary.
         report: Data quality report.
         run_at: When the run started, for the report.
+        record: The run record so far. If given, it is completed with
+            each output's rows and checksum and published with the
+            tables as ``run_record.json``.
 
     Returns:
         (table name, rows written) for each table.
@@ -2911,6 +2949,23 @@ def write_outputs(
         staged_report.write(stage / "data_quality_report.md", run_at)
         if "survey_other_text" not in staged_tables:
             (stage / "survey_other_text.csv").unlink(missing_ok=True)
+        if record is not None:
+            outputs: dict[str, dict[str, Any]] = {
+                name: {"rows": n, "sha256": sha256_file(stage / f"{name}.csv")}
+                for name, n in counts
+            }
+            outputs["data_quality_report"] = {
+                "sha256": sha256_file(stage / "data_quality_report.md")
+            }
+            write_record(
+                stage / RECORD_NAME,
+                {
+                    **record,
+                    "outcome": "published",
+                    "finished_at": utc_iso(),
+                    "outputs": outputs,
+                },
+            )
         if out.exists():
             out.rename(backup)
         try:
@@ -2938,6 +2993,7 @@ def run(
     config_path: str | Path = DEFAULT_CONFIG,
     output_folder: str | Path | None = None,
     now: datetime | None = None,
+    run_id: str | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Run the whole pipeline.
 
@@ -2949,15 +3005,19 @@ def run(
         now: Treat this as the time of the run (the tests fix it).
             Defaults to the real time. It is shown in the report, and
             dates after its day are reported as in the future.
+        run_id: The run's id, shared with its log (``main`` passes it);
+            a new one by default.
 
     Returns:
         The output tables as a dict of DataFrames, keyed by table name.
 
     Raises:
         InputError: A config setting, mapping file, input file, sheet or
-            column is missing or unreadable.
+            column is missing or unreadable, or the outputs can't be
+            written.
     """
     run_at = datetime.now() if now is None else now
+    run_id = run_id or new_run_id()
     today = run_at.date()
     config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
@@ -2985,6 +3045,9 @@ def run(
         ) from error
     report = Report()
     lookups, overrides = load_mappings(maps)
+    record = start_record(
+        run_id, run_at, config_path, sorted(maps.glob("*.csv"))
+    )
 
     # 1. Read and clean each source.
     signups = load_signups(
@@ -3057,8 +3120,10 @@ def run(
     }
     if cfg["survey"]["keep_other_free_text"]:
         tables["survey_other_text"] = other_text
+    record["inputs"] = report.inputs
+    record["attention"] = report.to_act_on()
     try:
-        counts = write_outputs(tables, out, engagement, report, run_at)
+        counts = write_outputs(tables, out, engagement, report, run_at, record)
     except OSError as error:
         raise InputError(
             f"Could not write the outputs to {out} "
@@ -3115,7 +3180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         folder = log_file = None
     try:
         logger.info("Run %s", run_id)
-        run(config_path)
+        run(config_path, run_id=run_id)
     except InputError as error:
         logger.error("Stopped: %s", error)
         return 1

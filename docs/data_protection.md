@@ -62,6 +62,14 @@ quote a value, so git ignores `logs/` like `output/`. With
 `HWW_LOG_FORMAT=json`, as in GCP, an error is logged by type and code
 location only, without its message.
 
+## Run records
+
+Each published set of outputs comes with `run_record.json`: the input
+files' names, sizes, times and checksums, the config's and mapping
+files' checksums, row counts, and the code and library versions. It
+holds no cell values, so it can be kept and shared like py-common's
+audit records.
+
 ## Where the data is
 
 - **Laptops**: the input workbooks (outside the repository), `output/`

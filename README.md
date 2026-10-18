@@ -57,7 +57,10 @@ saying which one before writing anything. The exit code says what happened: 0 th
 1 a problem a person can fix stopped it (an input, a setting, a mapping, or an output file open in
 another program such as Excel), and the message says what to do; 2 an unexpected error, which is a
 bug to report.
-Tables and `data_quality_report.md` are written to `output/`. The last line of the run's log says
+Tables, `data_quality_report.md` and `run_record.json` are written to `output/`. The run record
+says what produced the tables: each input file's name, size and SHA-256 checksum, the config and
+mapping files' checksums, the code's version and git commit, and the library versions. It holds no
+cell values. The last line of the run's log says
 whether the report needs attention; read the report when it does. Each run's log is also saved
 in `logs/` (set by `log_folder` in `config.toml`; the newest 20 are kept). Set
 `HWW_LOG_FORMAT=json` for one JSON object per line instead, as Cloud Logging expects.

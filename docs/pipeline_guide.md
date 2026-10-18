@@ -703,7 +703,11 @@ Each `load_*` function follows the same pattern:
 - **Gotchas:**
   - `reindex` drops every column not in `COLUMNS`. This is the main privacy guard: raw columns
     such as names or emails can't leak out by accident.
-  - Retained values and report text are checked for email, IPv4 and URL identifiers.
+  - Retained values and report text are checked for email, phone, IPv4 and URL identifiers.
+  - Given the run record from `run()`, `write_outputs` completes it with each output's rows and
+    SHA-256 and publishes it with the tables as `run_record.json`
+    (`hww_dashboard.run_record`). The record names files and holds checksums and counts, never
+    cell values.
     A match stops the run without echoing the value. Arbitrary personal names still
     require source governance; this pattern guard is not general anonymisation.
   - Booleans are written as `True`/`False`, and `None` as an empty cell.
@@ -1027,6 +1031,13 @@ columns that disappeared. For each new column, add a row to `survey_columns.csv`
 `survey_questions.csv` and its options to `survey_answers.csv`. Watch for repeated headings
 (`Other.3`) shifting when the form's order changes. If a **role** column (Entry Id, Company, …) is
 renamed, the run stops and names it.
+
+#### Q: Which files did a run use?
+Look in `output/run_record.json`. It names each input file, with its size, last-saved time and
+SHA-256 checksum, the sheet read and the rows read, plus checksums of the config and every mapping
+file, the code's version and git commit, and the library versions. The report's Inputs section
+repeats each file's name and the first 12 digits of its checksum. Two runs with the same checksums
+read the same files.
 
 #### Q: How do I point it at a newer survey export?
 Put the file in the input folder. The newest by date in the name is used, and the log says which.

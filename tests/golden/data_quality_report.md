@@ -4,10 +4,10 @@ Run at 2026-10-10 12:00.
 
 ## Inputs
 
-- Account signups: 200 rows read (sheet 'Account signups').
-- Survey export: 1 rows read, 93 columns.
-- WAS database: 35 rows read.
-- Peer mentoring: 11 rows read.
+- Account signups: 200 rows read (sheet 'Account signups') from dummy_HWW monitoring and reporting.xlsx (SHA-256 166334596127).
+- Survey export: 1 rows read, 93 columns, from dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx (SHA-256 35deb42f32d5).
+- WAS database: 35 rows read from dummy_was_database.xlsx (SHA-256 378e0cf813b8).
+- Peer mentoring: 11 rows read from dummy_peer_montoring.xlsx (SHA-256 f0e29dd68bb9).
 
 ## Outputs
 

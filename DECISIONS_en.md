@@ -185,6 +185,32 @@ output holds, for the DPIA.
 **Trade-off**: anyone who needs roles must ask for them back, with a
 DPIA note. Benefit: less personal data in every copy of the outputs.
 
+### Each published output carries a run record
+
+The report gave only the time of a run, so "why did this number
+change?" couldn't be answered later. `run_record.json` is now
+published with the tables, as the last file in the staged folder. It
+records:
+
+- the run id, start and finish times;
+- the package version and git commit, and whether there were
+  uncommitted changes (`HWW_GIT_COMMIT` supplies the commit in a
+  container);
+- the Python, pandas, numpy and openpyxl versions;
+- the config and every mapping file, with size, time and SHA-256;
+- each input file, with its source, sheet, rows read, size, time and
+  SHA-256;
+- each output's rows and SHA-256, and what needs attention.
+
+It holds no cell values, so it is safe to keep and share, like
+py-common's audit records. The report's Inputs lines now name each file
+and the first 12 digits of its checksum, which are stable for the same
+files, so the golden test still applies. The project owner agreed that
+output change.
+
+Not chosen: the report alone. Versions and times change from run to
+run, which would make the report differ between identical runs.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run
