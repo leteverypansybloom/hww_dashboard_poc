@@ -13,6 +13,18 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-10-18 — GCP deployment uses a read-only landing mount
+
+The Cloud Run job reads a read-only Cloud Storage mount and writes directly to
+its own interim BigQuery dataset. No py-common dependency or GCS adapter is
+added. Uploads must be frozen for the run (prefer an immutable batch prefix),
+and executions must be serialized. A fixed survey name matches py-common's
+contract. The laptop keeps dated export discovery.
+
+Deployment instructions, least-privilege roles, alerting, schema maintenance
+and synthetic acceptance checks are in `docs/gcp.md`. Docker was unavailable;
+image build and cloud acceptance remain deployment gates.
+
 ## 2026-10-18 — Reproducibility is tested across processes
 
 Tests compare table and report bytes on repeated runs at a fixed reference

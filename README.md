@@ -82,6 +82,7 @@ names from the job's environment.
 `HWW_OUTPUT` environment variable to it before starting the dashboard.
 
 Operator instructions: [docs/runbook.md](docs/runbook.md).
+GCP deployment and acceptance checks: [docs/gcp.md](docs/gcp.md).
 
 How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md).
 

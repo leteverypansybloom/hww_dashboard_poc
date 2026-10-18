@@ -1085,13 +1085,10 @@ Usual reasons, all in the report:
 Blank (`""`) means the field doesn't apply or is absent: no employer link, no session date, no duration.
 
 #### Q: Are dates always read correctly?
-Real Excel date cells, which is every date cell in the current files, are exact. Two cases are not
-handled yet, and neither changes today's output:
-- dates typed as **ISO text** (`2026-03-04`) are read day-first as 3 April;
-- dates stored as **plain numbers** (Excel serials) become blank.
-
-If an export ever arrives with text dates, fix `to_date` first. A fix is proposed in the handover
-notes and needs approval because it changes output for such files.
+Real Excel date cells are read directly. ISO text (`2026-03-04`) is read year-first;
+other date text is day-first. Bare numeric Excel serials use the Windows 1900 epoch.
+For a 1904-epoch workbook use real typed Excel date cells; bare serials do not carry their epoch.
+Invalid dates become blank, and invalid nonblank sign-up months stop the run before forward filling.
 
 #### Q: How do I change when a WAS request counts as "completed"?
 Set `completed_rule` in `[was]` to `summary_1_sent`, `session_1_held` or `last_session_held`. This
