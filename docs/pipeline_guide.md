@@ -57,7 +57,8 @@ The rule of thumb for problems:
 
 - **Structural problems stop the run.** If a file, sheet, column, mapping file or setting is
   missing, `wrangle.py` raises `InputError`, prints one line saying what to fix, and exits with code 1.
-  Nothing is written.
+  Nothing is written. An output file that can't be replaced (open in Excel, say) also exits with
+  code 1, and the previous outputs are kept. An unexpected error exits with code 2: that is a bug.
 - **Dirty values never stop the run.** A sector nobody mapped, a date in the wrong place or a
   duplicate organisation is dealt with in a predictable way and written to
   `data_quality_report.md`. Read that report after every run.
@@ -256,8 +257,10 @@ this way) and **Gotchas** (what can trip you up).
 
 #### `class InputError(Exception)`
 - **What:** the one exception type for "a person needs to fix a file or setting".
-- **Why:** `main()` catches only this type. It prints the message without a traceback and returns
-  exit code 1. Any other exception is a real bug, and you want its traceback.
+- **Why:** `main()` prints this type's message without a traceback and returns exit code 1. Any
+  other exception is a real bug: `main()` returns exit code 2 and logs the error's type and line
+  with the traceback. `run()` turns an `OSError` while writing the outputs into an `InputError`,
+  because closing a file or freeing space is something a person can do.
 - **Gotcha:** when you add a check, raise `InputError` with a message that names the file and what
   to change. Don't raise `SystemExit` or `print` and continue.
 
@@ -711,11 +714,12 @@ Each `load_*` function follows the same pattern:
 
 #### `main(argv=None)`
 - **What:** sets up logging (`INFO`, message only), runs, turns `InputError` into a log line and
-  exit code 1, and returns 0 on success. The `wrangle.py` launcher calls it with the
-  `config.toml` next to it when no config is named; `python -m hww_dashboard.wrangle` uses
-  `config.toml` in the current folder.
-- **Why:** `python wrangle.py` and `python wrangle.py other.toml` keep working. Any other exception
-  still shows a full traceback, because that is a bug to fix.
+  exit code 1, any other exception into exit code 2, and returns 0 on success. The `wrangle.py`
+  launcher calls it with the `config.toml` next to it when no config is named;
+  `python -m hww_dashboard.wrangle` uses `config.toml` in the current folder.
+- **Why:** `python wrangle.py` and `python wrangle.py other.toml` keep working. A scheduler can
+  tell "fix an input" (1) from "a bug" (2). The bug's line is named by `error_location`, and its
+  traceback is logged, because that is a bug to fix.
 
 ---
 

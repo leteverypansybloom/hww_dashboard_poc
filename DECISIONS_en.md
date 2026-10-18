@@ -113,6 +113,20 @@ runs weekly.
 Not chosen: a Codecov upload. The report is kept as a CI artifact
 instead, which needs no token or outside service.
 
+### Three exit codes: done, fix something, bug
+
+Exit code 1 used to mean both "fix an input" and "the code crashed",
+so a scheduler couldn't tell them apart. Now 0 means the run finished,
+1 means a problem a person can fix stopped it, with a message saying
+what to do, and 2 means an unexpected error, a bug. An `OSError` while
+writing the outputs (a CSV open in Excel, a full disk) counts as 1,
+because a person can fix it, and the previous outputs are kept.
+
+Not chosen: a separate code for "finished, but the report needs
+attention". A scheduled job would then fail every month over ordinary
+data-quality notes; a log line that an alert can match does that job
+instead.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)

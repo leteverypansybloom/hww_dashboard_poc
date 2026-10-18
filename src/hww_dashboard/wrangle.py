@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
+import traceback
 import zipfile
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -2878,7 +2879,14 @@ def run(
                 f"{config_path.name}: {label} {folder} does not exist."
             )
     logger.info("Config: %s", config_path)
-    out.mkdir(parents=True, exist_ok=True)
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise InputError(
+            f"Cannot create the output folder {out} "
+            f"({error.strerror or type(error).__name__}). Check the "
+            "output_folder setting and that the folder can be written."
+        ) from error
     report = Report()
     lookups, overrides = load_mappings(maps)
 
@@ -2953,7 +2961,16 @@ def run(
     }
     if cfg["survey"]["keep_other_free_text"]:
         tables["survey_other_text"] = other_text
-    counts = write_outputs(tables, out, engagement, report, run_at)
+    try:
+        counts = write_outputs(tables, out, engagement, report, run_at)
+    except OSError as error:
+        raise InputError(
+            f"Could not write the outputs to {out} "
+            f"({error.strerror or type(error).__name__}). The previous "
+            "outputs were kept. Close any output file that is open in "
+            "another program, such as Excel, check the folder can be "
+            "written, and run again."
+        ) from error
 
     logger.info(
         "Wrote %d tables and data_quality_report.md to %s", len(tables), out
@@ -2977,7 +2994,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             ``sys.argv[1:]``).
 
     Returns:
-        Exit code: 0 on success, 1 if an input problem stopped the run.
+        Exit code: 0 when the run finished; 1 when a problem a person
+        can fix stopped it (an input, setting or mapping, or an output
+        file open in another program), and the message says what to
+        do; 2 for an unexpected error, which is a bug to report.
     """
     args = list(sys.argv[1:] if argv is None else argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -2986,7 +3006,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     except InputError as error:
         logger.error("Stopped: %s", error)
         return 1
+    except Exception as error:
+        logger.exception(
+            "Unexpected error (%s at %s). This is a bug: please report "
+            "it with the details below.",
+            type(error).__name__,
+            error_location(error),
+        )
+        return 2
     return 0
+
+
+def error_location(error: BaseException) -> str:
+    """Name the line of this package where an error was raised.
+
+    Args:
+        error: The exception, with its traceback.
+
+    Returns:
+        ``file.py:line`` of the innermost frame in hww_dashboard, or of
+        the innermost frame at all, or ``"unknown"``.
+    """
+    package = Path(__file__).resolve().parent
+    frames = traceback.extract_tb(error.__traceback__)
+    ours = [
+        f for f in frames if Path(f.filename).resolve().is_relative_to(package)
+    ]
+    if not frames:
+        return "unknown"
+    frame = (ours or frames)[-1]
+    return f"{Path(frame.filename).name}:{frame.lineno}"
 
 
 if __name__ == "__main__":

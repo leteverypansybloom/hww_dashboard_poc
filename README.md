@@ -53,7 +53,10 @@ Inputs are read from the folder above this one (set in `config.toml`).
 The survey export is found by `file_pattern`: drop a new download in the input folder and the
 newest one (by the date in its name) is used. The other files are named exactly.
 If a file, sheet, column, mapping file or setting is missing, `wrangle.py` stops with a message
-saying which one (exit code 1) before writing anything.
+saying which one before writing anything. The exit code says what happened: 0 the run finished;
+1 a problem a person can fix stopped it (an input, a setting, a mapping, or an output file open in
+another program such as Excel), and the message says what to do; 2 an unexpected error, which is a
+bug to report.
 Tables and `data_quality_report.md` are written to `output/`. Read the report after every run.
 The dashboard picks up new tables automatically after `wrangle.py` runs again (refresh the browser).
 

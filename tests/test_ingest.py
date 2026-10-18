@@ -421,6 +421,94 @@ class TestMain:
         )
         assert not list((tmp_path / "out").glob("*.csv"))
 
+    def test_output_problem_exits_with_1_and_what_to_do(
+        self,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        caplog: pytest.LogCaptureFixture,
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An output file held open (as Excel does): exit 1, no traceback.
+
+        Args:
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            caplog: Captures the log.
+            run_time: The tests' fixed run time.
+            monkeypatch: Replaces the output writer.
+        """
+
+        def locked(*args: object, **kwargs: object) -> list[tuple[str, int]]:
+            """Fail the way Windows does when a file is open elsewhere.
+
+            Args:
+                *args: Ignored.
+                **kwargs: Ignored.
+
+            Raises:
+                PermissionError: Always.
+            """
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
+        monkeypatch.setattr(wrangle, "write_outputs", locked)
+        code = wrangle.main([str(write_config(settings))])
+        assert code == 1
+        assert "Could not write the outputs" in caplog.text
+        assert "Close any output file" in caplog.text
+        assert "Traceback" not in caplog.text
+
+    def test_unexpected_error_exits_with_2(
+        self,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        caplog: pytest.LogCaptureFixture,
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A bug: exit 2, naming the error and the line it came from.
+
+        Args:
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            caplog: Captures the log.
+            run_time: The tests' fixed run time.
+            monkeypatch: Breaks one step of the pipeline.
+        """
+
+        def broken(*args: object, **kwargs: object) -> None:
+            """Fail as a bug would.
+
+            Args:
+                *args: Ignored.
+                **kwargs: Ignored.
+
+            Raises:
+                KeyError: Always.
+            """
+            raise KeyError("employer_id")
+
+        monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
+        monkeypatch.setattr(wrangle, "reconcile", broken)
+        code = wrangle.main([str(write_config(settings))])
+        assert code == 2
+        assert "Unexpected error (KeyError at wrangle.py:" in caplog.text
+
+
+class TestErrorLocation:
+    """``error_location``: where an unexpected error was raised."""
+
+    def test_names_the_innermost_package_line(self) -> None:
+        """The last frame inside hww_dashboard is named, file and line."""
+        with pytest.raises(wrangle.InputError) as caught:
+            wrangle.check_config({})
+        assert wrangle.error_location(caught.value).startswith("wrangle.py:")
+
+    def test_error_without_a_traceback(self) -> None:
+        """An error that was never raised has no location."""
+        assert wrangle.error_location(KeyError("x")) == "unknown"
+
 
 class TestWriteConfig:
     """The ``write_config`` fixture that the tests above rely on."""
