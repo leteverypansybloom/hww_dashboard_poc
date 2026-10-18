@@ -350,6 +350,50 @@ def wait(job: Any, what: str, timeout: float) -> None:
     ) from None
 
 
+def latest_record(
+    dataset: str, client: Any, timeout: float = JOB_TIMEOUT_SECONDS
+) -> dict[str, Any] | None:
+    """Read the most recent run record from the ``runs`` table.
+
+    Args:
+        dataset: ``project.dataset``.
+        client: A BigQuery client.
+        timeout: Seconds to wait for the query.
+
+    Returns:
+        The record, or None before the first run (no ``runs`` table or
+        no rows yet).
+
+    Raises:
+        PublishSetupError: BigQuery refused access.
+        BigQueryError: Any other BigQuery failure.
+    """
+    sql = (
+        f"SELECT record FROM `{dataset}.{RUNS}` "
+        "ORDER BY finished_at DESC LIMIT 1"
+    )
+    try:
+        rows = list(client.query(sql).result(timeout=timeout))
+    except NotFound:
+        return None
+    except Forbidden as error:
+        raise PublishSetupError(
+            f"BigQuery refused access to {dataset} ({describe_error(error)})."
+            " The account running the pipeline needs BigQuery Data Editor "
+            "on the dataset and BigQuery Job User on the project "
+            "(docs/gcp.md)."
+        ) from None
+    except GoogleAPICallError as error:
+        raise BigQueryError(
+            f"BigQuery failed reading the last run from {dataset} "
+            f"({describe_error(error)})."
+        ) from None
+    if not rows:
+        return None
+    data = json.loads(rows[0][0])
+    return data if isinstance(data, dict) else None
+
+
 def publish(
     tables: Mapping[str, str],
     report: str,

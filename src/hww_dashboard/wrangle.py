@@ -13,6 +13,7 @@ run writes the tables to the output folder plus data_quality_report.md.
 """
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -25,6 +26,7 @@ import zipfile
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime
 from difflib import get_close_matches
 from pathlib import Path
@@ -338,6 +340,10 @@ ATTENTION = {
     "flag_problems": (
         "unreadable flag(s) on Account signups",
         "correct the cell in the workbook (see Free-text flags)",
+    ),
+    "shrunk_sources": (
+        "source(s) with far fewer rows than the last run",
+        "check the upload is complete (see Warnings)",
     ),
 }
 
@@ -788,6 +794,17 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
     location = output.get("location", "unset")
     if not isinstance(location, str) or not location.strip():
         raise InputError(f"{name}: [output] location must be nonblank text.")
+    for source in SOURCES:
+        if type(cfg[source].get("allow_empty", False)) is not bool:
+            raise InputError(
+                f"{name}: [{source}] allow_empty must be true or false."
+            )
+    checks = cfg.get("checks", {})
+    drop = checks.get("max_row_drop", 0.1) if isinstance(checks, dict) else -1
+    if type(drop) not in (int, float) or not 0 <= drop <= 1:
+        raise InputError(
+            f"{name}: [checks] max_row_drop must be a number from 0 to 1."
+        )
     privacy = cfg.get("privacy", {})
     if not isinstance(privacy, dict) or not isinstance(
         privacy.get("personal_columns", []), list
@@ -1100,6 +1117,92 @@ def note_input(
         f"- {source}: {len(df)} rows read{detail} from {path.name} "
         f"(SHA-256 {facts['sha256'][:12]}).",
     )
+
+
+def require_rows(
+    df: pd.DataFrame, cfg: Config, source: str, section: str, path: Path
+) -> None:
+    """Stop when a source has no usable rows, unless that is allowed.
+
+    An empty upload usually means a broken export, and publishing it
+    would empty the dashboard's tables without a word. py-common rejects
+    empty sheets for the same reason.
+
+    Args:
+        df: The source's rows, after unusable ones were dropped.
+        cfg: The source's config section; ``allow_empty = true`` lets
+            an empty source through.
+        source: Name of the source, for the message.
+        section: The config section's name, for the message.
+        path: The file read.
+
+    Raises:
+        InputError: The source has no rows and allow_empty isn't true.
+    """
+    if df.empty and cfg.get("allow_empty", False) is not True:
+        raise InputError(
+            f"{source}: {path.name} has no data rows. An empty upload "
+            "usually means the export went wrong, so check the file. If "
+            f"no rows is right, set allow_empty = true in [{section}]."
+        )
+
+
+def compare_with_previous(
+    report: Report, previous: Record | None, max_drop: float
+) -> None:
+    """Warn when a source has noticeably fewer rows than the last run.
+
+    The workbooks are cumulative, so their rows should only grow; a
+    big drop usually means an incomplete upload. Edits can remove rows
+    legitimately, so this warns rather than stops.
+
+    Args:
+        report: Data quality report, with this run's inputs.
+        previous: The previous published run's record, or None.
+        max_drop: The largest share of rows (0 to 1) that may go before
+            a warning, e.g. 0.1 for 10%.
+    """
+    if not previous:
+        return
+    before = {
+        str(entry.get("source")): entry
+        for entry in previous.get("inputs", [])
+        if isinstance(entry, dict)
+    }
+    for entry in report.inputs:
+        old = before.get(str(entry["source"]))
+        old_rows = old.get("rows") if old else None
+        if not isinstance(old_rows, int) or old_rows <= 0:
+            continue
+        drop = 1 - entry["rows"] / old_rows
+        if drop > max_drop:
+            report.add(
+                "Warnings",
+                f"- {entry['source']}: {entry['rows']} rows read, "
+                f"{drop:.0%} fewer than the previous run ({old_rows}, run "
+                f"{previous.get('run_id', 'unknown')}). These workbooks "
+                "only grow, so check the upload is complete.",
+            )
+            report.needs("shrunk_sources")
+
+
+def read_record(path: Path) -> Record | None:
+    """Read the run record published with the previous outputs.
+
+    Args:
+        path: ``run_record.json`` in the output folder.
+
+    Returns:
+        The record, or None if there is none or it can't be read.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        logger.warning("Cannot read the previous run record %s", path)
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def require(
@@ -1525,6 +1628,7 @@ def load_signups(
         "no organisation name (blank rows)",
     )
     df = df[~blank].copy()
+    require_rows(df, cfg, "Account signups", "signups", path)
 
     no_month = df["month"].isna()
     if no_month.any():
@@ -1838,6 +1942,7 @@ def load_survey(
     repeated = df["response_id"].duplicated()
     report.dropped("Survey export", int(repeated.sum()), "repeated Entry Id")
     df = df[~repeated].copy()
+    require_rows(df, cfg, "Survey export", "survey", path)
 
     df["date"] = df[role_columns["date"]].map(to_date)
     df["org"] = df[role_columns["org"]].map(lambda v: org_name(v, overrides))
@@ -1966,6 +2071,7 @@ def load_was(
     blank = df["org"] == ""
     report.dropped("WAS database", int(blank.sum()), "no organisation name")
     df = df[~blank].copy()
+    require_rows(df, cfg, "WAS database", "was", path)
 
     ids = []
     for value, excel_row in zip(df[cfg["id"]], df["excel_row"], strict=True):
@@ -2198,6 +2304,7 @@ def load_peer(
     blank = df["org"] == ""
     report.dropped("Peer mentoring", int(blank.sum()), "no organisation name")
     df = df[~blank].copy()
+    require_rows(df, cfg, "Peer mentoring", "peer", path)
 
     df["peer_id"] = [
         f"PM-{clean_text(v) or 'row' + str(r)}"
@@ -3005,13 +3112,89 @@ def add_output_counts(
     report.add("Outputs", markdown_table(by_type.reset_index(name="rows")))
 
 
+@dataclass(frozen=True)
+class BigQueryTarget:
+    """Where, and through what, a run publishes to BigQuery.
+
+    Attributes:
+        module: ``hww_dashboard.bigquery_output``, imported only when
+            BigQuery output is chosen, so the pipeline runs without the
+            bigquery extra.
+        client: The BigQuery client.
+        dataset: ``project.dataset``.
+    """
+
+    module: Any
+    client: Any
+    dataset: str
+
+
+def connect_bigquery(settings: Config) -> BigQueryTarget:
+    """Get ready to publish to BigQuery, before any file is read.
+
+    Args:
+        settings: The [output] section of the config.
+
+    Returns:
+        The target to publish to.
+
+    Raises:
+        InputError: The bigquery extra isn't installed, or there are no
+            Google credentials.
+    """
+    try:
+        from hww_dashboard import bigquery_output
+    except ImportError:
+        raise InputError(
+            "BigQuery output needs the bigquery extra: "
+            'pip install -e ".[bigquery]" -c constraints.txt'
+        ) from None
+    project = str(settings["project"])
+    try:
+        client = bigquery_output.make_client(project, settings.get("location"))
+    except bigquery_output.PublishSetupError as error:
+        raise InputError(str(error)) from None
+    return BigQueryTarget(
+        bigquery_output, client, f"{project}.{settings['dataset']}"
+    )
+
+
+def previous_record(target: BigQueryTarget | None, out: Path) -> Record | None:
+    """Fetch the record of the last published run, to compare with.
+
+    Args:
+        target: The BigQuery target, or None for a folder.
+        out: The output folder (used when target is None).
+
+    Returns:
+        The last record, or None if there was no earlier run.
+
+    Raises:
+        InputError: BigQuery refused access, or couldn't be reached.
+    """
+    if target is None:
+        return read_record(out / RECORD_NAME)
+    try:
+        record: Record | None = target.module.latest_record(
+            target.dataset, target.client
+        )
+    except target.module.PublishSetupError as error:
+        raise InputError(str(error)) from None
+    except OSError as error:
+        raise InputError(
+            f"Could not reach BigQuery ({type(error).__name__}). Check the "
+            "network and run again; nothing was changed."
+        ) from None
+    return record
+
+
 def publish_bigquery(
     tables: dict[str, pd.DataFrame],
     engagement: pd.DataFrame,
     report: Report,
     run_at: datetime,
     record: Record,
-    settings: Config,
+    target: BigQueryTarget,
 ) -> list[tuple[str, int]]:
     """Publish every table, the report and the run record to BigQuery.
 
@@ -3026,24 +3209,16 @@ def publish_bigquery(
         report: Data quality report.
         run_at: When the run started, for the report.
         record: The run record so far.
-        settings: The [output] section of the config.
+        target: From :func:`connect_bigquery`.
 
     Returns:
         (table name, rows published) for each table.
 
     Raises:
-        InputError: A table holds a contact identifier, the bigquery
-            extra isn't installed, or BigQuery reports a problem a
-            person can fix (access, a missing dataset, a changed table,
-            no credentials, no network).
+        InputError: A table holds a contact identifier, or BigQuery
+            reports a problem a person can fix (access, a missing
+            dataset, a changed table, no network).
     """
-    try:
-        from hww_dashboard import bigquery_output
-    except ImportError:
-        raise InputError(
-            "BigQuery output needs the bigquery extra: "
-            'pip install -e ".[bigquery]" -c constraints.txt'
-        ) from None
     texts: dict[str, str] = {}
     counts = []
     for name, df in tables.items():
@@ -3068,12 +3243,11 @@ def publish_bigquery(
         "finished_at": utc_iso(),
         "outputs": outputs,
     }
-    project = str(settings["project"])
-    dataset = f"{project}.{settings['dataset']}"
     try:
-        client = bigquery_output.make_client(project, settings.get("location"))
-        bigquery_output.publish(texts, report_text, finished, dataset, client)
-    except bigquery_output.PublishSetupError as error:
+        target.module.publish(
+            texts, report_text, finished, target.dataset, target.client
+        )
+    except target.module.PublishSetupError as error:
         raise InputError(str(error)) from None
     except OSError as error:
         raise InputError(
@@ -3229,6 +3403,7 @@ def run(
                 f"({error.strerror or type(error).__name__}). Check the "
                 "output_folder setting and that the folder can be written."
             ) from error
+    bq_target = connect_bigquery(output) if target == "bigquery" else None
     report = Report()
     lookups, overrides = load_mappings(maps)
     record = start_record(
@@ -3306,18 +3481,23 @@ def run(
     }
     if cfg["survey"]["keep_other_free_text"]:
         tables["survey_other_text"] = other_text
+    checks = cfg.get("checks", {})
+    compare_with_previous(
+        report,
+        previous_record(bq_target, out),
+        float(checks.get("max_row_drop", 0.1)),
+    )
     record["inputs"] = report.inputs
     record["attention"] = report.to_act_on()
-    if target == "bigquery":
+    if bq_target is not None:
         counts = publish_bigquery(
-            tables, engagement, report, run_at, record, output
+            tables, engagement, report, run_at, record, bq_target
         )
         logger.info(
             "Published %d tables, the report and the run record to "
-            "BigQuery dataset %s.%s",
+            "BigQuery dataset %s",
             len(tables),
-            output["project"],
-            output["dataset"],
+            bq_target.dataset,
         )
     else:
         try:

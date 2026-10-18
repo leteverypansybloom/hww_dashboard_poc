@@ -269,6 +269,23 @@ names, so the tests can't drift from the real settings.
 Not chosen: command-line flags for paths. They put the settings in
 the command rather than in a file that is reviewed and versioned.
 
+### An empty source stops the run; a shrunken one warns
+
+An empty WAS sheet used to crash the run, and since the code-quality
+review it ran through, publishing empty tables without a word. Now a
+source with no data rows (after blank rows and rows without an
+organisation are dropped) stops the run with exit code 1, unless its
+config section says `allow_empty = true`. An empty upload usually
+means a broken export, and py-common rejects empty sheets for the same
+reason, so the two behave alike.
+
+Each source's rows are also compared with the last published run (its
+run record, in the output folder or the `runs` table). More than
+`max_row_drop` (10%) fewer is a warning in the report and the log's
+last line, not a stop: the workbooks are cumulative, so a big drop
+usually means an incomplete upload, but an edit can remove rows
+legitimately.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run

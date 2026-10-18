@@ -53,7 +53,11 @@ Inputs are read from the folder above this one (set in `config.toml`).
 The survey export is found by `file_pattern`: drop a new download in the input folder and the
 newest one (by the date in its name) is used. The other files are named exactly.
 If a file, sheet, column, mapping file or setting is missing, `wrangle.py` stops with a message
-saying which one before writing anything. The exit code says what happened: 0 the run finished;
+saying which one before writing anything. So does a source with no data rows, because an empty
+upload usually means a broken export; set `allow_empty = true` in that source's section if no rows
+is a real answer. A source with more than 10% fewer rows than the last published run
+(`max_row_drop` in `[checks]`) is a warning instead, since edits can remove rows. The exit code
+says what happened: 0 the run finished;
 1 a problem a person can fix stopped it (an input, a setting, a mapping, or an output file open in
 another program such as Excel), and the message says what to do; 2 an unexpected error, which is a
 bug to report.

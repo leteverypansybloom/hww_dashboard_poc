@@ -30,15 +30,22 @@ DATASET = "proj.hww_interim"
 class FakeJob:
     """A finished BigQuery job, failed or not."""
 
-    def __init__(self, job_id: str, error: Exception | None = None) -> None:
-        """Remember the job's id and its error, if any.
+    def __init__(
+        self,
+        job_id: str,
+        error: Exception | None = None,
+        rows: list[tuple[Any, ...]] | None = None,
+    ) -> None:
+        """Remember the job's id, its error and its result rows.
 
         Args:
             job_id: The job id.
             error: What waiting for the job raises.
+            rows: What the job returns.
         """
         self.job_id = job_id
         self.error = error
+        self.rows = rows or []
         self.state = "DONE"
         self.error_result = None if error is None else {"reason": "invalid"}
 
@@ -49,14 +56,14 @@ class FakeJob:
             timeout: Ignored.
 
         Returns:
-            No rows.
+            The job's rows.
 
         Raises:
             Exception: The job's error.
         """
         if self.error is not None:
             raise self.error
-        return []
+        return self.rows
 
     def reload(self) -> None:
         """Re-read the job's state; it never changes here."""
@@ -160,6 +167,16 @@ class FakeClient:
             A finished job, failed if an INSERT was made to fail.
         """
         self.queries.append(script)
+        latest = re.match(r"SELECT record FROM `([^`]+)`", script)
+        if latest:
+            if latest.group(1) not in self.tables:
+                return FakeJob(self.job_id(), NotFound("table"))
+            rows = sorted(
+                self.tables[latest.group(1)]["rows"],
+                key=lambda row: row["finished_at"],
+                reverse=True,
+            )
+            return FakeJob(self.job_id(), rows=[(r["record"],) for r in rows])
         work = copy.deepcopy(self.tables)
         for table_id in re.findall(
             r"DELETE FROM `([^`]+)` WHERE TRUE;", script
@@ -408,6 +425,32 @@ class TestPublish:
         assert len(client.rows("survey_other_text")) == 1
         bigquery_output.publish(tables, "", record("r2"), DATASET, client)
         assert client.rows("survey_other_text") == []
+
+
+class TestLatestRecord:
+    """``latest_record``: the last run, to compare row counts with."""
+
+    def test_none_before_the_first_run(self, client: FakeClient) -> None:
+        """With no runs table yet, there is nothing to compare with.
+
+        Args:
+            client: A fake BigQuery.
+        """
+        assert bigquery_output.latest_record(DATASET, client) is None
+
+    def test_the_newest_record(self, client: FakeClient) -> None:
+        """The record of the run that finished last comes back.
+
+        Args:
+            client: A fake BigQuery.
+        """
+        tables = golden_tables()
+        first, second = record("run-1"), record("run-2")
+        second["finished_at"] = "2026-10-11T11:00:05+00:00"
+        bigquery_output.publish(tables, "", first, DATASET, client)
+        bigquery_output.publish(tables, "", second, DATASET, client)
+        latest = bigquery_output.latest_record(DATASET, client)
+        assert latest is not None and latest["run_id"] == "run-2"
 
 
 class TestCommitScript:

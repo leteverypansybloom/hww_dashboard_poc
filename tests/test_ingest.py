@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime
 from functools import partial
 from pathlib import Path
@@ -85,6 +85,48 @@ def save_xlsx(path: Path, sheets: dict[str, list[list[object]]]) -> Path:
                 writer, sheet_name=name, header=False, index=False
             )
     return path
+
+
+def header_only_config(
+    tmp_path: Path,
+    fixture_config: Path,
+    settings: wrangle.Config,
+    write_config: ConfigWriter,
+    empty: Sequence[str],
+) -> Path:
+    """Write a config whose inputs keep only their headings for some sources.
+
+    Args:
+        tmp_path: Holds the copied workbooks.
+        fixture_config: The frozen config, whose inputs are copied.
+        settings: The config dict to point at the copies (changed).
+        write_config: Writes the config.
+        empty: The sources whose sheets lose every row below the headings.
+
+    Returns:
+        The config file.
+    """
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    original = fixture_config.parent / "inputs"
+    for source in wrangle.SOURCES:
+        cfg = settings[source]
+        path = wrangle.input_file(original, cfg, source)
+        if source not in empty:
+            shutil.copy(path, inputs / path.name)
+            continue
+        with pd.ExcelFile(path) as book:
+            sheet = cfg["sheet"]
+            name = book.sheet_names[sheet] if isinstance(sheet, int) else sheet
+            raw = book.parse(sheet_name=sheet, header=None, dtype=object)
+        save_xlsx(
+            inputs / path.name,
+            {str(name): raw.head(cfg["header_row"]).values.tolist()},
+        )
+    config = write_config(settings)
+    settings["paths"]["input_folder"] = inputs.as_posix()
+    config.write_text(to_toml(settings), encoding="utf-8")
+    return config
 
 
 @pytest.fixture
@@ -1203,27 +1245,12 @@ class TestRun:
         write_config: ConfigWriter,
         run_time: datetime,
     ) -> None:
-        """Header-only workbooks still produce every agreed empty table."""
-        inputs = tmp_path / "inputs"
-        inputs.mkdir()
-        original = fixture_config.parent / "inputs"
+        """Header-only workbooks, when allowed, produce every empty table."""
+        config = header_only_config(
+            tmp_path, fixture_config, settings, write_config, wrangle.SOURCES
+        )
         for source in wrangle.SOURCES:
-            cfg = settings[source]
-            path = wrangle.input_file(original, cfg, source)
-            with pd.ExcelFile(path) as book:
-                sheet = cfg["sheet"]
-                name = (
-                    book.sheet_names[sheet]
-                    if isinstance(sheet, int)
-                    else sheet
-                )
-                raw = book.parse(sheet_name=sheet, header=None, dtype=object)
-            save_xlsx(
-                inputs / path.name,
-                {str(name): raw.head(cfg["header_row"]).values.tolist()},
-            )
-        config = write_config(settings)
-        settings["paths"]["input_folder"] = inputs.as_posix()
+            settings[source]["allow_empty"] = True
         config.write_text(to_toml(settings), encoding="utf-8")
         tables = wrangle.run(config, now=run_time)
         assert set(tables) == set(wrangle.COLUMNS) - {"survey_other_text"}
@@ -1232,3 +1259,55 @@ class TestRun:
             if name != "question_catalogue":
                 assert table.empty, name
         assert not tables["question_catalogue"].empty
+
+    def test_an_empty_source_stops_the_run(
+        self,
+        tmp_path: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """An empty upload stops the run, saying how to allow it.
+
+        Args:
+            tmp_path: Holds the workbooks and config.
+            fixture_config: The frozen config, whose inputs are copied.
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+        """
+        config = header_only_config(
+            tmp_path, fixture_config, settings, write_config, ("was",)
+        )
+        with pytest.raises(wrangle.InputError) as error:
+            wrangle.run(config, now=run_time)
+        message = str(error.value)
+        assert "dummy_was_database.xlsx has no data rows" in message
+        assert "allow_empty = true in [was]" in message
+
+    def test_a_shrunken_source_needs_attention(
+        self,
+        tmp_path: Path,
+        fixture_config: Path,
+        run_time: datetime,
+    ) -> None:
+        """Far fewer rows than the last run is a warning, not a stop.
+
+        Args:
+            tmp_path: The output folder's parent.
+            fixture_config: The frozen config.
+            run_time: The tests' fixed run time.
+        """
+        out = tmp_path / "out"
+        out.mkdir()
+        previous = {
+            "run_id": "earlier",
+            "inputs": [{"source": "WAS database", "rows": 100}],
+        }
+        (out / "run_record.json").write_text(json.dumps(previous), "utf-8")
+        wrangle.run(fixture_config, output_folder=out, now=run_time)
+        report = (out / "data_quality_report.md").read_text("utf-8")
+        assert "WAS database: 35 rows read, 65% fewer" in report
+        record = json.loads((out / "run_record.json").read_text("utf-8"))
+        assert record["attention"]["shrunk_sources"] == 1

@@ -97,6 +97,14 @@ size = "Business Size"
 sector = "Sector"
 industry = "Industry"
 
+[checks]
+# A source with no data rows stops the run: an empty upload usually means a
+# broken export. Where no rows is a real answer, add allow_empty = true to
+# that source's section.
+# A source with a larger share of rows gone than this, compared with the
+# last published run, is a warning to check the upload (0.1 = 10%).
+max_row_drop = 0.1
+
 [employers]
 # When duplicate rows for one organisation disagree, the most common value wins.
 # On a tie, a specific value beats "Other", then this source order decides.

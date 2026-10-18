@@ -1170,3 +1170,73 @@ class TestBuildEngagement:
                 wrangle.Report(),
                 today,
             )
+
+
+class TestCompareWithPrevious:
+    """``compare_with_previous``: far fewer rows than last time."""
+
+    @staticmethod
+    def report_with(rows: int) -> wrangle.Report:
+        """Make a report whose WAS database had some rows read.
+
+        Args:
+            rows: Rows read this run.
+
+        Returns:
+            The report.
+        """
+        report = wrangle.Report()
+        report.inputs.append({"source": "WAS database", "rows": rows})
+        return report
+
+    @pytest.mark.parametrize(
+        ("rows", "previous", "warned"),
+        [
+            (90, 100, False),
+            (89, 100, True),
+            (150, 100, False),
+            (0, 100, True),
+            (50, 0, False),
+        ],
+    )
+    def test_warns_past_the_threshold(
+        self, rows: int, previous: int, warned: bool
+    ) -> None:
+        """A drop of more than 10% warns; growth never does.
+
+        Args:
+            rows: Rows read this run.
+            previous: Rows read by the previous run.
+            warned: Whether a warning is expected.
+        """
+        report = self.report_with(rows)
+        record = {
+            "run_id": "r1",
+            "inputs": [{"source": "WAS database", "rows": previous}],
+        }
+        wrangle.compare_with_previous(report, record, 0.1)
+        assert bool(report.sections["Warnings"]) is warned
+        assert ("shrunk_sources" in report.to_act_on()) is warned
+
+    def test_no_previous_run(self) -> None:
+        """The first run has nothing to compare with."""
+        report = self.report_with(1)
+        wrangle.compare_with_previous(report, None, 0.1)
+        assert report.sections["Warnings"] == []
+
+
+class TestReadRecord:
+    """``read_record``: the previous run's record, if there is one."""
+
+    def test_missing_unreadable_and_valid(self, tmp_path: Path) -> None:
+        """No file or a broken one gives None; a record is returned.
+
+        Args:
+            tmp_path: Holds the record files.
+        """
+        path = tmp_path / "run_record.json"
+        assert wrangle.read_record(path) is None
+        path.write_text("{broken", "utf-8")
+        assert wrangle.read_record(path) is None
+        path.write_text('{"run_id": "r1"}', "utf-8")
+        assert wrangle.read_record(path) == {"run_id": "r1"}

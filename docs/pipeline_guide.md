@@ -59,6 +59,11 @@ The rule of thumb for problems:
   missing, `wrangle.py` raises `InputError`, prints one line saying what to fix, and exits with code 1.
   Nothing is written. An output file that can't be replaced (open in Excel, say) also exits with
   code 1, and the previous outputs are kept. An unexpected error exits with code 2: that is a bug.
+- **An empty source stops the run too,** unless its section says `allow_empty = true`: an empty
+  upload usually means a broken export, and py-common rejects empty sheets for the same reason. A
+  source with far fewer rows than the last published run (more than `max_row_drop`, 10%, in
+  `[checks]`) only warns, under Warnings and in the log's last line, because edits can remove
+  rows; the workbooks are cumulative, so a big drop usually means an incomplete upload.
 - **Dirty values never stop the run.** A sector nobody mapped, a date in the wrong place or a
   duplicate organisation is dealt with in a predictable way and written to
   `data_quality_report.md`. Read that report after every run.
