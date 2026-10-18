@@ -197,6 +197,7 @@ see [docs/output_contract.md](docs/output_contract.md).
 | `badges` | employer badge (empty for now) | page 2 |
 | `dim_date` | day, with month and April–March financial year | all date filters |
 
+How each key is made, and which survive a new upload, is in [docs/identifiers.md](docs/identifiers.md).
 Keys: `employer_id` links everything to `dim_employer`; `date` links to `dim_date`;
 `response_id` links the survey tables; `answer_id` links `fact_survey_answer` to `question_catalogue`.
 

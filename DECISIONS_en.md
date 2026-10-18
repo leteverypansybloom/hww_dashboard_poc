@@ -286,6 +286,29 @@ last line, not a stop: the workbooks are cumulative, so a big drop
 usually means an incomplete upload, but an edit can remove rows
 legitimately.
 
+### Organisation names are compared by one key that SQL can reproduce
+
+`employer_id` was an MD5 of the case-folded name, and names were
+grouped by `str.casefold()`. Python's case folding and whitespace
+differ from the obvious SQL in edge cases (`ß`, non-breaking spaces),
+so Dataform could have produced different ids for the same employer.
+Now one function, `name_key`, gives the form in which names are
+compared, grouped, overridden and hashed: invisible formatting
+characters removed, NFKC normalisation, case folding and collapsed
+whitespace. That matches BigQuery's `NORMALIZE_AND_CASEFOLD(..., NFKC)`
+for the cases in `tests/data/identifier_cases.json`, which Dataform
+should reuse to confirm its ids. `docs/identifiers.md` gives every id's
+rule in SQL and says which ids survive a new upload (`signup_id` and
+`answer_id` don't).
+
+No real ids existed yet, so changing the rule cost nothing; the
+synthetic names are plain text, so no golden file changed. As a side
+effect, names that differ only by look-alike characters now merge.
+
+Not chosen: a permanent register of employers with assigned ids. It
+would survive renames, but someone must maintain it; that belongs in
+Dataform's employer model.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run

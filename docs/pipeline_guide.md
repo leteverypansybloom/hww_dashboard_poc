@@ -438,19 +438,25 @@ this way) and **Gotchas** (what can trip you up).
 - **Why:** each loader used to repeat the same four lines. Now each loader states only which of its
   columns is which.
 
-#### `org_name(raw, overrides)`
-- **What:** `clean_text`, then replaces the name if its case-folded form is in `org_overrides.csv`.
+#### `org_name(raw, overrides)` and `name_key(name)`
+- **What:** `org_name` runs `clean_text`, then replaces the name if its key is in
+  `org_overrides.csv`. `name_key` gives the form in which organisation names are compared,
+  grouped and hashed: invisible formatting characters removed, look-alike characters folded
+  (NFKC), case folded and spaces collapsed, so `Org 11`, `ORG 11` and `Org` with a non-breaking
+  space before `11` are one organisation. `docs/identifiers.md` gives the rule in SQL.
 - **Why:** "ABC Ltd" and "A.B.C. Limited" can't be matched automatically. A person decides once,
   in the override file, and every source follows.
 
 #### `employer_id_for(name)`
-- **What:** `"E" + md5(name.casefold())[:8]`, e.g. `E7f29becf`.
+- **What:** `"E" + md5(name_key(name))[:8]`, e.g. `E7f29becf`. `tests/data/identifier_cases.json`
+  lists awkward names with the id each must get, for checking Dataform's version.
 - **Why:** the same name always gets the same id, on every run and on every machine, without a
   lookup table. Ids stay stable when new rows are added, and bookmarks or exports that use them
   keep working. MD5 is used for a short, stable fingerprint, not for security.
 - **Gotchas:** if an organisation's name changes, its id changes. Add an override to keep the old
   name. Two names could, very rarely, share the same 8 characters. `build_dim_employer` checks for
-  that and stops.
+  that and stops, asking for a longer id. The id is pseudonymous, not anonymous: anyone with a list
+  of names can recompute it.
 
 #### `iso(d)` and `fin_year(d)`
 - **What:** `iso` gives `YYYY-MM-DD` or `""`. `fin_year` gives the April–March label, e.g. `2025-26`.

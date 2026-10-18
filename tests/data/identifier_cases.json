@@ -1,0 +1,107 @@
+[
+  {
+    "raw": "Org 11",
+    "why": "plain name",
+    "cleaned": "Org 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "  ORG   11 ",
+    "why": "case and extra spaces",
+    "cleaned": "ORG 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "Org\u00a011",
+    "why": "non-breaking space, from pasted web text",
+    "cleaned": "Org 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "Org\u200b 11",
+    "why": "zero-width space",
+    "cleaned": "Org\u200b 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "Org\u00ad 11",
+    "why": "soft hyphen",
+    "cleaned": "Org\u00ad 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "\uff2f\uff52\uff47 11",
+    "why": "full-width letters",
+    "cleaned": "\uff2f\uff52\uff47 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "Org\n11",
+    "why": "line break inside the cell",
+    "cleaned": "Org 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "Org_x000D_11",
+    "why": "Excel's escaped carriage return",
+    "cleaned": "Org 11",
+    "key": "org 11",
+    "employer_id": "E7f29becf"
+  },
+  {
+    "raw": "Stra\u00dfe Wellbeing Ltd",
+    "why": "German sharp s: folds to ss",
+    "cleaned": "Stra\u00dfe Wellbeing Ltd",
+    "key": "strasse wellbeing ltd",
+    "employer_id": "E0cc8e80e"
+  },
+  {
+    "raw": "Caf\u00e9 Cymru",
+    "why": "accent, one character",
+    "cleaned": "Caf\u00e9 Cymru",
+    "key": "caf\u00e9 cymru",
+    "employer_id": "E4896a057"
+  },
+  {
+    "raw": "Cafe\u0301 Cymru",
+    "why": "accent, letter plus combining mark: same key",
+    "cleaned": "Cafe\u0301 Cymru",
+    "key": "caf\u00e9 cymru",
+    "employer_id": "E4896a057"
+  },
+  {
+    "raw": "\u0174yddfa Wellbeing",
+    "why": "Welsh w-circumflex",
+    "cleaned": "\u0174yddfa Wellbeing",
+    "key": "\u0175yddfa wellbeing",
+    "employer_id": "Eb1209985"
+  },
+  {
+    "raw": "\ufb01rst Steps",
+    "why": "fi ligature",
+    "cleaned": "\ufb01rst Steps",
+    "key": "first steps",
+    "employer_id": "E690d18d5"
+  },
+  {
+    "raw": 1234,
+    "why": "a number typed in the cell",
+    "cleaned": "1234",
+    "key": "1234",
+    "employer_id": "E81dc9bdb"
+  },
+  {
+    "raw": 12.0,
+    "why": "a whole number stored as a decimal",
+    "cleaned": "12",
+    "key": "12",
+    "employer_id": "Ec20ad4d7"
+  }
+]

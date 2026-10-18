@@ -22,6 +22,7 @@ import sys
 import tempfile
 import tomllib
 import traceback
+import unicodedata
 import zipfile
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -1340,7 +1341,17 @@ def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
         maps / "org_overrides.csv", MAPPING_COLUMNS["org_overrides"]
     )
     path = maps / "org_overrides.csv"
-    overrides = mapping_pairs(table, "raw_name", "canonical_name", path)
+    pairs = mapping_pairs(table, "raw_name", "canonical_name", path)
+    overrides: Lookup = {}
+    for raw, canonical in pairs.items():
+        key = name_key(raw)
+        if overrides.get(key, canonical) != canonical:
+            raise InputError(
+                f"{path}: two raw names that are the same organisation "
+                "(ignoring case, spacing and look-alike characters) point "
+                "at different canonical names. Give them one target."
+            )
+        overrides[key] = canonical
     resolved: Lookup = {}
     for key in overrides:
         visited: set[str] = set()
@@ -1353,9 +1364,9 @@ def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
                 )
             visited.add(current)
             target = overrides[current]
-            if target.casefold() == current:
+            if name_key(target) == current:
                 break
-            current = target.casefold()
+            current = name_key(target)
         resolved[key] = target
     return lookups, resolved
 
@@ -1436,20 +1447,43 @@ def org_name(raw: object, overrides: Mapping[str, str]) -> str:
         The name to use ('' if blank).
     """
     name = clean_text(raw)
-    return overrides.get(name.casefold(), name)
+    return overrides.get(name_key(name), name)
+
+
+def name_key(name: str) -> str:
+    """Give the form in which organisation names are compared and hashed.
+
+    Two names are the same organisation when their keys match. The key
+    is the cleaned name with invisible formatting characters removed
+    (Unicode category Cf: soft hyphens, zero-width spaces), look-alike
+    characters folded by NFKC normalisation (full-width letters,
+    ligatures, non-breaking spaces), case-folded, normalised again, and
+    with runs of whitespace collapsed to one space. docs/identifiers.md
+    gives the rule in SQL, and tests/data/identifier_cases.json the
+    expected key and id of awkward names.
+
+    Args:
+        name: An organisation name, already cleaned by ``clean_text``.
+
+    Returns:
+        The key, e.g. ``"org 11"``.
+    """
+    visible = "".join(c for c in name if unicodedata.category(c) != "Cf")
+    folded = unicodedata.normalize("NFKC", visible).casefold()
+    return " ".join(unicodedata.normalize("NFKC", folded).split())
 
 
 def employer_id_for(name: str) -> str:
-    """Make a stable id from the lower-case name: E and 8 hex digits.
+    """Make a stable id from an organisation name: E and 8 hex digits.
 
     Args:
-        name: Organisation name.
+        name: Organisation name, already cleaned.
 
     Returns:
-        'E' followed by the first 8 hex digits of the MD5 of the
-        lower-case name.
+        'E' followed by the first 8 hex digits of the MD5 of the name's
+        ``name_key``.
     """
-    digest = hashlib.md5(name.casefold().encode("utf-8")).hexdigest()
+    digest = hashlib.md5(name_key(name).encode("utf-8")).hexdigest()
     return "E" + digest[:8]
 
 
@@ -2417,7 +2451,7 @@ def build_dim_employer(
         InputError: Two different names hash to the same employer_id.
     """
     org_rows = org_rows[org_rows["org"] != ""].copy()
-    org_rows["key"] = org_rows["org"].str.casefold()
+    org_rows["key"] = org_rows["org"].map(name_key)
     rows = []
     for _key, group in org_rows.groupby("key", sort=False):
         name = Counter(group["org"]).most_common(1)[0][0]
@@ -2446,8 +2480,9 @@ def build_dim_employer(
 
     if dim["employer_id"].duplicated().any():
         raise InputError(
-            "Two organisation names produced the same employer_id. "
-            "Add an override in mappings/org_overrides.csv."
+            "Two different organisation names produce the same "
+            "employer_id. That is very unlikely; ask a developer to "
+            "lengthen the id (docs/identifiers.md)."
         )
 
     with_conflicts = dim[dim["attribute_conflicts"] != ""]
@@ -2476,12 +2511,12 @@ def report_duplicates(
         dim_employer: From ``build_dim_employer``.
         report: Data quality report.
     """
-    repeated = count_values(signups["org"].str.casefold())
+    repeated = count_values(signups["org"].map(name_key))
     repeated = repeated[repeated > 1]
     report.add(
         "Duplicates",
         f"- Account signups: {len(signups)} sign-up rows for "
-        f"{signups['org'].str.casefold().nunique()} organisations.",
+        f"{signups['org'].map(name_key).nunique()} organisations.",
     )
     report.add(
         "Duplicates",
@@ -2489,7 +2524,7 @@ def report_duplicates(
         "(each row kept as a user in fact_signup):",
     )
     for key, n in repeated.items():
-        is_key = dim_employer["employer_name"].str.casefold() == key
+        is_key = dim_employer["employer_name"].map(name_key) == key
         name = dim_employer.loc[is_key, "employer_name"].iloc[0]
         report.add("Duplicates", f"  - {name}: {n} rows")
     in_count = dim_employer[
@@ -2525,13 +2560,13 @@ def attach_employer_ids(
     """
     ids = dict(
         zip(
-            dim_employer["employer_name"].str.casefold(),
+            dim_employer["employer_name"].map(name_key),
             dim_employer["employer_id"],
             strict=True,
         )
     )
     for frame in frames:
-        frame["employer_id"] = frame["org"].str.casefold().map(ids).fillna("")
+        frame["employer_id"] = frame["org"].map(name_key).map(ids).fillna("")
 
 
 # ---------------------------------------------------------------- outputs
