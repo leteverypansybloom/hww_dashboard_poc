@@ -13,6 +13,15 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-10-18 — Release 0.2.0 and record remaining assurance gates
+
+The agreed output changes and new BigQuery publisher are released locally as
+0.2.0, under MIT with Public Health Wales copyright, matching py-common.
+CHANGELOG.md signposts changes. `docs/readiness.md` separates implemented
+engineering from deployed cloud behavior and human assurance. No tag, push,
+merge or deployment is performed. Formal RAP maturity still needs the owner's
+publication decision, recorded human review and actual CI/scheduled operation.
+
 ## 2026-10-18 — GCP deployment uses a read-only landing mount
 
 The Cloud Run job reads a read-only Cloud Storage mount and writes directly to

@@ -207,3 +207,10 @@ Keys: `employer_id` links everything to `dim_employer`; `date` links to `dim_dat
 
 Survey percentage (Figure 13) = respondents who chose the answer ÷ respondents who gave any answer
 to that question (distinct `response_id` in `fact_survey_answer` for that `question_id`).
+
+## Readiness and release status
+
+See [CHANGELOG.md](CHANGELOG.md) for 0.2.0 and
+[docs/readiness.md](docs/readiness.md) for the RAP assessment and remaining
+cloud acceptance, DPIA and human-review gates. Code is MIT licensed
+([LICENSE](LICENSE)).

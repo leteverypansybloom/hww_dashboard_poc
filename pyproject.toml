@@ -17,8 +17,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hww-dashboard"
-version = "0.1.0"
-description = "Healthy Working Wales prototype: CSV tables and a dashboard"
+version = "0.2.0"
+description = "Healthy Working Wales reference pipeline and interim BigQuery publisher"
+license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.11"
 # Upper bounds stop a fresh install pulling in a major version the code
