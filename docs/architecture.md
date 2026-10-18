@@ -10,14 +10,21 @@ py-common  →  BigQuery raw tables  →  Dataform  →  Power BI
                                        modelling)
 ```
 
-The prototype does every one of those jobs itself, in Python, on local
-files:
+The prototype does every one of those jobs itself, in Python:
 
 ```
-input folder  →  hww_dashboard.wrangle  →  output/*.csv  →  Streamlit pages
-(4 workbooks)    (read, clean, model)     (star schema)    (dashboard_data
-                                                            + dashboard)
+input folder  →  hww_dashboard.wrangle  →  output/*.csv       →  Streamlit pages
+(4 workbooks)    (read, clean, model)     or an interim         (dashboard_data
+                                          BigQuery dataset         + dashboard)
+                                          (star schema)
 ```
+
+Until the Dataform models exist, the pipeline runs for real: on
+laptops it writes CSV files, and in GCP it loads the same tables into
+an interim BigQuery dataset (`[output] target = "bigquery"`), with the
+table names and schemas Dataform is expected to produce, so reports
+built on it later move to Dataform's tables by changing the dataset
+name (`DECISIONS_en.md`, 2026-10-18).
 
 This page says which prototype piece corresponds to which production
 stage, what the package refactor did and did not change, and what a
@@ -73,10 +80,11 @@ Black, Ruff and mypy versions as py-common.
 
 Kept on purpose:
 
-- **The backend.** The prototype still reads the workbooks from a local
-  folder with pandas and openpyxl and writes CSV files that the
-  Streamlit app reads. It has no dependency on py-common, Google Cloud
-  or BigQuery.
+- **The backend.** The prototype still reads the workbooks from a
+  folder with pandas and openpyxl. It writes CSV files that the
+  Streamlit app reads or, since 2026-10-18, BigQuery tables through
+  the optional `bigquery` extra (google-cloud-bigquery). It has no
+  dependency on py-common.
 - **Every output.** The CSVs, their columns, the identifiers
   (`employer_id`, `signup_id`, `answer_id`, ...) and the data quality
   report are byte-for-byte what the code wrote before the refactor

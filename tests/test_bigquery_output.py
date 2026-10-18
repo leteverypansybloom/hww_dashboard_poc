@@ -11,6 +11,7 @@ import copy
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -19,7 +20,7 @@ import pytest
 from google.api_core.exceptions import BadRequest, Forbidden, NotFound
 from google.cloud import bigquery
 
-from hww_dashboard import bigquery_output
+from hww_dashboard import bigquery_output, wrangle
 from hww_dashboard.output_schema import BIGQUERY_FOLDER, schema
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
@@ -484,6 +485,67 @@ class TestDescribeError:
         described = bigquery_output.describe_error(error)
         assert described.startswith("BadRequest 400")
         assert "Org 11" not in described
+
+
+class TestRun:
+    """``wrangle.run`` with ``[output] target = "bigquery"``."""
+
+    def test_publishes_exactly_the_snapshot(
+        self,
+        client: FakeClient,
+        fixture_config: Path,
+        tmp_path: Path,
+        run_time: datetime,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The tables and the report match the golden files row for row.
+
+        Args:
+            client: A fake BigQuery.
+            fixture_config: The frozen config, copied with BigQuery output.
+            tmp_path: Holds the copy.
+            run_time: The tests' fixed run time.
+            monkeypatch: Hands the pipeline the fake client.
+        """
+        base = fixture_config.parent
+        text = (
+            fixture_config.read_text("utf-8")
+            .replace(
+                'input_folder = "inputs"',
+                f'input_folder = "{(base / "inputs").as_posix()}"',
+            )
+            .replace(
+                'mappings_folder = "../../mappings"',
+                'mappings_folder = "'
+                f'{(base / "../../mappings").resolve().as_posix()}"',
+            )
+            .replace(
+                'output_folder = "../../output"',
+                f'output_folder = "{(tmp_path / "unused").as_posix()}"',
+            )
+        )
+        text += (
+            '\n[output]\ntarget = "bigquery"\nproject = "proj"\n'
+            'dataset = "hww_interim"\n'
+        )
+        config = tmp_path / "config.toml"
+        config.write_text(text, encoding="utf-8")
+        monkeypatch.setattr(
+            bigquery_output,
+            "make_client",
+            lambda project, location=None: client,
+        )
+        wrangle.run(config, now=run_time)
+        for name, csv in golden_tables().items():
+            assert client.rows(name) == bigquery_output.table_rows(
+                csv, schema(name)
+            ), name
+        golden_report = (GOLDEN / "data_quality_report.md").read_text("utf-8")
+        [report] = client.rows("data_quality_report")
+        assert report["report"] == golden_report.replace("\r\n", "\n")
+        [run] = client.rows("runs")
+        assert json.loads(run["record"])["outputs"]["dim_date"]["rows"] == 730
+        assert not (tmp_path / "unused").exists()
 
 
 LIVE = pytest.mark.skipif(

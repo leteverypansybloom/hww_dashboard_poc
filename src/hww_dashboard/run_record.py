@@ -30,6 +30,18 @@ LIBRARIES = ("pandas", "numpy", "openpyxl")
 Record = dict[str, Any]
 
 
+def sha256_bytes(data: bytes) -> str:
+    """Checksum some bytes.
+
+    Args:
+        data: The bytes, e.g. a table's CSV text encoded as UTF-8.
+
+    Returns:
+        Their SHA-256, as 64 hex digits.
+    """
+    return hashlib.sha256(data).hexdigest()
+
+
 def sha256_file(path: Path) -> str:
     """Checksum a file.
 
@@ -39,7 +51,7 @@ def sha256_file(path: Path) -> str:
     Returns:
         Its SHA-256, as 64 hex digits.
     """
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_bytes(path.read_bytes())
 
 
 def file_facts(path: Path) -> dict[str, Any]:

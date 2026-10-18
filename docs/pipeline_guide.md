@@ -336,7 +336,9 @@ this way) and **Gotchas** (what can trip you up).
 
 #### `load_config(path)` and `check_config(cfg)`
 - **What:** `load_config` reads the TOML file and turns "file missing" and "bad TOML" into
-  `InputError`. `check_config` then checks:
+  `InputError`. It replaces every `${NAME}` in the config's text with the environment variable
+  NAME (`interpolate`, py-common's syntax), and stops naming any variable that isn't set.
+  `check_config` then checks:
   - every section and setting in `REQUIRED_SETTINGS` is present with its expected type;
   - headers and session numbers are positive integers; session numbers are unique;
   - the free-text switch is a boolean, and column names and paths are nonblank text;
@@ -716,11 +718,15 @@ Each `load_*` function follows the same pattern:
 
 ### Entry points
 
-#### `run(config_path=DEFAULT_CONFIG, output_folder=None, now=None)`
-- **What:** the 7 steps above. It returns the tables as a dict, which the tests use.
-  `output_folder` overrides the config so tests can write to a temporary folder. `now` is the
-  time of the run (the real time unless given): it is shown in the report, and its date is the
-  "today" that future dates are checked against. The tests pass 12:00 on 10 October 2026.
+#### `run(config_path=DEFAULT_CONFIG, output_folder=None, now=None, run_id=None)`
+- **What:** the 7 steps above. It returns the tables as a dict, which the tests use. Step 7
+  publishes to the config's `[output] target`: CSV files in a folder (`write_outputs`), or a
+  BigQuery dataset (`publish_bigquery`, which sends the same CSV text through
+  `bigquery_output.publish`). `output_folder` overrides the config, always writing CSV files
+  there, so tests can write to a temporary folder. `now` is the time of the run (the real time
+  unless given): it is shown in the report, and its date is the "today" that future dates are
+  checked against. The tests pass 12:00 on 10 October 2026. `run_id` ties the run's log and
+  record together.
 - **Gotcha:** folder paths in the config are relative to the **config file**, not to where you
   run the command from.
 

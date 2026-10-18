@@ -81,6 +81,13 @@ audit records.
   Once people merge duplicate employers, `mappings/org_overrides.csv`
   will hold real organisation names; keep the repository private, or
   move that file next to the inputs before publishing the code.
+- **BigQuery** (in GCP, with `[output] target = "bigquery"`): the
+  tables and the report are in one interim dataset, which only the
+  pipeline's service account, and whoever the DPIA allows, should be
+  able to read. Each run replaces them; the `runs` table keeps every
+  run's record (no cell values). BigQuery keeps replaced or deleted
+  rows for up to 7 days (time travel), then 7 more days (fail-safe),
+  and the staging tables of a run that died expire after a day.
 - **The dashboard** has no sign-in. It must not be reachable beyond the
   laptop it runs on while it shows real data.
 

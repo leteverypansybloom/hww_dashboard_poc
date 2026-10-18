@@ -14,6 +14,7 @@ run writes the tables to the output folder plus data_quality_report.md.
 
 import hashlib
 import logging
+import os
 import re
 import shutil
 import sys
@@ -45,6 +46,7 @@ from hww_dashboard.run_record import (
     RECORD_NAME,
     Record,
     file_facts,
+    sha256_bytes,
     sha256_file,
     start_record,
     utc_iso,
@@ -59,6 +61,10 @@ UNKNOWN = "Unknown"
 OTHER = "Other"
 SOURCES = ("signups", "survey", "was", "peer")
 COMPLETED_RULES = ("summary_1_sent", "session_1_held", "last_session_held")
+#: Where the tables go: CSV files in a folder, or BigQuery tables.
+OUTPUT_TARGETS = ("folder", "bigquery")
+#: ``${NAME}`` in config text, replaced by an environment variable.
+CONFIG_VARIABLE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 DATE_IN_NAME = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 
 MONTHS = {
@@ -422,6 +428,24 @@ class Report:
             path: File to write (overwritten).
             run_at: When the run started, shown at the top of the report.
         """
+        text = self.render(run_at, path.name)
+        path.write_text(text, encoding="utf-8", newline="\n")
+
+    def render(
+        self, run_at: datetime, filename: str = "data_quality_report.md"
+    ) -> str:
+        """Render the report as markdown, checked for contact details.
+
+        Args:
+            run_at: When the run started, shown at the top of the report.
+            filename: The report's name, for the contact-detail message.
+
+        Returns:
+            The report's text.
+
+        Raises:
+            InputError: The report would hold a contact identifier.
+        """
         lines = [
             "# Data quality report",
             "",
@@ -456,8 +480,8 @@ class Report:
         lines.extend(f"- {a}" for a in ASSUMPTIONS)
         lines.append("")
         text = "\n".join(lines)
-        check_public_text(text, path.name)
-        path.write_text(text, encoding="utf-8", newline="\n")
+        check_public_text(text, filename)
+        return text
 
 
 def markdown_table(df: pd.DataFrame) -> str:
@@ -621,11 +645,12 @@ def load_config(path: Path) -> Config:
         path: The config file.
 
     Returns:
-        The whole config as nested dicts.
+        The whole config as nested dicts, with every ``${NAME}`` replaced
+        by the environment variable NAME.
 
     Raises:
-        InputError: The file is missing, is not valid TOML, or lacks a
-            setting.
+        InputError: The file is missing, is not valid TOML, uses an
+            environment variable that isn't set, or lacks a setting.
     """
     try:
         with open(path, "rb") as f:
@@ -634,8 +659,54 @@ def load_config(path: Path) -> Config:
         raise InputError(f"Config file not found: {path}") from None
     except tomllib.TOMLDecodeError as error:
         raise InputError(f"{path.name} is not valid TOML: {error}") from None
+    missing: set[str] = set()
+    cfg = dict(interpolate(cfg, missing))
+    if missing:
+        raise InputError(
+            f"{path.name} uses environment variable(s) that aren't set: "
+            f"{sorted(missing)}. Set them, or write the value in the config."
+        )
     check_config(cfg, path.name)
     return cfg
+
+
+def interpolate(value: Any, missing: set[str]) -> Any:
+    """Replace ``${NAME}`` in config text with environment variables.
+
+    The syntax is py-common's: NAME is upper-case letters, digits and
+    underscores, and the replacement is done once, as the config loads.
+
+    Args:
+        value: A config value: text, a list or a table (dict).
+        missing: Collects the names of variables that aren't set; their
+            placeholders are left as they are.
+
+    Returns:
+        The value with every placeholder in it replaced.
+    """
+    if isinstance(value, str):
+
+        def replace(match: re.Match[str]) -> str:
+            """Look up one variable.
+
+            Args:
+                match: The ``${NAME}`` found.
+
+            Returns:
+                The variable's value, or the placeholder if it isn't set.
+            """
+            name = match.group(1)
+            if name not in os.environ:
+                missing.add(name)
+                return match.group(0)
+            return os.environ[name]
+
+        return CONFIG_VARIABLE.sub(replace, value)
+    if isinstance(value, list):
+        return [interpolate(item, missing) for item in value]
+    if isinstance(value, dict):
+        return {key: interpolate(item, missing) for key, item in value.items()}
+    return value
 
 
 def check_config(cfg: Config, name: str = "config.toml") -> None:
@@ -697,6 +768,26 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
     folder = cfg["paths"].get("log_folder", "logs")
     if not isinstance(folder, str) or not folder.strip():
         raise InputError(f"{name}: [paths] log_folder must be nonblank text.")
+    output = cfg.get("output", {})
+    if not isinstance(output, dict):
+        raise InputError(f"{name}: [output] must be a table.")
+    target = output.get("target", "folder")
+    if target not in OUTPUT_TARGETS:
+        raise InputError(
+            f"{name}: [output] target must be one of "
+            f"{list(OUTPUT_TARGETS)}, got {target!r}."
+        )
+    if target == "bigquery":
+        for key in ("project", "dataset"):
+            value = output.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise InputError(
+                    f"{name}: [output] {key} must be nonblank text for "
+                    "BigQuery output."
+                )
+    location = output.get("location", "unset")
+    if not isinstance(location, str) or not location.strip():
+        raise InputError(f"{name}: [output] location must be nonblank text.")
     privacy = cfg.get("privacy", {})
     if not isinstance(privacy, dict) or not isinstance(
         privacy.get("personal_columns", []), list
@@ -2893,6 +2984,108 @@ def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
     return len(df)
 
 
+def add_output_counts(
+    report: Report, counts: list[tuple[str, int]], engagement: pd.DataFrame
+) -> None:
+    """Add the rows per table and per event type to the report.
+
+    Args:
+        report: Data quality report (the copy about to be published).
+        counts: (table name, rows) for each table.
+        engagement: fact_engagement, for the event-type summary.
+    """
+    report.add(
+        "Outputs",
+        markdown_table(pd.DataFrame(counts, columns=["table", "rows"])),
+    )
+    report.add("Outputs", "")
+    report.add("Outputs", "fact_engagement by event type:")
+    report.add("Outputs", "")
+    by_type = count_values(engagement["event_type"]).rename_axis("event_type")
+    report.add("Outputs", markdown_table(by_type.reset_index(name="rows")))
+
+
+def publish_bigquery(
+    tables: dict[str, pd.DataFrame],
+    engagement: pd.DataFrame,
+    report: Report,
+    run_at: datetime,
+    record: Record,
+    settings: Config,
+) -> list[tuple[str, int]]:
+    """Publish every table, the report and the run record to BigQuery.
+
+    The tables pass the same checks as in a folder (contact details,
+    schema) and are sent as the same CSV text, so both targets publish
+    the same rows. ``tables`` and ``report`` are updated as
+    ``write_outputs`` updates them.
+
+    Args:
+        tables: Table name -> DataFrame (changed in place).
+        engagement: fact_engagement, for the event-type summary.
+        report: Data quality report.
+        run_at: When the run started, for the report.
+        record: The run record so far.
+        settings: The [output] section of the config.
+
+    Returns:
+        (table name, rows published) for each table.
+
+    Raises:
+        InputError: A table holds a contact identifier, the bigquery
+            extra isn't installed, or BigQuery reports a problem a
+            person can fix (access, a missing dataset, a changed table,
+            no credentials, no network).
+    """
+    try:
+        from hww_dashboard import bigquery_output
+    except ImportError:
+        raise InputError(
+            "BigQuery output needs the bigquery extra: "
+            'pip install -e ".[bigquery]" -c constraints.txt'
+        ) from None
+    texts: dict[str, str] = {}
+    counts = []
+    for name, df in tables.items():
+        text = csv_text(df, name)
+        check_public_text(text, f"{name}.csv")
+        check_cells(parse_csv(text), name)
+        texts[name] = text
+        counts.append((name, len(df)))
+    staged_report = deepcopy(report)
+    add_output_counts(staged_report, counts, engagement)
+    report_text = staged_report.render(run_at)
+    outputs: dict[str, dict[str, Any]] = {
+        name: {"rows": n, "sha256": sha256_bytes(texts[name].encode())}
+        for name, n in counts
+    }
+    outputs["data_quality_report"] = {
+        "sha256": sha256_bytes(report_text.encode())
+    }
+    finished = {
+        **record,
+        "outcome": "published",
+        "finished_at": utc_iso(),
+        "outputs": outputs,
+    }
+    project = str(settings["project"])
+    dataset = f"{project}.{settings['dataset']}"
+    try:
+        client = bigquery_output.make_client(project, settings.get("location"))
+        bigquery_output.publish(texts, report_text, finished, dataset, client)
+    except bigquery_output.PublishSetupError as error:
+        raise InputError(str(error)) from None
+    except OSError as error:
+        raise InputError(
+            f"Could not reach BigQuery ({type(error).__name__}). Check the "
+            "network and run again; nothing was changed."
+        ) from None
+    for name, df in tables.items():
+        tables[name] = df.reindex(columns=COLUMNS[name])
+    report.sections = staged_report.sections
+    return counts
+
+
 def write_outputs(
     tables: dict[str, pd.DataFrame],
     out: Path,
@@ -2933,19 +3126,7 @@ def write_outputs(
         for name, df in staged_tables.items():
             counts.append((name, write_csv(df, stage, name)))
             staged_tables[name] = df.reindex(columns=COLUMNS[name])
-        staged_report.add(
-            "Outputs",
-            markdown_table(pd.DataFrame(counts, columns=["table", "rows"])),
-        )
-        staged_report.add("Outputs", "")
-        staged_report.add("Outputs", "fact_engagement by event type:")
-        staged_report.add("Outputs", "")
-        by_type = count_values(engagement["event_type"]).rename_axis(
-            "event_type"
-        )
-        staged_report.add(
-            "Outputs", markdown_table(by_type.reset_index(name="rows"))
-        )
+        add_output_counts(staged_report, counts, engagement)
         staged_report.write(stage / "data_quality_report.md", run_at)
         if "survey_other_text" not in staged_tables:
             (stage / "survey_other_text.csv").unlink(missing_ok=True)
@@ -3035,14 +3216,19 @@ def run(
                 f"{config_path.name}: {label} {folder} does not exist."
             )
     logger.info("Config: %s", config_path)
-    try:
-        out.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        raise InputError(
-            f"Cannot create the output folder {out} "
-            f"({error.strerror or type(error).__name__}). Check the "
-            "output_folder setting and that the folder can be written."
-        ) from error
+    output = cfg.get("output", {})
+    # An output folder given by the caller (the tests, the golden
+    # refresh) always means CSV files there.
+    target = "folder" if output_folder else output.get("target", "folder")
+    if target == "folder":
+        try:
+            out.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise InputError(
+                f"Cannot create the output folder {out} "
+                f"({error.strerror or type(error).__name__}). Check the "
+                "output_folder setting and that the folder can be written."
+            ) from error
     report = Report()
     lookups, overrides = load_mappings(maps)
     record = start_record(
@@ -3122,20 +3308,35 @@ def run(
         tables["survey_other_text"] = other_text
     record["inputs"] = report.inputs
     record["attention"] = report.to_act_on()
-    try:
-        counts = write_outputs(tables, out, engagement, report, run_at, record)
-    except OSError as error:
-        raise InputError(
-            f"Could not write the outputs to {out} "
-            f"({error.strerror or type(error).__name__}). The previous "
-            "outputs were kept. Close any output file that is open in "
-            "another program, such as Excel, check the folder can be "
-            "written, and run again."
-        ) from error
-
-    logger.info(
-        "Wrote %d tables and data_quality_report.md to %s", len(tables), out
-    )
+    if target == "bigquery":
+        counts = publish_bigquery(
+            tables, engagement, report, run_at, record, output
+        )
+        logger.info(
+            "Published %d tables, the report and the run record to "
+            "BigQuery dataset %s.%s",
+            len(tables),
+            output["project"],
+            output["dataset"],
+        )
+    else:
+        try:
+            counts = write_outputs(
+                tables, out, engagement, report, run_at, record
+            )
+        except OSError as error:
+            raise InputError(
+                f"Could not write the outputs to {out} "
+                f"({error.strerror or type(error).__name__}). The previous "
+                "outputs were kept. Close any output file that is open in "
+                "another program, such as Excel, check the folder can be "
+                "written, and run again."
+            ) from error
+        logger.info(
+            "Wrote %d tables and data_quality_report.md to %s",
+            len(tables),
+            out,
+        )
     for name, n in counts:
         logger.info("  %-24s %6d rows", name, n)
     attention = report.to_act_on()

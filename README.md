@@ -66,6 +66,12 @@ in `logs/` (set by `log_folder` in `config.toml`; the newest 20 are kept). Set
 `HWW_LOG_FORMAT=json` for one JSON object per line instead, as Cloud Logging expects.
 The dashboard picks up new tables automatically after `wrangle.py` runs again (refresh the browser).
 
+`[output] target` in `config.toml` chooses where the tables go: `"folder"` (CSV files in
+`output/`, the default) or `"bigquery"` (tables in a BigQuery dataset, all replaced at once, with
+the report and an append-only `runs` table of run records). Any config value can use `${NAME}`
+for an environment variable, as in py-common, so a config used in GCP can take its paths and
+names from the job's environment.
+
 `python wrangle.py other.toml` uses another config, and
 `python -m hww_dashboard.wrangle [config.toml]` does the same as
 `python wrangle.py`. To show the tables in another folder, set the

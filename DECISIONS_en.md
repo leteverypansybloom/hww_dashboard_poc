@@ -253,6 +253,22 @@ Not chosen: appending every run's rows with a run id. That gives full
 history, but at the cost of more personal data and a "latest run"
 filter in every query.
 
+### The config chooses the output; `${NAME}` fills values from the environment
+
+A new `[output]` section chooses where the tables go: `target =
+"folder"` (CSV files, the default, for laptops and tests) or
+`"bigquery"`, with `project`, `dataset` and an optional `location`. Any
+config value can use `${NAME}` for an environment variable, with
+py-common's syntax, filled in as the config loads; a variable that
+isn't set stops the run, naming it. So one config file can serve a
+Cloud Run job, which supplies its folder and dataset names through
+its environment. A test checks that `config.toml` and the frozen test
+config agree on everything except folders, the output target and file
+names, so the tests can't drift from the real settings.
+
+Not chosen: command-line flags for paths. They put the settings in
+the command rather than in a file that is reviewed and versioned.
+
 ### Outputs have LF line endings on every system
 
 pandas and Python wrote CRLF on Windows and LF on Linux, so one run

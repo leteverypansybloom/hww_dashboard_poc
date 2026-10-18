@@ -11,6 +11,18 @@ mappings_folder = "mappings"
 # HWW_LOG_FORMAT=json (in GCP), which logs to the console only.
 log_folder = "logs"
 
+[output]
+# Where the tables, the report and the run record go:
+#   "folder"   - CSV files in output_folder (above): laptops and tests
+#   "bigquery" - tables in a BigQuery dataset, replaced all at once
+# Any value can use ${NAME} for an environment variable, so a GCP config
+# can take its names from the job, e.g.:
+#   target = "bigquery"
+#   project = "${HWW_BQ_PROJECT}"
+#   dataset = "${HWW_BQ_DATASET}"
+#   location = "europe-west2"
+target = "folder"
+
 [signups]
 file = "dummy_HWW monitoring and reporting.xlsx"
 sheet = "Account signups"

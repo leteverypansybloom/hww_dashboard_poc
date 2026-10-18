@@ -319,6 +319,24 @@ class TestCheckConfig:
                 ],
                 r"\[survey\] needs 'file' or 'file_pattern'",
             ),
+            (
+                lambda c: c.update(output={"target": "cloud"}),
+                r"\[output\] target must be one of",
+            ),
+            (
+                lambda c: c.update(
+                    output={"target": "bigquery", "project": "p"}
+                ),
+                r"\[output\] dataset must be nonblank",
+            ),
+            (
+                lambda c: c.update(output={"location": ""}),
+                r"\[output\] location must be nonblank",
+            ),
+            (
+                lambda c: c["paths"].update(log_folder=" "),
+                r"\[paths\] log_folder must be nonblank",
+            ),
         ],
     )
     def test_problem_is_named(
@@ -397,6 +415,40 @@ class TestCheckConfig:
     ) -> None:
         """A new survey download needs no config change."""
         assert "file_pattern" in shipped["survey"]
+
+    def test_matches_the_frozen_test_config(
+        self, shipped: wrangle.Config, settings: wrangle.Config
+    ) -> None:
+        """The tests run with the shipped settings, not a drifted copy.
+
+        Only where things are may differ: the folders, the output target
+        and the file names.
+
+        Args:
+            shipped: config.toml.
+            settings: The frozen test config.
+        """
+
+        def rules(cfg: wrangle.Config) -> wrangle.Config:
+            """Keep everything except where things are.
+
+            Args:
+                cfg: A config.
+
+            Returns:
+                The config without [paths], [output] and file names.
+            """
+            kept = {
+                section: dict(values)
+                for section, values in cfg.items()
+                if section not in ("paths", "output")
+            }
+            for values in kept.values():
+                for key in ("file", "file_pattern"):
+                    values.pop(key, None)
+            return kept
+
+        assert rules(shipped) == rules(settings)
 
 
 class TestMain:
@@ -822,6 +874,73 @@ class TestLoadConfig:
         path.write_text("[broken", encoding="utf-8")
         with pytest.raises(wrangle.InputError, match="not valid TOML"):
             wrangle.load_config(path)
+
+    def test_environment_variables_fill_placeholders(
+        self,
+        fixture_config: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``${NAME}`` takes the environment variable's value.
+
+        Args:
+            fixture_config: The frozen config, copied with placeholders.
+            tmp_path: Holds the copy.
+            monkeypatch: Sets the environment variables.
+        """
+        text = fixture_config.read_text("utf-8").replace(
+            'input_folder = "inputs"',
+            'input_folder = "${HWW_TEST_INPUTS}/${HWW_TEST_SUB}"',
+        )
+        path = tmp_path / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        monkeypatch.setenv("HWW_TEST_INPUTS", "/mnt/landing")
+        monkeypatch.setenv("HWW_TEST_SUB", "hww")
+        cfg = wrangle.load_config(path)
+        assert cfg["paths"]["input_folder"] == "/mnt/landing/hww"
+
+    def test_unset_variables_are_named(
+        self,
+        fixture_config: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A placeholder with no variable stops the run, naming it.
+
+        Args:
+            fixture_config: The frozen config, copied with a placeholder.
+            tmp_path: Holds the copy.
+            monkeypatch: Clears the environment variable.
+        """
+        text = fixture_config.read_text("utf-8").replace(
+            'input_folder = "inputs"', 'input_folder = "${HWW_NOT_SET}"'
+        )
+        path = tmp_path / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        monkeypatch.delenv("HWW_NOT_SET", raising=False)
+        with pytest.raises(wrangle.InputError, match="HWW_NOT_SET"):
+            wrangle.load_config(path)
+
+
+class TestInterpolate:
+    """``interpolate``: placeholders in text, lists and tables."""
+
+    def test_nested_values_and_other_types(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Text inside lists and tables is filled; numbers are left alone.
+
+        Args:
+            monkeypatch: Sets an environment variable.
+        """
+        monkeypatch.setenv("HWW_TEST_VALUE", "x")
+        missing: set[str] = set()
+        value = {"a": ["${HWW_TEST_VALUE}", 1], "b": {"c": "$NOT ${lower}"}}
+        assert wrangle.interpolate(value, missing) == {
+            "a": ["x", 1],
+            "b": {"c": "$NOT ${lower}"},
+        }
+        assert missing == set()
 
 
 class TestDateInName:
