@@ -13,45 +13,6 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
-## 2026-10-18 — Release 0.2.0 and record remaining assurance gates
-
-The agreed output changes and new BigQuery publisher are released locally as
-0.2.0, under MIT with Public Health Wales copyright, matching py-common.
-CHANGELOG.md signposts changes. `docs/readiness.md` separates implemented
-engineering from deployed cloud behavior and human assurance. No tag, push,
-merge or deployment is performed. Formal RAP maturity still needs the owner's
-publication decision, recorded human review and actual CI/scheduled operation.
-
-## 2026-10-18 — GCP deployment uses a read-only landing mount
-
-The Cloud Run job reads a read-only Cloud Storage mount and writes directly to
-its own interim BigQuery dataset. No py-common dependency or GCS adapter is
-added. Uploads must be frozen for the run (prefer an immutable batch prefix),
-and executions must be serialized. A fixed survey name matches py-common's
-contract. The laptop keeps dated export discovery.
-
-Deployment instructions, least-privilege roles, alerting, schema maintenance
-and synthetic acceptance checks are in `docs/gcp.md`. Docker was unavailable;
-image build and cloud acceptance remain deployment gates.
-
-## 2026-10-18 — Reproducibility is tested across processes
-
-Tests compare table and report bytes on repeated runs at a fixed reference
-time, and in independent Python processes with different hash seeds. Run
-records are excluded because they describe executions and include completion
-times. The BigQuery writer's existing round-trip test checks the same golden
-rows after explicit conversion to warehouse types. CI runs these checks on
-Windows and Linux with pinned dependencies.
-
-## 2026-10-18 — Operators get an action summary
-
-The report starts with a count of items needing attention and the action for
-each. A successful publication with warnings still exits 0; monitoring must
-match the warning log as well as failed executions. `docs/runbook.md` explains
-running, interpretation, recovery and the ownership needed before scheduling.
-This implements the report change approved by the project owner. The golden
-report gains only the four lines of the new summary.
-
 ## 2026-10-18 — Production readiness
 
 The production-readiness review prepared the prototype for two jobs:
@@ -385,6 +346,45 @@ first run.
 
 Not chosen: growing the golden dataset. Its expected values would still
 come from the code, and every addition would change the golden files.
+
+### Operators get an action summary
+
+The report starts with a count of items needing attention and the action for
+each. A successful publication with warnings still exits 0; monitoring must
+match the warning log as well as failed executions. `docs/runbook.md` explains
+running, interpretation, recovery and the ownership needed before scheduling.
+This implements the report change approved by the project owner. The golden
+report gains only the four lines of the new summary.
+
+### Reproducibility is tested across processes
+
+Tests compare table and report bytes on repeated runs at a fixed reference
+time, and in independent Python processes with different hash seeds. Run
+records are excluded because they describe executions and include completion
+times. The BigQuery writer's existing round-trip test checks the same golden
+rows after explicit conversion to warehouse types. CI runs these checks on
+Windows and Linux with pinned dependencies.
+
+### GCP deployment uses a read-only landing mount
+
+The Cloud Run job reads a read-only Cloud Storage mount and writes directly to
+its own interim BigQuery dataset. No py-common dependency or GCS adapter is
+added. Uploads must be frozen for the run (prefer an immutable batch prefix),
+and executions must be serialized. A fixed survey name matches py-common's
+contract. The laptop keeps dated export discovery.
+
+Deployment instructions, least-privilege roles, alerting, schema maintenance
+and synthetic acceptance checks are in `docs/gcp.md`. Docker was unavailable;
+image build and cloud acceptance remain deployment gates.
+
+### Release 0.2.0 and record remaining assurance gates
+
+The agreed output changes and new BigQuery publisher are released locally as
+0.2.0, under MIT with Public Health Wales copyright, matching py-common.
+CHANGELOG.md signposts changes. `docs/readiness.md` separates implemented
+engineering from deployed cloud behavior and human assurance. No tag, push,
+merge or deployment is performed. Formal RAP maturity still needs the owner's
+publication decision, recorded human review and actual CI/scheduled operation.
 
 ### Outputs have LF line endings on every system
 
