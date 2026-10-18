@@ -95,6 +95,24 @@ GCP image needs only `bigquery`.
 smaller image for the scheduled job, with fewer libraries to audit
 and patch.
 
+### Quality gates match py-common's, plus Windows and version jobs
+
+Pre-commit hooks run Black, Ruff, mypy, detect-secrets and file checks
+as py-common's do, plus a local guard that refuses `output/`, workbooks
+outside `tests/data/inputs/` and stray CSV files. mypy runs from the
+project venv rather than a hook environment, because it needs
+Streamlit, which fails to install in a hook environment's long Windows
+path.
+
+CI adds pip-audit (on the installed set and on `constraints.txt`) and
+coverage with a floor of 90% (93% today), and runs on Windows as well
+as Linux, because development happens on Windows. Separate jobs test
+the oldest and the newest versions the ranges allow; the newest also
+runs weekly.
+
+Not chosen: a Codecov upload. The report is kept as a CI artifact
+instead, which needs no token or outside service.
+
 ## 2026-10-17 — Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)

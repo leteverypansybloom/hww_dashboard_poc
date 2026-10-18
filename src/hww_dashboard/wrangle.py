@@ -1144,7 +1144,7 @@ def org_name(raw: object, overrides: Mapping[str, str]) -> str:
 
 
 def employer_id_for(name: str) -> str:
-    """Make a stable id from the lower-case name, e.g. 'E1a2b3c4d'.
+    """Make a stable id from the lower-case name: E and 8 hex digits.
 
     Args:
         name: Organisation name.

@@ -44,13 +44,18 @@ bigquery = [
 dev = [
     "hww-dashboard[dashboard,bigquery]",
     "pytest>=7.4",
-    # Exact pins, the same as py-common's, so both projects are formatted
-    # and linted alike. Bump them together.
+    "pytest-cov>=4.1",
+    # Exact pins, the same as py-common's and the hook revs in
+    # .pre-commit-config.yaml, so both projects are formatted and linted
+    # alike. Bump them together.
     "black==26.10.1",
     "ruff==0.17.0",
     "mypy==2.4.0",
     "pandas-stubs",
     "types-openpyxl",
+    "pre-commit>=3.7",
+    "detect-secrets>=1.5",
+    "pip-audit>=2.7",
 ]
 
 [tool.setuptools.packages.find]
@@ -100,3 +105,14 @@ testpaths = ["tests"]
 # Import test modules without putting their folder on sys.path: the code
 # under test is imported from the installed package, as users import it.
 addopts = ["--import-mode=importlib"]
+
+[tool.coverage.run]
+source = ["hww_dashboard"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# Just under today's figure (93% with branches), so coverage can't fall
+# far without CI saying so.
+fail_under = 90

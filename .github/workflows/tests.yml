@@ -5,15 +5,28 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Every Monday, so the "newest" job tries new library releases before
+  # anyone moves constraints.txt to them.
+  schedule:
+    - cron: "17 6 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  checks:
+    # The pinned versions in constraints.txt, on every supported Python,
+    # and on Windows, where development happens.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: windows-latest
+            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +35,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      # A venv in the runner's short temporary folder: Streamlit fails
+      # to install in long Windows paths.
+      - name: Create a virtual environment
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "$RUNNER_TEMP/venv/Scripts" >> "$GITHUB_PATH"
+          else
+            echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: Install the package and its developer tools
         run: |
@@ -39,7 +64,54 @@ jobs:
       - name: Type check with mypy
         run: mypy
 
+      - name: Audit dependencies for known vulnerabilities
+        run: |
+          pip-audit --skip-editable
+          pip-audit -r constraints.txt --no-deps --disable-pip
+
       # Unit tests, the golden-output comparison and the Streamlit page
-      # smoke tests. Everything they read is in the repository.
+      # smoke tests, with coverage. Everything they read is in the
+      # repository.
       - name: Run tests
-        run: pytest -v
+        # The coverage floor is fail_under in pyproject.toml.
+        run: python -m pytest -W error --cov --cov-report=term --cov-report=xml
+
+      - name: Check the tests left the golden files alone
+        run: git diff --exit-code -- tests/golden
+
+      - name: Keep the coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-${{ matrix.python-version }}
+          path: coverage.xml
+
+  newest:
+    # The newest versions the ranges in pyproject.toml allow, to catch a
+    # breaking release early.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the newest allowed versions
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run tests
+        run: python -m pytest -W error
+
+  oldest:
+    # The lowest versions pyproject.toml allows, on the oldest Python.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the oldest allowed versions
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" "pandas==2.2.3" "openpyxl==3.1.5"
+      - name: Run tests
+        run: python -m pytest -W error

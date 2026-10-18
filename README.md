@@ -84,17 +84,24 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 
 ```
 pip install -r requirements-dev.txt -c constraints.txt
+pre-commit install
 black --check .
 ruff check .
 mypy
-python -m pytest
+python -m pytest -W error
 ```
 
 Settings are in `pyproject.toml`: PEP 8 with 79-character lines, the same
 Black, Ruff and mypy versions as py-common, Google-style docstrings
-(checked by Ruff) and mypy in strict mode. GitHub Actions runs the same
-four checks on Python 3.11, 3.12 and 3.13
-(`.github/workflows/tests.yml`).
+(checked by Ruff) and mypy in strict mode. `pre-commit install` makes git
+run Black, Ruff, mypy, a secrets scan and a check that no real data is
+being committed before every commit (`.pre-commit-config.yaml`).
+
+GitHub Actions (`.github/workflows/tests.yml`) runs the checks with the
+pinned versions on Python 3.11, 3.12 and 3.13 on Linux and on Windows,
+audits the dependencies with pip-audit, and fails if test coverage drops
+below 90%. Two more jobs run the tests with the oldest and the newest
+versions `pyproject.toml` allows.
 
 The tests are self-contained: they read the synthetic workbooks in
 `tests/data/inputs/` through `tests/data/config.toml`, never the real

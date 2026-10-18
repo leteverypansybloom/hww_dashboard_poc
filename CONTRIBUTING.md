@@ -19,6 +19,17 @@ pip install -r requirements-dev.txt -c constraints.txt
 to newer versions, run `python scripts/update_constraints.py`, review
 the diff, and run the checks.
 
+Then turn on the pre-commit hooks, from the activated venv:
+
+```
+pre-commit install
+```
+
+Before each commit, git then runs Black, Ruff, mypy, a secrets scan
+(`detect-secrets`, against `.secrets.baseline`), file checks, and a
+guard that refuses `output/`, workbooks outside `tests/data/inputs/` and
+stray CSV files. Run them all by hand with `pre-commit run --all-files`.
+
 ## Checks
 
 Run all of these before every commit. CI runs the same checks.
@@ -32,6 +43,14 @@ git diff --exit-code -- tests/golden
 ```
 
 The last one confirms that nothing rewrote the golden files.
+
+On every push and pull request, GitHub Actions runs these checks with
+the pinned versions on Python 3.11, 3.12 and 3.13 on Linux and on
+Windows. It also audits the dependencies (`pip-audit`, on the installed
+set and on `constraints.txt`) and measures coverage, failing below the
+`fail_under` figure in `pyproject.toml`. Separate jobs run the tests
+with the oldest and the newest versions `pyproject.toml` allows; the
+newest also runs every Monday.
 
 ## Code standards
 

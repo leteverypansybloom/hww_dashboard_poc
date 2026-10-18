@@ -18,3 +18,8 @@ output/
 *.local.toml
 .env
 .env.*
+
+# Coverage reports.
+.coverage
+coverage.xml
+htmlcov/

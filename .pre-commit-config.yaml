@@ -1,0 +1,59 @@
+# Checks that run before every commit. Set them up once, from the
+# activated project venv:
+#
+#   pip install -r requirements-dev.txt -c constraints.txt
+#   pre-commit install
+#
+# Run them all by hand with: pre-commit run --all-files
+#
+# The Black and Ruff revs match the exact pins in pyproject.toml's dev
+# extra (and py-common's), so a commit that passes here passes CI. Bump
+# them together.
+
+repos:
+  - repo: https://github.com/psf/black
+    rev: 26.10.1
+    hooks:
+      - id: black
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff-check
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+      # The data files are compared byte for byte, so the fixers leave
+      # them alone.
+      - id: end-of-file-fixer
+        exclude: ^(tests/golden/|tests/data/|mappings/)
+      - id: trailing-whitespace
+        exclude: ^(tests/golden/|tests/data/|mappings/)
+
+  - repo: local
+    hooks:
+      # mypy runs from the project venv, as in CI, because it needs
+      # pandas, Streamlit and their stubs, and Streamlit fails to
+      # install in a hook environment's long Windows path.
+      - id: mypy
+        name: mypy (strict)
+        entry: mypy
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: no-real-data
+        name: no real data (output/, workbooks, stray CSVs)
+        entry: python scripts/check_no_real_data.py
+        language: python

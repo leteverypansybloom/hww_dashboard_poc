@@ -985,7 +985,10 @@ report without the test failing.
 **Tooling.** Black (layout, PEP 8 with 79-character lines), Ruff (PEP 8, import order, naming,
 Google-style docstrings, likely bugs) and `mypy --strict`, all configured in `pyproject.toml` and
 pinned to the same versions as py-common. `pandas-stubs` gives mypy pandas types. Plotly has no
-types and is excluded. GitHub Actions runs all four checks on Python 3.11 to 3.13.
+types and is excluded. GitHub Actions runs all four checks on Python 3.11 to 3.13 on Linux and on
+Windows, audits the dependencies, measures coverage and runs the tests against the oldest and newest
+versions allowed. Pre-commit hooks run the same checks, a secrets scan and a guard against
+committing real data before every commit (`CONTRIBUTING.md`).
 
 **Pinned versions.** `pyproject.toml` gives each library a range, and `constraints.txt` pins one
 tested version of everything those ranges resolve to, for every supported Python on Linux and
