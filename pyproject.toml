@@ -42,8 +42,14 @@ dashboard = [
 bigquery = [
     "google-cloud-bigquery>=3.13,<4",
 ]
+# Ingestion with py-common (python ingest.py; [landed] in config.toml).
+# Pinned to a commit of the shared library; its gcp extra brings the GCS
+# and BigQuery adapters.
+landing = [
+    "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@36b7e593f0061488b1ba38940614cab09867416f",
+]
 dev = [
-    "hww-dashboard[dashboard,bigquery]",
+    "hww-dashboard[dashboard,bigquery,landing]",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     # Exact pins, the same as py-common's and the hook revs in
@@ -93,7 +99,7 @@ known-first-party = ["hww_dashboard"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src", "tests", "scripts", "wrangle.py", "dashboard.py"]
+files = ["src", "tests", "scripts", "wrangle.py", "dashboard.py", "ingest.py"]
 mypy_path = "src"
 strict = true
 # google-api-core's exception classes have no type hints; the tests
@@ -101,8 +107,14 @@ strict = true
 untyped_calls_exclude = ["google.api_core.exceptions"]
 
 [[tool.mypy.overrides]]
-# plotly ships without type information.
-module = ["plotly", "plotly.*"]
+# py-common is fully typed (it runs mypy --strict) but ships no py.typed
+# marker, so mypy is told to follow it rather than treat it as untyped.
+module = ["py_common", "py_common.*"]
+follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
+# plotly and pyarrow ship without type information.
+module = ["plotly", "plotly.*", "pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

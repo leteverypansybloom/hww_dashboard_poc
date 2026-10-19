@@ -23,6 +23,31 @@ log_folder = "logs"
 #   location = "europe-west2"
 target = "folder"
 
+[landed]
+# Ingestion with py-common's typed route (python ingest.py): each
+# workbook is checked against its contract (src/hww_dashboard/landing.py)
+# and loaded into a typed table: hww_signups, hww_survey, hww_was,
+# hww_peer. Personal and unused columns are never loaded.
+#
+# read = true makes wrangle.py read the newest load of those tables
+# instead of the workbooks in input_folder. Run python ingest.py first.
+read = false
+# Where the files are dropped and the tables kept:
+#   "local" - folders below, relative to this file (laptops, tests).
+#             Drop each workbook in <landing_folder>/<source>/, where
+#             source is signups, survey, was or peer.
+#   "gcp"   - a landing bucket and a BigQuery dataset, e.g.:
+#               target = "gcp"
+#               project = "${HWW_GCP_PROJECT}"
+#               landing_bucket = "${HWW_LANDING_BUCKET}"
+#               landing_prefix = "hww"   # files in hww/<source>/
+#               store_bucket = "${HWW_STORE_BUCKET}"
+#               dataset = "${HWW_LANDED_DATASET}"
+target = "local"
+landing_folder = "landing"
+store_folder = "store"
+tables_folder = "landed"
+
 [signups]
 file = "dummy_HWW monitoring and reporting.xlsx"
 sheet = "Account signups"

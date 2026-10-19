@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Ingestion with py-common's typed route: `python ingest.py` checks each
+  workbook against its contract (`hww_dashboard.landing`) and loads it into
+  a typed table, locally or in BigQuery. With `[landed] read = true`,
+  `wrangle.py` reads the newest load of those tables instead of the
+  workbooks (`hww_dashboard.landed`). Output tables are identical either way.
+- `landing` extra: py-common, pinned to a commit.
+
+### Changed
+
+- The source loaders take an inputs object (`FolderInputs`, or
+  `landed.LandedInputs`) instead of the input folder.
+
 ### Removed
 
 - `wrangle.survey_percentages` and `output_schema.tables`, which only the
@@ -9,6 +23,18 @@
   `survey_question_results`.
 - The dashboard no longer loads `fact_signup` and `dim_date`, which no page
   used. wrangle still writes both.
+
+### Fixed
+
+- Reject unexpected signup columns while allowing mixed values only in
+  the explicitly named Number of sites column; require its heading.
+- Select the newest matching export before ingestion, and honour file
+  selection when reading existing committed load history.
+- Commit local Parquet rows and embedded audit history atomically, with
+  compatibility for existing separate audit.jsonl files.
+- Honour allow_empty per source and select audited empty snapshots in
+  both local and BigQuery readers instead of reviving older rows.
+- Clarify that excluded columns remain in archived original workbooks.
 
 ## [0.2.0] - 2026-10-18
 

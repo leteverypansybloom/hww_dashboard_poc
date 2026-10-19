@@ -478,12 +478,13 @@ class TestCheckConfig:
                 cfg: A config.
 
             Returns:
-                The config without [paths], [output] and file names.
+                The config without [paths], [output], [landed] and file
+                names.
             """
             kept = {
                 section: dict(values)
                 for section, values in cfg.items()
-                if section not in ("paths", "output")
+                if section not in ("paths", "output", "landed")
             }
             for values in kept.values():
                 for key in ("file", "file_pattern"):
@@ -814,7 +815,7 @@ class TestLoadWas:
         with pytest.raises(wrangle.InputError, match="was.xlsx.*duplicate"):
             wrangle.load_was(
                 cfg,
-                tmp_path,
+                wrangle.FolderInputs(tmp_path),
                 {n: {} for n in wrangle.LOOKUP_NAMES},
                 {},
                 wrangle.Report(),
@@ -837,7 +838,7 @@ class TestLoadPeer:
         with pytest.raises(wrangle.InputError, match="peer.xlsx.*duplicate"):
             wrangle.load_peer(
                 cfg,
-                tmp_path,
+                wrangle.FolderInputs(tmp_path),
                 {n: {} for n in wrangle.LOOKUP_NAMES},
                 {},
                 wrangle.Report(),
@@ -867,7 +868,7 @@ class TestLoadSurvey:
         ):
             wrangle.load_survey(
                 settings["survey"],
-                fixture_config.parent / "inputs",
+                wrangle.FolderInputs(fixture_config.parent / "inputs"),
                 maps,
                 lookups,
                 overrides,
@@ -887,7 +888,7 @@ class TestLoadSurvey:
         with pytest.raises(wrangle.InputError, match="personal columns"):
             wrangle.load_survey(
                 settings["survey"],
-                tmp_path,
+                wrangle.FolderInputs(tmp_path),
                 maps,
                 {},
                 {},
@@ -1095,7 +1096,7 @@ class TestLoadSignups:
         report = wrangle.Report()
         frame = wrangle.load_signups(
             cfg,
-            tmp_path,
+            wrangle.FolderInputs(tmp_path),
             {n: {} for n in wrangle.LOOKUP_NAMES},
             {},
             report,
@@ -1137,7 +1138,7 @@ class TestLoadSignups:
         with pytest.raises(wrangle.InputError, match="signups.xlsx.*month"):
             wrangle.load_signups(
                 cfg,
-                tmp_path,
+                wrangle.FolderInputs(tmp_path),
                 {n: {} for n in wrangle.LOOKUP_NAMES},
                 {},
                 wrangle.Report(),

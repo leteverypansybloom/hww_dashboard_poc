@@ -14,6 +14,13 @@ output/
 # restoring a previous output folder fails).
 .hww-*/
 
+# py-common ingestion (python ingest.py, [landed] in config.toml): the
+# dropped workbooks, kept copies and typed tables hold the source data,
+# personal details included, so they are never committed.
+landing/
+store/
+landed/
+
 # Run logs: they can hold the details of an unexpected error.
 logs/
 *.log

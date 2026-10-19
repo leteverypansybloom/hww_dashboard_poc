@@ -23,7 +23,16 @@ well:
 
 Each sheet is read whole into memory, then only the columns named in
 `config.toml` and `mappings/survey_columns.csv` are used. Personal
-columns are read into memory but never used or written.
+columns are read into memory but are not used or written to the
+dashboard's output tables.
+
+With `[landed] read = true`, the separate py-common ingestion job checks
+each workbook and loads only the contract's allowed columns into typed
+tables. Unknown signup columns are also rejected; the mixed-value
+Number of sites exception applies only to that named column. However,
+ingestion archives the complete original workbook in its object store,
+including excluded columns. Rejected files are retained in raw and
+quarantine storage. Exclusions do not redact those archived originals.
 
 Two checks run before any workbook is opened:
 
@@ -75,6 +84,12 @@ audit records.
 - **Laptops**: the input workbooks (outside the repository), `output/`
   and `logs/`. git ignores both folders, and a pre-commit hook refuses
   workbooks, stray CSV files and anything under `output/`.
+- **Optional typed ingestion**: `landing/` contains source workbooks,
+  `store/` retains originals, rejected copies and processed files, and
+  `landed/` retains typed load history. In GCP the configured buckets
+  and landed BigQuery dataset serve those roles. Original workbooks
+  retain excluded personal columns. Restrict access accordingly; git
+  ignores the local folders but does not enforce storage access.
 - **The repository** holds only synthetic data: the test workbooks use
   reserved values (`example.org`, `192.0.2.x`), and a test fails if a
   real-looking email address, IP address or link appears in them.
@@ -97,6 +112,11 @@ Each run replaces the output tables and the report. The previous set is
 deleted once the new one is in place, unless restoring it failed (it is
 then kept in a `.hww-*` folder next to the output, for recovery). Run
 logs: the newest 20.
+
+Typed ingestion retains original workbooks and previous typed uploads;
+replacing dashboard outputs does not remove them. The data owner must
+set retention and deletion rules for landing, raw, quarantine, processed
+and typed-history storage separately.
 
 ## Decisions for the DPIA
 

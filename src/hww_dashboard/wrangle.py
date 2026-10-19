@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import pandas as pd
 from openpyxl.utils import get_column_letter
@@ -66,6 +66,7 @@ SOURCES = ("signups", "survey", "was", "peer")
 COMPLETED_RULES = ("summary_1_sent", "session_1_held", "last_session_held")
 #: Where the tables go: CSV files in a folder, or BigQuery tables.
 OUTPUT_TARGETS = ("folder", "bigquery")
+LANDED_TARGETS = ("local", "gcp")
 #: ``${NAME}`` in config text, replaced by an environment variable.
 CONFIG_VARIABLE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 DATE_IN_NAME = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -812,6 +813,7 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
     location = output.get("location", "unset")
     if not isinstance(location, str) or not location.strip():
         raise InputError(f"{name}: [output] location must be nonblank text.")
+    check_landed(cfg.get("landed", {}), name)
     for source in SOURCES:
         if type(cfg[source].get("allow_empty", False)) is not bool:
             raise InputError(
@@ -896,6 +898,44 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
             f"{name}: [employers] source_priority must list each of "
             f"{list(SOURCES)} once, got {priority}."
         )
+
+
+def check_landed(landed: Any, name: str) -> None:
+    """Check the optional [landed] section (py-common ingestion).
+
+    Args:
+        landed: The section, or {} when it is left out.
+        name: Config file name, for messages.
+
+    Raises:
+        InputError: A setting has the wrong type, or the GCP target
+            lacks a bucket, project or dataset.
+    """
+    if not isinstance(landed, dict):
+        raise InputError(f"{name}: [landed] must be a table.")
+    if type(landed.get("read", False)) is not bool:
+        raise InputError(f"{name}: [landed] read must be true or false.")
+    target = landed.get("target", "local")
+    if target not in LANDED_TARGETS:
+        raise InputError(
+            f"{name}: [landed] target must be one of "
+            f"{list(LANDED_TARGETS)}, got {target!r}."
+        )
+    # Folders have defaults; the GCP names must be given.
+    texts = {"landing_folder": "x", "store_folder": "x", "tables_folder": "x"}
+    if target == "gcp":
+        texts.update(
+            project="", landing_bucket="", store_bucket="", dataset=""
+        )
+    for key, default in texts.items():
+        value = landed.get(key, default)
+        if not isinstance(value, str) or not value.strip():
+            raise InputError(
+                f"{name}: [landed] {key} must be nonblank text"
+                + (" for the GCP target." if target == "gcp" else ".")
+            )
+    if not isinstance(landed.get("landing_prefix", ""), str):
+        raise InputError(f"{name}: [landed] landing_prefix must be text.")
 
 
 def date_in_name(path: Path) -> date | None:
@@ -1113,32 +1153,122 @@ def read_sheet(
     return table
 
 
+@dataclass
+class SheetInput:
+    """One source's sheet, read for a loader.
+
+    Attributes:
+        frame: The sheet, as ``read_sheet`` returns it: headings as in
+            config.toml, cells with their Excel types, an excel_row
+            column.
+        name: The workbook's file name, for messages.
+        facts: What the run record keeps about where the rows came from
+            (``file`` and ``sha256`` at least).
+    """
+
+    frame: pd.DataFrame
+    name: str
+    facts: dict[str, Any]
+
+
+class Inputs(Protocol):
+    """Where the loaders get their sheets from.
+
+    ``FolderInputs`` reads the workbooks in the input folder.
+    ``hww_dashboard.landed.LandedInputs`` reads the newest load of each
+    source's typed table, as py-common's ingestion job loaded it.
+    """
+
+    def read(
+        self,
+        section: str,
+        cfg: Config,
+        source: str,
+        required: Sequence[str],
+    ) -> SheetInput:
+        """Read one source's sheet.
+
+        Args:
+            section: The source's config section, e.g. ``"was"``.
+            cfg: That section of config.toml.
+            source: Name of the source for messages, e.g.
+                ``"WAS database"``.
+            required: Column headings that must be present.
+
+        Returns:
+            The sheet.
+
+        Raises:
+            InputError: The sheet or a required column can't be read.
+        """
+        ...
+
+
+@dataclass
+class FolderInputs:
+    """Read each source's workbook from the input folder.
+
+    Attributes:
+        folder: The input folder.
+    """
+
+    folder: Path
+
+    def read(
+        self,
+        section: str,
+        cfg: Config,
+        source: str,
+        required: Sequence[str],
+    ) -> SheetInput:
+        """Find the source's workbook and read its sheet.
+
+        Args:
+            section: The source's config section (unused here).
+            cfg: That section of config.toml.
+            source: Name of the source, for messages.
+            required: Column headings that must be present.
+
+        Returns:
+            The sheet, with the file's name, size, time and SHA-256.
+        """
+        path = input_file(self.folder, cfg, source)
+        df = read_sheet(
+            path, cfg["sheet"], cfg["header_row"], source, required
+        )
+        return SheetInput(df, path.name, file_facts(path))
+
+
 def note_input(
-    report: Report, source: str, path: Path, df: pd.DataFrame, detail: str
+    report: Report, source: str, sheet: SheetInput, detail: str
 ) -> None:
-    """Record an input file in the report and for the run record.
+    """Record an input in the report and for the run record.
 
     Args:
         report: Data quality report.
         source: Name of the source, e.g. ``"WAS database"``.
-        path: The file read.
-        df: The sheet as returned by ``read_sheet``.
+        sheet: The sheet read.
         detail: Words that follow the row count in the report line,
             e.g. ``" (sheet 'Account signups')"``.
     """
-    facts = file_facts(path)
-    sheet = str(df.attrs.get("sheet_name", ""))
-    report.inputs.append({"source": source, "sheet": sheet, "rows": len(df)})
+    df = sheet.frame
+    facts = sheet.facts
+    name = str(df.attrs.get("sheet_name", ""))
+    report.inputs.append({"source": source, "sheet": name, "rows": len(df)})
     report.inputs[-1].update(facts)
     report.add(
         "Inputs",
-        f"- {source}: {len(df)} rows read{detail} from {path.name} "
+        f"- {source}: {len(df)} rows read{detail} from {sheet.name} "
         f"(SHA-256 {facts['sha256'][:12]}).",
     )
 
 
 def require_rows(
-    df: pd.DataFrame, cfg: Config, source: str, section: str, path: Path
+    df: pd.DataFrame,
+    cfg: Config,
+    source: str,
+    section: str,
+    path: Path | str,
 ) -> None:
     """Stop when a source has no usable rows, unless that is allowed.
 
@@ -1152,14 +1282,14 @@ def require_rows(
             an empty source through.
         source: Name of the source, for the message.
         section: The config section's name, for the message.
-        path: The file read.
+        path: The file read, or its name.
 
     Raises:
         InputError: The source has no rows and allow_empty isn't true.
     """
     if df.empty and cfg.get("allow_empty", False) is not True:
         raise InputError(
-            f"{source}: {path.name} has no data rows. An empty upload "
+            f"{source}: {Path(path).name} has no data rows. An empty upload "
             "usually means the export went wrong, so check the file. If "
             f"no rows is right, set allow_empty = true in [{section}]."
         )
@@ -1651,7 +1781,7 @@ def parse_flag(
 
 def load_signups(
     cfg: Config,
-    folder: Path,
+    inputs: Inputs,
     lookups: Mapping[str, Lookup],
     overrides: Lookup,
     report: Report,
@@ -1661,7 +1791,8 @@ def load_signups(
 
     Args:
         cfg: The [signups] section of config.toml.
-        folder: The input folder.
+        inputs: Where the sheets come from: the workbooks, or the
+            typed tables py-common loaded.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
@@ -1684,17 +1815,12 @@ def load_signups(
         "completed_survey",
         "requested_was",
     ]
-    path = input_file(folder, cfg, "Account signups")
-    df = read_sheet(
-        path,
-        cfg["sheet"],
-        cfg["header_row"],
-        "Account signups",
-        [cfg[k] for k in keys],
+    sheet = inputs.read(
+        "signups", cfg, "Account signups", [cfg[k] for k in keys]
     )
-    note_input(
-        report, "Account signups", path, df, f" (sheet '{cfg['sheet']}')"
-    )
+    df = sheet.frame
+    path = sheet.name
+    note_input(report, "Account signups", sheet, f" (sheet '{cfg['sheet']}')")
 
     # The month is a merged cell, so only the first row of each month has
     # it.
@@ -1704,7 +1830,7 @@ def load_signups(
     if invalid_months.any():
         rows = df.loc[invalid_months, "excel_row"].tolist()
         raise InputError(
-            f"{path.name}: invalid sign-up month in Excel row(s) {rows}. "
+            f"{path}: invalid sign-up month in Excel row(s) {rows}. "
             "Use a valid date, or leave merged continuation cells blank."
         )
     df["month"] = months.ffill()
@@ -1898,7 +2024,7 @@ def unpivot_survey(
 
 def load_survey(
     cfg: Config,
-    folder: Path,
+    inputs: Inputs,
     maps: Path,
     lookups: Mapping[str, Lookup],
     overrides: Lookup,
@@ -1912,7 +2038,8 @@ def load_survey(
 
     Args:
         cfg: The [survey] section of config.toml.
-        folder: The input folder.
+        inputs: Where the sheets come from: the workbooks, or the
+            typed tables py-common loaded.
         maps: The mappings folder.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
@@ -1973,22 +2100,25 @@ def load_survey(
         return str(found.iloc[0])
 
     role_columns = {role: column_for(role) for role in SURVEY_ROLES}
-    path = input_file(folder, cfg, "Survey export")
-    df = read_sheet(
-        path,
-        cfg["sheet"],
-        cfg["header_row"],
-        "Survey export",
-        list(role_columns.values()),
+    sheet = inputs.read(
+        "survey", cfg, "Survey export", list(role_columns.values())
     )
+    df = sheet.frame
+    path = sheet.name
     note_input(
-        report, "Survey export", path, df, f", {len(df.columns) - 1} columns,"
+        report, "Survey export", sheet, f", {len(df.columns) - 1} columns,"
     )
 
     known = set(columns_map["column"])
     in_file = [c for c in df.columns if c != "excel_row"]
     unexpected = [c for c in in_file if c not in known]
-    missing = [c for c in columns_map["column"] if c not in in_file]
+    # Columns an ingestion contract left out on purpose aren't missing.
+    left_out = set(df.attrs.get("excluded", ()))
+    missing = [
+        c
+        for c in columns_map["column"]
+        if c not in in_file and c not in left_out
+    ]
     report.add(
         "Survey checks",
         f"- {len(in_file)} columns in the export, {len(known)} in "
@@ -2105,7 +2235,7 @@ def load_survey(
 
 def load_was(
     cfg: Config,
-    folder: Path,
+    inputs: Inputs,
     lookups: Mapping[str, Lookup],
     overrides: Lookup,
     report: Report,
@@ -2116,7 +2246,8 @@ def load_was(
 
     Args:
         cfg: The [was] section of config.toml.
-        folder: The input folder.
+        inputs: Where the sheets come from: the workbooks, or the
+            typed tables py-common loaded.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
@@ -2145,15 +2276,15 @@ def load_was(
         for k in ("date", "duration", "summary_sent", "topics")
         if k in s
     ]
-    path = input_file(folder, cfg, "WAS database")
-    df = read_sheet(
-        path,
-        cfg["sheet"],
-        cfg["header_row"],
+    sheet = inputs.read(
+        "was",
+        cfg,
         "WAS database",
         [cfg[k] for k in keys] + session_columns,
     )
-    note_input(report, "WAS database", path, df, "")
+    df = sheet.frame
+    path = sheet.name
+    note_input(report, "WAS database", sheet, "")
 
     df = drop_blank_rows(df)
     df["org"] = df[cfg["org"]].map(lambda v: org_name(v, overrides))
@@ -2338,27 +2469,29 @@ def check_was_sessions(
             )
 
 
-def require_unique_ids(df: pd.DataFrame, column: str, path: Path) -> None:
+def require_unique_ids(
+    df: pd.DataFrame, column: str, path: Path | str
+) -> None:
     """Reject source keys that would duplicate downstream identifiers.
 
     Args:
         df: Cleaned source records, including generated fallback IDs.
         column: Identifier column to validate.
-        path: Source workbook for the error message.
+        path: Source workbook, or its name, for the error message.
 
     Raises:
         InputError: Two records have the same identifier.
     """
     if df[column].duplicated().any():
         raise InputError(
-            f"{path.name}: duplicate {column}. "
+            f"{Path(path).name}: duplicate {column}. "
             "Give each retained source row a unique participant ID."
         )
 
 
 def load_peer(
     cfg: Config,
-    folder: Path,
+    inputs: Inputs,
     lookups: Mapping[str, Lookup],
     overrides: Lookup,
     report: Report,
@@ -2367,7 +2500,8 @@ def load_peer(
 
     Args:
         cfg: The [peer] section of config.toml.
-        folder: The input folder.
+        inputs: Where the sheets come from: the workbooks, or the
+            typed tables py-common loaded.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
@@ -2378,15 +2512,10 @@ def load_peer(
         collect it).
     """
     keys = ("id", "org", "interest_date", "size", "sector", "industry")
-    path = input_file(folder, cfg, "Peer mentoring")
-    df = read_sheet(
-        path,
-        cfg["sheet"],
-        cfg["header_row"],
-        "Peer mentoring",
-        [cfg[k] for k in keys],
-    )
-    note_input(report, "Peer mentoring", path, df, "")
+    sheet = inputs.read("peer", cfg, "Peer mentoring", [cfg[k] for k in keys])
+    df = sheet.frame
+    path = sheet.name
+    note_input(report, "Peer mentoring", sheet, "")
 
     df = drop_blank_rows(df)
     df["org"] = df[cfg["org"]].map(lambda v: org_name(v, overrides))
@@ -3435,14 +3564,18 @@ def run(
     config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
     base = config_path.parent
-    inputs = (base / cfg["paths"]["input_folder"]).resolve()
+    input_folder = (base / cfg["paths"]["input_folder"]).resolve()
     maps = (base / cfg["paths"]["mappings_folder"]).resolve()
+    read_landed = cfg.get("landed", {}).get("read", False) is True
     out = (
         Path(output_folder)
         if output_folder
         else (base / cfg["paths"]["output_folder"]).resolve()
     )
-    for label, folder in (("input_folder", inputs), ("mappings_folder", maps)):
+    folders = [("mappings_folder", maps)]
+    if not read_landed:
+        folders.insert(0, ("input_folder", input_folder))
+    for label, folder in folders:
         if not folder.is_dir():
             raise InputError(
                 f"{config_path.name}: {label} {folder} does not exist."
@@ -3464,6 +3597,14 @@ def run(
     bq_target = connect_bigquery(output) if target == "bigquery" else None
     report = Report()
     lookups, overrides = load_mappings(maps)
+    inputs: Inputs
+    if read_landed:
+        # Only this route needs py-common, so it's imported only here.
+        from hww_dashboard.landed import landed_inputs
+
+        inputs = landed_inputs(cfg, base, maps)
+    else:
+        inputs = FolderInputs(input_folder)
     record = start_record(
         run_id, run_at, config_path, sorted(maps.glob("*.csv"))
     )
