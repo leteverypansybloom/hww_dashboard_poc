@@ -24,10 +24,10 @@ Before any rule, a cell becomes text by `clean_text`:
 - Excel's escaped carriage return `_x000D_` becomes a space;
 - every run of whitespace becomes one space, and the ends are trimmed.
   Whitespace is what Python's `str.isspace()` counts: tab, line feed,
-  vertical tab, form feed, carriage return, `\x1c` to `\x1f`, space,
-  `\x85`, non-breaking space and the other Unicode spaces (` `,
-  ` ` to ` `, ` `, ` `, ` `, ` `,
-  `　`).
+  vertical tab, form feed, carriage return, U+001C to U+001F, space,
+  U+0085, the no-break space U+00A0 and the other Unicode spaces
+  (U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F and
+  U+3000).
 
 In SQL, with `v` the payload value as text:
 
