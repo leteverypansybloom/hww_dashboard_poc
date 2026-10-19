@@ -97,6 +97,7 @@ says the same rules in a few lines, for readers of the report.
 | R63 | `attribute_conflicts` lists each attribute's known values, sorted, where the rows disagree. | `build_dim_employer` | scenario | |
 | R64 | `employer_id` is E and the first 8 hex digits of the MD5 of the name's key. Two keys with one id stop the run. | `employer_id_for` | TestEmployerIdFor, test_identifiers.py | |
 | R65 | Every row gets its organisation's `employer_id`; a row with no organisation gets none. | `attach_employer_ids` | TestAttachEmployerIds; scenario (103) | |
+| R66 | Employers whose names differ only by punctuation, spaces, `&` for "and", a leading "The" or a legal-form word at the end (Ltd, Limited, plc, LLP, CIC, Cyf, Cyfyngedig, CCC) are listed under Duplicates in the report as possibly one organisation. They are never merged automatically; an override merges them. Report only: no table changes, and not counted under Needs attention, because two organisations that really are different would be listed on every run. | `loose_key`, `possible_duplicates`, `report_duplicates` | TestLooseKey, TestPossibleDuplicates, TestReportDuplicates | not needed |
 
 ## Engagement and calendar
 

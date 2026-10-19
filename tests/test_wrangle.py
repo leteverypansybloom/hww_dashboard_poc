@@ -848,6 +848,63 @@ class TestEmployerIdFor:
         )
 
 
+class TestLooseKey:
+    """``loose_key``: names that differ only in form share a key."""
+
+    @pytest.mark.parametrize(
+        ("name", "key"),
+        [
+            ("The Acme Co-op Ltd", "acmecoop"),
+            ("Acme Coop Limited", "acmecoop"),
+            ("Smith & Sons", "smithandsons"),
+            ("Smith and Sons Cyf.", "smithandsons"),
+            ("Cwmni Da Cyfyngedig", "cwmnida"),
+            ("Bay Leaf PLC", "bayleaf"),
+            ("Org-11", "org11"),
+            ("Org 11", "org11"),
+            ("Limited", "limited"),
+            ("...", ""),
+        ],
+    )
+    def test_key(self, name: str, key: str) -> None:
+        """Punctuation, spaces, "the" and legal-form words don't count.
+
+        A name that is only a legal-form word keeps it, and a name with
+        no letters or digits has no key.
+
+        Args:
+            name: A cleaned organisation name.
+            key: The loose key it must get.
+        """
+        assert wrangle.loose_key(name) == key
+
+
+class TestPossibleDuplicates:
+    """``possible_duplicates``: list names to check, merging nothing."""
+
+    def test_groups_names_that_differ_only_in_form(self) -> None:
+        """Each group is sorted, and groups come in order of first name."""
+        names = [
+            "Zeta Care",
+            "Acme Ltd",
+            "Org 1",
+            "ACME Limited",
+            "Zeta Care CIC",
+            "The Acme",
+            "Org 11",
+        ]
+        assert wrangle.possible_duplicates(names) == [
+            ["ACME Limited", "Acme Ltd", "The Acme"],
+            ["Zeta Care", "Zeta Care CIC"],
+        ]
+
+    def test_distinct_names_and_blank_keys_are_left_alone(self) -> None:
+        """Different numbers stay apart; names with no key are skipped."""
+        assert (
+            wrangle.possible_duplicates(["Org 1", "Org 11", "...", "-"]) == []
+        )
+
+
 class TestIso:
     """Format optional dates without textual missing values."""
 
@@ -1102,6 +1159,35 @@ class TestReportDuplicates:
         assert "Org A: 2 rows" in notes
         assert "1 found in more than one source" in notes
         assert "['Org B']" in notes
+        assert "Possibly one organisation" not in notes
+
+    def test_lists_possible_duplicates(self) -> None:
+        """Names that differ only in form are listed, not merged.
+
+        They aren't counted under Needs attention: two organisations
+        that really are different would be counted on every run.
+        """
+        dim = pd.DataFrame(
+            {
+                "employer_name": ["Acme Ltd", "Org B", "ACME Limited"],
+                "in_signups": [True, True, True],
+                "in_survey": [False, False, False],
+                "in_was": [False, False, False],
+                "in_peer": [False, False, False],
+            }
+        )
+        report = wrangle.Report()
+        wrangle.report_duplicates(
+            pd.DataFrame({"org": ["Acme Ltd", "Org B", "ACME Limited"]}),
+            dim,
+            report,
+        )
+        assert (
+            "- Possibly one organisation, not merged: "
+            "['ACME Limited', 'Acme Ltd']. If they are, add an override to "
+            "mappings/org_overrides.csv." in report.sections["Duplicates"]
+        )
+        assert report.to_act_on() == {}
 
 
 class TestBuildSurveyTables:

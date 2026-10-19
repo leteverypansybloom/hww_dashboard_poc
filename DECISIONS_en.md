@@ -37,6 +37,31 @@ which field to look in, and the report's own sections name the source.
 alarm above. Benefit: the person fixing the source knows where to look,
 without the value reaching a log.
 
+### Likely duplicate employers are listed, not merged
+
+Exact matching never merges two organisations by mistake, but with real
+data it leaves `Acme Ltd` and `Acme Limited` as two employers without a
+word, and nothing prompts anyone to add the override. The report's
+Duplicates section now lists employers whose names share a looser key
+(`loose_key`): `name_key` without punctuation or spaces, with `&` read
+as "and", and without a leading "The" or a legal-form word at the end
+(Ltd, Limited, plc, LLP, CIC and the Welsh Cyf, Cyfyngedig and CCC).
+Nothing is merged; an override does that once a person agrees.
+
+They aren't counted under Needs attention. Two organisations that
+really are different (a charity and a company of the same name) would
+be listed on every run, so Needs attention could never say `None.`.
+
+Not chosen: fuzzy matching by edit distance, or Splink. `Org 1` and
+`Org 11` are one character apart but different employers; a key with
+fixed rules finds no false pairs in the synthetic data and is easy to
+explain. Splink belongs to Dataform's employer model (py-common's
+`INGESTION_FRAMEWORK_GUIDE.md`, section 8).
+
+**Trade-off**: a pair of different organisations stays listed for
+good. Benefit: likely duplicates show up on the first real run, and
+nothing merges without a person's say.
+
 ## 2026-10-18 — Production readiness
 
 The production-readiness review prepared the prototype for two jobs:

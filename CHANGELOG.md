@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- The data quality report's Duplicates section lists employers that are
+  possibly one organisation: names that differ only by punctuation, `&`
+  or a legal-form word such as Ltd or Cyf. Nothing is merged; an override
+  in `mappings/org_overrides.csv` does that.
+
 ### Changed
 
 - A run stopped by contact details names the table and column, with how

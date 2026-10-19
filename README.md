@@ -162,7 +162,10 @@ To show the HWW logo instead of the text name, save it as `assets/logo.png` in t
    - new or missing survey columns – the form changed; update `mappings/survey_columns.csv`;
    - answers not in `survey_answers.csv` – add the option, or a Welsh translation to
      `survey_answer_translations.csv`.
-3. Run again until Needs attention says `None.`, then `python -m pytest`.
+3. Look under **Duplicates** for employers listed as possibly one organisation (names that
+   differ only by punctuation, `&` or a word like Ltd). For each pair that is one organisation,
+   add an override to `mappings/org_overrides.csv`.
+4. Run again until Needs attention says `None.`, then `python -m pytest`.
 
 [docs/runbook.md](docs/runbook.md) covers exit codes, recovery and support.
 

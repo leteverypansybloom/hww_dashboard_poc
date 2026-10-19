@@ -633,11 +633,23 @@ Each `load_*` function follows the same pattern:
   6. Checks the ids are unique.
   7. Writes the conflicts table to the report.
 - **Gotcha:** names only merge if they match after cleaning and ignoring case. `Org 11` and `Org-11`
-  are two employers until someone adds an override.
+  are two employers until someone adds an override; the report lists them as possibly one
+  organisation (`report_duplicates`, below).
 
 #### `report_duplicates(signups, dim_employer, report)`
 - **What:** reports how many sign-up rows each repeated organisation has, how many employers are in
-  more than one source, and which employers appear only outside Account signups.
+  more than one source, and which employers appear only outside Account signups. It also lists
+  employers that are possibly one organisation (`possible_duplicates`). They aren't counted
+  under Needs attention, since two organisations that really are different would be listed on
+  every run.
+- **Why:** exact matching never merges two organisations by mistake, but it leaves `Acme Ltd` and
+  `Acme Limited` as two employers without a word. `loose_key` ignores punctuation, spaces, `&`
+  against "and", a leading "The" and a legal-form word at the end (Ltd, Limited, plc, LLP, CIC and
+  the Welsh Cyf, Cyfyngedig and CCC), so the report can point a person at the likely pairs. Only
+  an override in `mappings/org_overrides.csv` merges them.
+- **Gotcha:** a suggestion can be wrong (a charity called "Hope" and a company called "Hope
+  Ltd"). Add an override only after checking; a pair left as it is is listed again on the next
+  run.
 
 #### `attach_employer_ids(frames, dim_employer)`
 - **What:** adds `employer_id` to each source table by matching the case-folded `org` against
@@ -1072,9 +1084,10 @@ Put the file in the input folder. The newest by date in the name is used, and th
 To pin a specific export, replace `file_pattern` with `file = "exact name.xlsx"` in `[survey]`.
 
 #### Q: The same organisation shows up as two employers.
-Their names differ by more than case or spacing. Add a line to `mappings/org_overrides.csv`
-(`raw_name,canonical_name`). Every source then uses the canonical name, and the merged spellings
-appear under **Duplicates** in the report.
+Their names differ by more than case or spacing. If they differ only by punctuation, `&` or a word
+like Ltd, the report already lists them under **Duplicates** as possibly one organisation. Add a
+line to `mappings/org_overrides.csv` (`raw_name,canonical_name`). Every source then uses the
+canonical name, and the merged spellings appear under **Duplicates** in the report.
 
 #### Q: Why did an employer's id change?
 Its name changed (or an override was added). The id is a hash of the name. To keep the old id, add

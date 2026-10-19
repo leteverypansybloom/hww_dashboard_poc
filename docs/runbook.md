@@ -51,6 +51,12 @@ mapping change. Empty sources stop the run unless that source explicitly sets
 0.1) requires investigation, even when the run succeeds. Never suppress a
 warning just to make a report look clean.
 
+The report's Duplicates section lists employers that are possibly one
+organisation (names that differ only by punctuation, `&` or a word like
+Ltd). They are not counted under Needs attention. Check each pair, and add
+an override to `mappings/org_overrides.csv` only for those that are one
+organisation; the others stay listed.
+
 ## Recovery
 
 Correct the source and rerun the complete pipeline. BigQuery stages the new

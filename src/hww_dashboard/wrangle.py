@@ -1552,6 +1552,38 @@ def name_key(name: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", folded).split())
 
 
+#: Words at the end of a name that only say what kind of company it is,
+#: in English and in Welsh (Cyf and Cyfyngedig are Limited; CCC is plc).
+LEGAL_SUFFIXES = frozenset(
+    {"ltd", "limited", "plc", "llp", "cic", "cyf", "cyfyngedig", "ccc"}
+)
+
+
+def loose_key(name: str) -> str:
+    """Give a looser form of a name, to spot likely duplicate employers.
+
+    It starts from ``name_key``, writes ``&`` as "and", drops
+    punctuation, a leading "the" and the legal-form words in
+    ``LEGAL_SUFFIXES`` at the end, then removes the spaces. So "The Acme
+    Co-op Ltd" and "Acme Coop Limited" share the key ``acmecoop``. It
+    only suggests duplicates for a person to check; employers are never
+    merged by it.
+
+    Args:
+        name: An organisation name, already cleaned by ``clean_text``.
+
+    Returns:
+        The loose key, or '' for a name with no letters or digits.
+    """
+    text = name_key(name).replace("&", " and ")
+    words = re.sub(r"[^\w\s]", " ", text).split()
+    if words[:1] == ["the"] and len(words) > 1:
+        words = words[1:]
+    while len(words) > 1 and words[-1] in LEGAL_SUFFIXES:
+        words.pop()
+    return "".join(words)
+
+
 def employer_id_for(name: str) -> str:
     """Make a stable id from an organisation name: E and 8 hex digits.
 
@@ -2580,10 +2612,35 @@ def build_dim_employer(
     return dim
 
 
+def possible_duplicates(names: Iterable[str]) -> list[list[str]]:
+    """Group employer names that may belong to one organisation.
+
+    Names whose ``loose_key`` matches are listed together for a person
+    to check. They are not merged: an override in
+    ``mappings/org_overrides.csv`` does that, if they are one.
+
+    Args:
+        names: Employer names, one per employer (``dim_employer``).
+
+    Returns:
+        Each group of two or more names, sorted, with the groups in
+        order of their first name.
+    """
+    groups: dict[str, set[str]] = {}
+    for name in names:
+        key = loose_key(name)
+        if key:
+            groups.setdefault(key, set()).add(name)
+    return sorted(sorted(group) for group in groups.values() if len(group) > 1)
+
+
 def report_duplicates(
     signups: pd.DataFrame, dim_employer: pd.DataFrame, report: Report
 ) -> None:
     """Summarise repeated sign-up organisations and overlap between sources.
+
+    Also lists employers that may be one organisation under different
+    spellings (``possible_duplicates``), for a person to check.
 
     Args:
         signups: From ``load_signups``.
@@ -2622,6 +2679,14 @@ def report_duplicates(
             "Duplicates",
             "- Employers not on Account signups (added from other files): "
             f"{not_in_signups}",
+        )
+    # Listed, not counted under Needs attention: two organisations that
+    # really are different would otherwise need attention on every run.
+    for group in possible_duplicates(dim_employer["employer_name"]):
+        report.add(
+            "Duplicates",
+            f"- Possibly one organisation, not merged: {group}. If they "
+            "are, add an override to mappings/org_overrides.csv.",
         )
 
 

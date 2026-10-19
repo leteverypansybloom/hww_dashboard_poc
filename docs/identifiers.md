@@ -73,6 +73,13 @@ same key, and two rows whose raw names share a key must point at the
 same canonical name. Rows from every source are grouped by key, so two
 spellings are one employer when their keys match.
 
+Names whose keys still differ only by punctuation, spaces, `&` for
+"and", a leading "The" or a legal-form word at the end (`loose_key`,
+rule R66 in [rules.md](rules.md)) stay separate employers with their
+own ids. The report lists them as possibly one organisation; only an
+override merges them. Dataform doesn't need this looser key, because it
+changes no id or table.
+
 **Stability.** The id stays the same as long as the organisation's
 name does. A renamed organisation gets a new id; an override from the
 new name to the old one keeps the old id. The id is a hash of a name
