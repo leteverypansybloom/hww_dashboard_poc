@@ -66,9 +66,6 @@ validate methodology, review changes and assess outputs against intended use.
 - Coordinate the survey source of truth/fixed landing name, raw heading
   translation and privacy exclusions with the solution repository. Dataform
   must validate identifier cases, scenarios and golden results in BigQuery.
-- py-common docs still contain the original dummy survey with an IP address
-  and report links in pushed history. Refer it to its owner/DPO for replacement
-  and any history remediation; this implementation does not edit that repo.
 - Keep organisation overrides private or move them outside the published repo
   when real organisation names are introduced. Set CODEOWNERS once the
   human reviewers are named.

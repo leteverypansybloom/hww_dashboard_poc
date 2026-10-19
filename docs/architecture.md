@@ -184,10 +184,8 @@ py-common:
   here is excluded there.
 - **Shared synthetic fixtures.** `tests/data/inputs/` holds copies of
   the dummy workbooks in which every personal value is a reserved
-  example (`example.org`, `192.0.2.10`). py-common's `docs/` folder
-  still holds the original dummy survey export, which includes an IP
-  address and report links from a survey submission; the synthetic
-  copies could replace it.
+  example (`example.org`, `192.0.2.10`), which py-common's tests could
+  share.
 - **Golden outputs as acceptance tests.** `tests/golden/` is a
   ready-made expected result for the Dataform layer (step 3 above).
 - **A public naming function.** If py-common exposed the heading names
