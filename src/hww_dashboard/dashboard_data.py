@@ -18,17 +18,18 @@ UNKNOWN = "Unknown"
 Tables = dict[str, pd.DataFrame]  # table name -> table, from load_tables
 Filters = Mapping[str, Collection[str]]  # column -> values to keep
 
-# Tables the dashboard reads, and which of their columns are dates.
+# Tables the dashboard reads, and which of their columns are dates. The
+# other tables wrangle writes (fact_signup, dim_date, the WAS session
+# tables and survey_other_text) are for BigQuery and analysts; no page
+# uses them yet.
 DATE_COLUMNS: dict[str, list[str]] = {
     "dim_employer": [],
-    "fact_signup": ["signup_month"],
     "fact_engagement": ["date"],
     "dim_survey_response": ["date"],
     "fact_survey_answer": ["date"],
     "question_catalogue": [],
     "fact_event": ["event_date", "action_date"],
     "badges": ["awarded_date"],
-    "dim_date": ["date", "month_start"],
 }
 
 # Page 3 metric picker: label on screen -> event_type in fact_engagement,

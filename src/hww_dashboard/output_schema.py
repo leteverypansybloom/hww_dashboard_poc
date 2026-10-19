@@ -146,15 +146,6 @@ def schema(table: str, folder: Path = SCHEMA_FOLDER) -> tuple[Field, ...]:
     return fields
 
 
-def tables() -> list[str]:
-    """List the tables that have a schema.
-
-    Returns:
-        Table names, sorted.
-    """
-    return sorted(path.stem for path in SCHEMA_FOLDER.glob("*.json"))
-
-
 def parse_csv(text: str) -> pd.DataFrame:
     """Read CSV text back as text cells, exactly as written.
 

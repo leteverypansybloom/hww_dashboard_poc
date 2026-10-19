@@ -3039,38 +3039,6 @@ def calendar_dates(
     ]
 
 
-def survey_percentages(
-    answers: pd.DataFrame, question_id: str
-) -> pd.DataFrame:
-    """Work out Figure 13 style numbers for one question.
-
-    ticks       = respondents who chose the answer
-    respondents = respondents who gave any answer to the question
-    percent     = ticks / respondents * 100
-
-    Args:
-        answers: Long answers (response_id, question_id, answer).
-        question_id: E.g. ``"Q04"``.
-
-    Returns:
-        One row per answer chosen at least once: answer, ticks,
-        respondents, percent; most ticked first.
-    """
-    rows = answers[answers["question_id"] == question_id]
-    respondents = rows["response_id"].nunique()
-    result = (
-        rows.groupby("answer")["response_id"]
-        .nunique()
-        .rename("ticks")
-        .reset_index()
-    )
-    result["respondents"] = respondents
-    result["percent"] = (
-        result["ticks"] / respondents * 100 if respondents else 0.0
-    )
-    return result.sort_values("ticks", ascending=False).reset_index(drop=True)
-
-
 def reconcile(
     signups: pd.DataFrame,
     survey: pd.DataFrame,

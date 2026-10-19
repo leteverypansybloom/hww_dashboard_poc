@@ -336,36 +336,6 @@ class TestUnpivotSurvey:
         ]
 
 
-class TestSurveyPercentages:
-    """``survey_percentages``: Figure 13 numbers for one question."""
-
-    def test_percent_is_ticks_over_respondents(
-        self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
-    ) -> None:
-        """Percent = ticks / people who answered the question.
-
-        R3 ticked nothing for Q04, so only R1 and R2 count as
-        respondents.
-        """
-        answers, _ = unpivoted
-        q4 = wrangle.survey_percentages(answers, "Q04").set_index("answer")
-        assert (q4["respondents"] == 2).all()
-        assert q4.loc["Minor illness", "ticks"] == 2
-        assert q4.loc["Minor illness", "percent"] == pytest.approx(100.0)
-        assert q4.loc["Mental health", "percent"] == pytest.approx(50.0)
-        assert q4.loc["Other", "percent"] == pytest.approx(50.0)
-        assert (q4["percent"] == q4["ticks"] / q4["respondents"] * 100).all()
-
-    def test_single_choice_counts_everyone_who_answered(
-        self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
-    ) -> None:
-        """All three responses answered Q14; one chose Sometimes."""
-        answers, _ = unpivoted
-        q14 = wrangle.survey_percentages(answers, "Q14").set_index("answer")
-        assert q14.loc["Sometimes", "ticks"] == 1
-        assert q14["respondents"].iloc[0] == 3
-
-
 class TestCountValues:
     """``count_values``: counts in an order that every pandas gives."""
 

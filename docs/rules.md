@@ -67,7 +67,7 @@ says the same rules in a few lines, for readers of the report.
 | R33 | A single-choice answer is translated from Welsh for its question, then spelt as in the catalogue. An answer not in the catalogue is kept and reported. | `unpivot_survey`, `load_survey` | TestUnpivotSurvey; scenario (Weithiau, Maybe) | |
 | R34 | Free text from "Other" boxes is output only when `keep_other_free_text = true`. | `unpivot_survey` | TestUnpivotSurvey | |
 | R35 | A response's bands are its own; one that is Unknown takes the employer's value. | `build_survey_tables` | TestBuildSurveyTables; scenario (102) | |
-| R36 | Figure 13: the percent for an answer is the respondents who chose it divided by the respondents who gave any answer to that question. | `survey_percentages` (and the dashboard's `survey_question_results`) | TestSurveyPercentages; scenario | |
+| R36 | Figure 13: the percent for an answer is the respondents who chose it divided by the respondents who gave any answer to that question. | the dashboard's `survey_question_results` | TestSurveyQuestionResults (test_dashboard_data.py); scenario | |
 | R37 | The catalogue lists every option in `survey_answers.csv` order, then options seen only in the data (order 999). `answer_id` is the question id and the option's 2-digit position. | `build_question_catalogue` | TestBuildQuestionCatalogue; scenario (Q14-04) | |
 
 ## Workplace Advisor Support (WAS)

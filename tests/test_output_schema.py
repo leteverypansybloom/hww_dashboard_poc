@@ -11,11 +11,12 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 
 
 class TestSchema:
-    """``schema`` and ``tables``: one schema per output table."""
+    """``schema``: one schema per output table."""
 
     def test_every_table_has_a_schema(self) -> None:
         """The schemas cover exactly the tables the pipeline writes."""
-        assert output_schema.tables() == sorted(wrangle.COLUMNS)
+        found = output_schema.SCHEMA_FOLDER.glob("*.json")
+        assert sorted(path.stem for path in found) == sorted(wrangle.COLUMNS)
 
     @pytest.mark.parametrize("table", sorted(wrangle.COLUMNS))
     def test_columns_match_the_pipeline(self, table: str) -> None:

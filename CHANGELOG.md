@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Removed
+
+- `wrangle.survey_percentages` and `output_schema.tables`, which only the
+  tests called. The Figure 13 scenario test now checks the dashboard's own
+  `survey_question_results`.
+- The dashboard no longer loads `fact_signup` and `dim_date`, which no page
+  used. wrangle still writes both.
+
 ## [0.2.0] - 2026-10-18
 
 ### Added
