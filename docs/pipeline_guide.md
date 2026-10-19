@@ -979,8 +979,10 @@ because they disagree with the records in most cases (104 flagged vs 0 survey re
 dummy data).
 
 **Privacy by allow-list.** Only columns named in `COLUMNS` are written. Survey columns marked `drop`
-are never read. Free text is off by default. Two tests check the output for personal column names,
-emails, IP addresses and links.
+are read into memory with the rest of the sheet, but never used or written. Free text is off by
+default. Before anything is written, every table and the report are checked for email addresses,
+UK phone numbers, IP addresses and web links, and one found stops the run
+([data_protection.md](data_protection.md)).
 
 **Loops instead of vectorised pandas in places.** `load_signups`, `unpivot_survey`,
 `unpivot_was_sessions` and `pick_value` loop over rows. The data is hundreds of rows, each row may

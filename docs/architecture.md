@@ -62,7 +62,7 @@ design (its `INGESTION_FRAMEWORK_GUIDE.md`, section 8).
 |---|---|---|
 | `input_folder`, `input_file`, `newest_match` | Find each workbook in a local folder; the survey export is the newest by the date in its name | py-common `GCSSource`, one landing folder per workbook, fixed names |
 | `read_sheet`, `require`, `check_config` | Read a sheet by name or position below a heading row; stop with a clear message on missing files, sheets or columns | py-common `Contract` (heading row, listed columns, warn or quarantine) |
-| `COLUMNS`, survey `drop` roles, `keep_other_free_text` | Never write personal columns or free text (the tests check against `[privacy]` in the config) | py-common contracts' `excluded` columns (personal data never loaded), then Dataform's selected columns |
+| `COLUMNS`, survey `drop` roles, `keep_other_free_text`, `check_public_text` | Never write personal columns or free text: a run stops if the config selects a column on its `[privacy]` list, or if an output holds contact details | py-common contracts' `excluded` columns (personal data never loaded), then Dataform's selected columns |
 | `clean_text`, `to_date`, `drop_blank_rows` | Tidy cells, read dates day-first, skip blank rows | Dataform staging models (`SAFE_CAST`, trimming) |
 | `mappings/*.csv`, `map_value`, `map_bands` | Map messy labels to agreed bands | Dataform reference tables loaded from the same CSVs |
 | `build_dim_employer`, `pick_value`, `org_overrides.csv` | One employer per organisation, explainable tie-breaks | Dataform employer model (identity resolution) |
@@ -88,7 +88,8 @@ Kept on purpose:
 - **Every output.** The CSVs, their columns, the identifiers
   (`employer_id`, `signup_id`, `answer_id`, ...) and the data quality
   report are byte-for-byte what the code wrote before the refactor
-  (`tests/test_golden.py`).
+  (`tests/test_golden.py`). The output changes agreed since then are
+  in [CHANGELOG.md](../CHANGELOG.md).
 - **The commands**: `python wrangle.py [config.toml]` and
   `streamlit run dashboard.py`, run from the project folder.
 
@@ -111,9 +112,11 @@ needs. Nothing fits without changing what the prototype does:
   and uses `B` and pandas-style `Other.1`, and `config.toml` and
   `mappings/survey_columns.csv` are written in those names. Switching
   would change those identifiers for no gain in the prototype.
-- **Different output.** py-common's pipeline ends in a warehouse load
-  with audit records and stored copies. The prototype rebuilds every
-  table from all four files on every run, and has no warehouse.
+- **Different output.** py-common's pipeline loads each upload once,
+  with audit records and stored copies of every file. The prototype
+  rebuilds every table from all four files on every run and replaces
+  the previous set, in a folder or in an interim BigQuery dataset,
+  keeping only a run record.
 
 Adding py-common anyway would mean wrapping it to undo these
 differences. An earlier attempt did exactly that (a `py-common-ingestion`
@@ -139,8 +142,10 @@ reproduce the dashboard.
    their spaces back).
 3. **Cleaning rules move to SQL.** `clean_text`, day-first dates, the
    `Y (Dec)` flag parser and the employer tie-breaks are Python here.
-   The `ASSUMPTIONS` list at the end of every data quality report is
-   the plain-language specification to port.
+   The rule register ([rules.md](rules.md)) is the specification to
+   port, with the id rules in [identifiers.md](identifiers.md). The
+   `ASSUMPTIONS` list at the end of every data quality report says the
+   same rules in a few lines, for readers of the report.
 
 ## Migrating the backend (separate work)
 
