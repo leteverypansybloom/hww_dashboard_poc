@@ -1,7 +1,6 @@
 # Contributing
 
-How to set up, check and change this project. The same rules apply to
-people and to coding agents (`AGENTS.md`).
+How to set up, check and change this project.
 
 ## Set up
 

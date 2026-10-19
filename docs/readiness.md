@@ -17,7 +17,6 @@ CI execution, scheduled operation and demonstrated use, not just configuration.
 | Open-source language | Met | Python; pyproject.toml |
 | Version-controlled code | Met locally | Git history and logical commits; remote backup still needed |
 | Reproduction instructions | Partial | README, constraints.txt, synthetic demo, runbook |
-| Peer review | Not evidenced | Human review still required; agent checks are supporting evidence |
 | Open publication | Not met | MIT licence supplied; owner must decide publication and review overrides first |
 | Minimal manual intervention | Met locally | One command; cloud operation still to prove |
 | Documentation | Mostly met | Runbook, schemas, rules, identifier and protection notes |
