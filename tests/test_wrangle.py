@@ -1277,6 +1277,33 @@ class TestBuildEngagement:
         ) == [expected]
         assert len(fact) == 3
 
+    def test_undated_events_are_kept_and_reported(self, today: date) -> None:
+        """An event with no date is kept, and the report counts it (R71).
+
+        Args:
+            today: Frozen warning cutoff.
+        """
+        empty = pd.DataFrame()
+        was = pd.DataFrame(
+            {
+                "employer_id": ["E1", "E2"],
+                "enquiry_date": [None, date(2026, 3, 4)],
+                "was_request_id": ["WAS-1", "WAS-2"],
+            }
+        )
+        sessions = pd.DataFrame(columns=wrangle.COLUMNS["fact_was_session"])
+        report = wrangle.Report()
+        fact = wrangle.build_engagement(
+            empty, empty, was, sessions, empty, "summary_1_sent", report, today
+        )
+        undated = fact[fact["date"].isna()]
+        assert list(undated["engagement_id"]) == ["was_request-WAS-1"]
+        assert list(undated["date_precision"]) == [""]
+        assert report.sections["Warnings"] == [
+            "- fact_engagement: 1 'was_request' event(s) have no date "
+            "(counted, but not on monthly charts)."
+        ]
+
     def test_invalid_rule_with_no_sessions(self, today: date) -> None:
         """An invalid rule must fail even when there are no session rows."""
         empty = pd.DataFrame()

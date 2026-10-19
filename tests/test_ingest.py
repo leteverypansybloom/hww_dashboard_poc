@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from openpyxl import load_workbook
 
 from hww_dashboard import wrangle
 from hww_dashboard.output_schema import parse_csv
@@ -875,6 +876,47 @@ class TestLoadSurvey:
                 wrangle.Report(),
             )
 
+    def test_new_export_column_is_ignored_and_reported(
+        self,
+        tmp_path: Path,
+        project_folder: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
+    ) -> None:
+        """A column survey_columns.csv doesn't list is left out, and flagged.
+
+        It is named under Survey checks and counted under Needs
+        attention, and its answers don't reach the output (rule R30).
+
+        Args:
+            tmp_path: Holds the changed copy of the export.
+            project_folder: Repository holding the live mappings.
+            fixture_config: The frozen config, whose export is copied.
+            settings: A copy of the fixture config.
+        """
+        cfg = settings["survey"]
+        export = tmp_path / cfg["file"]
+        shutil.copy(fixture_config.parent / "inputs" / cfg["file"], export)
+        book = load_workbook(export)
+        sheet = book.worksheets[cfg["sheet"]]
+        column = sheet.max_column + 1
+        sheet.cell(cfg["header_row"], column, "Brand new question?")
+        sheet.cell(cfg["header_row"] + 1, column, "A brand new answer")
+        book.save(export)
+        maps = project_folder / "mappings"
+        lookups, overrides = wrangle.load_mappings(maps)
+        report = wrangle.Report()
+        _, answers, _, _ = wrangle.load_survey(
+            cfg, tmp_path, maps, lookups, overrides, report
+        )
+        checks = "\n".join(report.sections["Survey checks"])
+        assert (
+            "**New columns not in survey_columns.csv (ignored):** "
+            "['Brand new question?']" in checks
+        )
+        assert report.to_act_on() == {"new_columns": 1}
+        assert "A brand new answer" not in set(answers["answer"])
+
     def test_personal_heading_must_be_dropped(
         self, tmp_path: Path, project_folder: Path, settings: wrangle.Config
     ) -> None:
@@ -1289,7 +1331,7 @@ class TestCheckPublicCells:
 
 
 class TestRun:
-    """The pipeline handles a generation with no source records."""
+    """``run``: whole runs on changed copies of the synthetic inputs."""
 
     def test_header_only_sources(
         self,
@@ -1365,6 +1407,88 @@ class TestRun:
         assert "WAS database: 35 rows read, 65% fewer" in report
         record = json.loads((out / "run_record.json").read_text("utf-8"))
         assert record["attention"]["shrunk_sources"] == 1
+
+    def test_free_text_is_written_when_switched_on(
+        self,
+        tmp_path: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """keep_other_free_text = true writes the Other boxes' text.
+
+        One row per filled-in box, with the schema's three columns, and
+        the text cleaned like every other cell (rule R34).
+
+        Args:
+            tmp_path: The config's folder; the outputs go in out/.
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+        """
+        settings["survey"]["keep_other_free_text"] = True
+        wrangle.run(write_config(settings), now=run_time)
+        table = pd.read_csv(
+            tmp_path / "out" / "survey_other_text.csv",
+            dtype=str,
+            keep_default_na=False,
+        )
+        assert list(table.columns) == wrangle.COLUMNS["survey_other_text"]
+        assert len(table) == 2
+        assert not table["other_text"].str.contains("_x000D_").any()
+
+    def test_contact_details_in_free_text_stop_the_run(
+        self,
+        tmp_path: Path,
+        project_folder: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """An email address typed into an Other box stops the run.
+
+        The message names the table and column, never the address, and
+        no free-text file is written.
+
+        Args:
+            tmp_path: Holds the changed inputs and the config.
+            project_folder: Repository holding the live mappings.
+            fixture_config: The frozen config, whose inputs are copied.
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+        """
+        inputs = tmp_path / "inputs"
+        shutil.copytree(fixture_config.parent / "inputs", inputs)
+        cfg = settings["survey"]
+        export = inputs / cfg["file"]
+        sheet = wrangle.read_sheet(export, cfg["sheet"], cfg["header_row"])
+        mapping = wrangle.read_csv_text(
+            project_folder / "mappings" / "survey_columns.csv"
+        )
+        free = set(mapping.loc[mapping["role"] == "other_text", "column"])
+        position = next(
+            i
+            for i, column in enumerate(sheet.columns)
+            if column in free and wrangle.clean_text(sheet.at[0, column])
+        )
+        book = load_workbook(export)
+        book.worksheets[cfg["sheet"]].cell(
+            cfg["header_row"] + 1, position + 1, "Email me: name@example.org"
+        )
+        book.save(export)
+        cfg["keep_other_free_text"] = True
+        config = write_config(settings)
+        settings["paths"]["input_folder"] = inputs.as_posix()
+        config.write_text(to_toml(settings), encoding="utf-8")
+        with pytest.raises(wrangle.InputError) as error:
+            wrangle.run(config, now=run_time)
+        message = str(error.value)
+        assert message.startswith("survey_other_text.csv: ")
+        assert "1 cell(s) of column 'other_text'" in message
+        assert "name@example.org" not in message
+        assert not (tmp_path / "out" / "survey_other_text.csv").exists()
 
 
 class TestCheckAgreedValues:
