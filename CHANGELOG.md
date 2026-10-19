@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A run stopped by contact details names the table and column, with how
+  many cells, or the report section, so the source can be corrected. It
+  still never repeats the value.
+
 ### Removed
 
 - `wrangle.survey_percentages` and `output_schema.tables`, which only the

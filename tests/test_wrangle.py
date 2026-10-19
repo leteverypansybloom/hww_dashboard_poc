@@ -618,6 +618,7 @@ class TestWriteCsv:
             wrangle.write_csv(
                 pd.DataFrame({"badge": [value]}), tmp_path, "badges"
             )
+        assert "1 cell(s) of column 'badge'" in str(error.value)
         assert value not in str(error.value)
         assert not (tmp_path / "badges.csv").exists()
 
@@ -643,13 +644,42 @@ class TestReport:
     def test_blocks_personal_values(
         self, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Reject identifiers in report notes without echoing them."""
+        """Reject identifiers in report notes without echoing them.
+
+        The message names the section to look in.
+
+        Args:
+            tmp_path: Temporary output folder.
+            run_time: The tests' fixed run time.
+        """
         report = wrangle.Report()
         report.add("Warnings", "bad value person@example.org")
         path = tmp_path / "data_quality_report.md"
-        with pytest.raises(wrangle.InputError, match="data_quality_report.md"):
+        with pytest.raises(
+            wrangle.InputError, match="data_quality_report.md"
+        ) as error:
             report.write(path, run_time)
+        assert "the 'Warnings' section" in str(error.value)
+        assert "person@example.org" not in str(error.value)
         assert not path.exists()
+
+    def test_names_every_section_with_contact_details(
+        self, run_time: datetime
+    ) -> None:
+        """An unmapped raw value is caught in the Unmapped values table.
+
+        Args:
+            run_time: The tests' fixed run time.
+        """
+        report = wrangle.Report()
+        report.add("Warnings", "call 07700 900123")
+        report.unmapped[("sector", "signups", "https://example.org")] = 1
+        with pytest.raises(wrangle.InputError) as error:
+            report.render(run_time)
+        message = str(error.value)
+        assert "the 'Unmapped values' and 'Warnings' sections" in message
+        assert "07700" not in message
+        assert "example.org" not in message
 
     def test_repeated_write_is_identical(
         self, tmp_path: Path, run_time: datetime

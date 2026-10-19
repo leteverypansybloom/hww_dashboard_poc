@@ -13,6 +13,30 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-10-19 — Production-readiness follow-up
+
+The review's findings were checked again after 0.2.0 reached `main`.
+Most were done; these entries record the decisions in the follow-up.
+
+### A contact-detail stop says where to look
+
+The contact-detail check read each output as one block of text, so
+its message could name only the file, and whoever fixed the source
+had to search the whole table or report for the value. Tables are now
+checked cell by cell and the report section by section. The message
+names the table and each column, with how many cells, or the report
+sections, and still never the value. Checking cells one at a time also
+stops digits at the end of one row and the start of the next from
+reading as a phone number.
+
+Not chosen: naming output rows. An output row is built from several
+sources, so it doesn't point at one row of a workbook; the column says
+which field to look in, and the report's own sections name the source.
+
+**Trade-off**: none for what stops a run, except the cross-row false
+alarm above. Benefit: the person fixing the source knows where to look,
+without the value reaching a log.
+
 ## 2026-10-18 — Production readiness
 
 The production-readiness review prepared the prototype for two jobs:

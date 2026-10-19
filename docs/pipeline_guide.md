@@ -282,8 +282,9 @@ this way) and **Gotchas** (what can trip you up).
   counting each unmapped raw value once. `render()` builds the text: the run time, then **Needs
   attention** (one line per item, saying what was found and what to do, or `None.`), then every
   section in order (`None.` if it is empty) with the unmapped-values table, then `ASSUMPTIONS`.
-  It checks the text for recognisable contact identifiers and leaves the stored sections
-  unchanged, so rendering twice gives the same bytes. `write()` saves that text with LF line
+  It checks each section for recognisable contact identifiers (stopping the run and naming the
+  section, never the value) and leaves the stored sections unchanged, so rendering twice gives
+  the same bytes. `write()` saves that text with LF line
   endings; the BigQuery writer stores the same text in its `data_quality_report` table.
 - **Why:** each function adds notes as it goes, so the report says exactly what happened in this run.
   The fixed section order makes two reports easy to compare. Needs attention comes first so whoever
@@ -712,9 +713,10 @@ Each `load_*` function follows the same pattern:
 
 #### `write_csv(df, folder, name)` and `write_outputs(tables, out, engagement, report, run_at)`
 - **What:** `write_csv` turns the table into CSV text with `csv_text` (reindexed to
-  `COLUMNS[name]`, dates as `YYYY-MM-DD`, LF line endings on every system), checks that text for
-  contact details and against the table's schema (`output_schema.check_cells`), then writes it as
-  UTF-8 without the index. `write_outputs` writes every table, adds the row counts and
+  `COLUMNS[name]`, dates as `YYYY-MM-DD`, LF line endings on every system), checks each cell for
+  contact details (`check_public_cells`) and against the table's schema
+  (`output_schema.check_cells`), then writes it as UTF-8 without the index. `write_outputs`
+  writes every table, adds the row counts and
   event-type counts to the report, and writes the report. A sibling staging directory holds
   the whole generation before publication. Rename failures restore the previous directory;
   if restoration itself fails, the `.hww-*/previous` backup is retained for recovery.
@@ -722,13 +724,14 @@ Each `load_*` function follows the same pattern:
 - **Gotchas:**
   - `reindex` drops every column not in `COLUMNS`. This is the main privacy guard: raw columns
     such as names or emails can't leak out by accident.
-  - Retained values and report text are checked for email, phone, IPv4 and URL identifiers.
+  - Every cell, and every section of the report, is checked for email, phone, IPv4 and URL
+    identifiers. A match stops the run, naming the table and column (with how many cells) or
+    the report section, without echoing the value. Arbitrary personal names still
+    require source governance; this pattern guard is not general anonymisation.
   - Given the run record from `run()`, `write_outputs` completes it with each output's rows and
     SHA-256 and publishes it with the tables as `run_record.json`
     (`hww_dashboard.run_record`). The record names files and holds checksums and counts, never
     cell values.
-    A match stops the run without echoing the value. Arbitrary personal names still
-    require source governance; this pattern guard is not general anonymisation.
   - Booleans are written as `True`/`False`, and `None` as an empty cell.
   - When free text is off, `write_outputs()` removes an old `survey_other_text.csv` only
     when the new generation has been written successfully. Unmanaged files are preserved.

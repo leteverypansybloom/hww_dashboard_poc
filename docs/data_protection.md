@@ -46,12 +46,13 @@ Only the columns in each table's schema are written
 | `survey_other_text` | free text from "Other" boxes | only written when `keep_other_free_text = true`; off by default |
 | `data_quality_report.md` | organisation names, and raw values that didn't map or couldn't be read | the dashboard's Home page shows the whole report |
 
-Before anything is written, every table and the report are checked for
-email addresses, UK phone numbers, IPv4 addresses and web links. One
-found stops the run (exit code 1), and the message names the table but
-never the value. The check can't recognise people's names or postal
-addresses in free text: only fixed lists of values (the mapping files)
-would rule those out.
+Before anything is written, every cell of every table and every section
+of the report are checked for email addresses, UK phone numbers, IPv4
+addresses and web links. One found stops the run (exit code 1). The
+message names the table and column, with how many cells, or the report
+section, so the source can be corrected, but never the value. The check
+can't recognise people's names or postal addresses in free text: only
+fixed lists of values (the mapping files) would rule those out.
 
 ## Logs
 

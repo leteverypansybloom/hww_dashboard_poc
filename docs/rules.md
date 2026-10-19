@@ -111,7 +111,7 @@ says the same rules in a few lines, for readers of the report.
 | Id | Rule | Code | Tests | Dataform |
 |---|---|---|---|---|
 | R80 | Only the columns in each table's schema are written, and every table is checked against its schema. | `csv_text`, `write_csv`, `output_schema` | test_output_schema.py | |
-| R81 | An email address, UK phone number, IPv4 address or web link in any output or the report stops the run, without repeating it. | `check_public_text` | TestCheckPublicText, TestWriteCsv, TestReport | |
+| R81 | An email address, UK phone number, IPv4 address or web link in any output cell or report section stops the run. The message names the table and column (with how many cells) or the section, never the value. | `check_public_cells`, `check_public_text`, `Report.render` | TestCheckPublicCells, TestCheckPublicText, TestWriteCsv, TestReport | |
 | R82 | The outputs are published all at once or not at all: a folder swap, or one BigQuery transaction. | `write_outputs`, `bigquery_output.publish` | TestWriteOutputs, test_bigquery_output.py | |
 | R83 | Every published set of outputs carries a run record with no cell values. | `run_record` | test_run_record.py | |
 | R84 | A source with more than `max_row_drop` (10%) fewer rows than the last published run is a warning that needs attention. | `compare_with_previous` | TestCompareWithPrevious, TestRun (test_ingest.py) | |

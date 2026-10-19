@@ -19,6 +19,7 @@ import pandas as pd
 import pytest
 
 from hww_dashboard import wrangle
+from hww_dashboard.output_schema import parse_csv
 
 ConfigWriter = Callable[[wrangle.Config], Path]
 
@@ -1232,6 +1233,59 @@ class TestCheckPublicText:
             text: Text like the pipeline's own outputs.
         """
         wrangle.check_public_text(text, "output.csv")
+
+
+class TestCheckPublicCells:
+    """``check_public_cells``: say which columns to fix, never the values."""
+
+    def test_names_each_column_and_how_many_cells(self) -> None:
+        """Every column with a hit is named, with its count of cells."""
+        cells = parse_csv(
+            "employer_id,topic,duration\n"
+            "E1,name@example.org,\n"
+            "E2,Sleep,https://example.org/x\n"
+            "E3,07700 900123,\n"
+        )
+        with pytest.raises(wrangle.InputError) as error:
+            wrangle.check_public_cells(cells, "fact_was_session.csv")
+        message = str(error.value)
+        assert message.startswith("fact_was_session.csv: ")
+        assert (
+            "2 cell(s) of column 'topic' and 1 cell(s) of column 'duration'"
+            in message
+        )
+        for value in ("name@example.org", "07700", "example.org/x"):
+            assert value not in message
+
+    def test_ordinary_tables_pass(self) -> None:
+        """Ids, dates, bands and empty cells raise nothing."""
+        cells = parse_csv(
+            "employer_id,date,size_band\n"
+            "E0016300d,2025-11-01,0-9\n"
+            "E7f29becf,,1000+\n"
+        )
+        wrangle.check_public_cells(cells, "dim_employer.csv")
+
+    def test_a_table_with_no_rows_passes(self) -> None:
+        """A table with headings only, as ``parse_csv`` reads it, passes.
+
+        The placeholder tables (``fact_event``, ``badges``) are written
+        like this on every run.
+        """
+        wrangle.check_public_cells(
+            parse_csv("event_id,event_name\n"), "fact_event.csv"
+        )
+
+    def test_digits_split_across_rows_are_not_a_phone_number(self) -> None:
+        """A row ending in 0 and digits starting the next row are not joined.
+
+        Read as one block of text, the line break between them looked
+        like a phone number's spacing.
+        """
+        text = "ref,count\nA,0\n1234567890,2\n"
+        with pytest.raises(wrangle.InputError):
+            wrangle.check_public_text(text, "table.csv")
+        wrangle.check_public_cells(parse_csv(text), "table.csv")
 
 
 class TestRun:

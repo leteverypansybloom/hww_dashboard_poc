@@ -69,6 +69,15 @@ OUTPUT_TARGETS = ("folder", "bigquery")
 #: ``${NAME}`` in config text, replaced by an environment variable.
 CONFIG_VARIABLE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 DATE_IN_NAME = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+#: Contact details that must never reach an output: email addresses,
+#: UK phone numbers (0 or +44 and 10 more digits, spaces, dashes and
+#: brackets allowed), IPv4 addresses and web links.
+CONTACT_DETAILS = re.compile(
+    r"[\w.+-]+@[\w-]+\.[\w.]+|"
+    r"(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|"
+    r"\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://",
+    flags=re.IGNORECASE,
+)
 
 MONTHS = {
     "jan": 1,
@@ -464,7 +473,8 @@ class Report:
             The report's text.
 
         Raises:
-            InputError: The report would hold a contact identifier.
+            InputError: The report would hold a contact identifier. The
+                message names the section, never the value.
         """
         lines = [
             "# Data quality report",
@@ -503,7 +513,21 @@ class Report:
         lines.append("")
         lines.extend(f"- {a}" for a in ASSUMPTIONS)
         lines.append("")
+        found = [
+            f"'{name}'"
+            for name in self.ORDER
+            if CONTACT_DETAILS.search("\n".join(sections[name]))
+        ]
+        if found:
+            where = (
+                f"the {found[0]} section"
+                if len(found) == 1
+                else f"the {', '.join(found[:-1])} and {found[-1]} sections"
+            )
+            raise contact_details_found(filename, where)
         text = "\n".join(lines)
+        # The rest (the run time, Needs attention and the assumptions)
+        # is checked too, with the whole text.
         check_public_text(text, filename)
         return text
 
@@ -3074,13 +3098,35 @@ def reconcile(
         )
 
 
+def contact_details_found(filename: str, where: str) -> InputError:
+    """Say where contact details were found, never what they are.
+
+    Args:
+        filename: The output, e.g. ``"dim_employer.csv"``.
+        where: Where in it, e.g. ``"1 cell(s) of column 'topic'"``.
+
+    Returns:
+        The error to raise. Its message names the place and what to do,
+        and leaves the values out, so they can't reach a log.
+    """
+    return InputError(
+        f"{filename}: contact details (an email address, phone number, "
+        f"IP address or web link) found in {where}. Remove them from the "
+        "source workbook or the mapping files, then run again. The values "
+        "are not repeated here."
+    )
+
+
 def check_public_text(text: str, filename: str) -> None:
     """Stop recognisable contact identifiers from reaching an output.
 
     This guard catches email addresses, UK phone numbers (0 or +44 and
     10 more digits, spaces, dashes and brackets allowed), IPv4
-    addresses and web links. It cannot identify arbitrary personal
-    names in free-form text.
+    addresses and web links (``CONTACT_DETAILS``). It cannot identify
+    arbitrary personal names in free-form text. Tables are checked cell
+    by cell (:func:`check_public_cells`) and the report section by
+    section, so the message can say where to look; this checks a whole
+    text at once.
 
     Args:
         text: Text destined for an output table or report.
@@ -3089,17 +3135,37 @@ def check_public_text(text: str, filename: str) -> None:
     Raises:
         InputError: Text contains a recognisable personal identifier.
     """
-    pattern = (
-        r"[\w.+-]+@[\w-]+\.[\w.]+|"
-        r"(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|"
-        r"\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://"
-    )
-    if re.search(pattern, text, flags=re.IGNORECASE):
-        raise InputError(
-            f"{filename}: personal identifiers found in retained text. "
-            "Remove contact details from source fields and mappings "
-            "before running again."
+    if CONTACT_DETAILS.search(text):
+        raise contact_details_found(filename, "its text")
+
+
+def check_public_cells(cells: pd.DataFrame, filename: str) -> None:
+    """Stop a table whose cells hold recognisable contact identifiers.
+
+    Each cell is checked on its own, so the message can name the
+    columns, and how many cells of each, for whoever has to find them in
+    the source. It never repeats the values.
+
+    Args:
+        cells: The table as text cells, from ``parse_csv``.
+        filename: The table's file name, e.g. ``"dim_employer.csv"``.
+
+    Raises:
+        InputError: A cell holds a contact identifier.
+    """
+    # A plain count, so the result doesn't depend on the column's pandas
+    # dtype (an empty text column sums to "" in pandas 3).
+    found = {
+        str(column): sum(
+            1 for value in cells[column] if CONTACT_DETAILS.search(value)
         )
+        for column in cells.columns
+    }
+    places = [
+        f"{n} cell(s) of column '{column}'" for column, n in found.items() if n
+    ]
+    if places:
+        raise contact_details_found(filename, " and ".join(places))
 
 
 def csv_text(df: pd.DataFrame, name: str) -> str:
@@ -3126,7 +3192,7 @@ def csv_text(df: pd.DataFrame, name: str) -> str:
 def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
     """Write a table with its agreed columns. Dates come out as YYYY-MM-DD.
 
-    The text is checked for contact details and against the table's
+    The cells are checked for contact details and against the table's
     schema (``hww_dashboard/schema/``) before anything is written.
 
     Args:
@@ -3143,8 +3209,9 @@ def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
         SchemaError: The table breaks its schema (a bug).
     """
     text = csv_text(df, name)
-    check_public_text(text, f"{name}.csv")
-    check_cells(parse_csv(text), name)
+    cells = parse_csv(text)
+    check_public_cells(cells, f"{name}.csv")
+    check_cells(cells, name)
     (folder / f"{name}.csv").write_bytes(text.encode("utf-8"))
     return len(df)
 
@@ -3281,8 +3348,9 @@ def publish_bigquery(
     counts = []
     for name, df in tables.items():
         text = csv_text(df, name)
-        check_public_text(text, f"{name}.csv")
-        check_cells(parse_csv(text), name)
+        cells = parse_csv(text)
+        check_public_cells(cells, f"{name}.csv")
+        check_cells(cells, name)
         texts[name] = text
         counts.append((name, len(df)))
     staged_report = deepcopy(report)
