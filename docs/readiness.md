@@ -1,7 +1,9 @@
 # Production-readiness acceptance record
 
-Prepared on 2026-10-18 for both interim real-data runs and the Dataform reference.
-The approved work builds on `review/code-quality`; no remote or merge is created.
+Prepared on 2026-10-18 for both interim real-data runs and the Dataform reference,
+and updated on 2026-10-19. The approved work builds on `review/code-quality`. It
+is now on `main`, which is pushed to the project's GitHub repository (not
+publicly visible).
 
 ## RAP assessment
 
@@ -15,7 +17,7 @@ CI execution, scheduled operation and demonstrated use, not just configuration.
 | Criterion | Before | After and evidence |
 |---|---|---|
 | Open-source language | Met | Python; pyproject.toml |
-| Version-controlled code | Met locally | Git history and logical commits; remote backup still needed |
+| Version-controlled code | Met locally | Git history and logical commits, pushed to the GitHub repository |
 | Reproduction instructions | Partial | README, constraints.txt, synthetic demo, runbook |
 | Open publication | Not met | MIT licence supplied; owner must decide publication and review overrides first |
 | Minimal manual intervention | Met locally | One command; cloud operation still to prove |
@@ -28,7 +30,7 @@ CI execution, scheduled operation and demonstrated use, not just configuration.
 | Automatic logs | Console only | Per-run logs and structured cloud output |
 | Tidy data | Met | Dimensions and long fact tables, schema contracts |
 | Fully packaged | Met | Installable package and packaged schemas |
-| Automatic CI | Config only | Windows/Linux and version jobs configured; no remote execution yet |
+| Automatic CI | Config only | Windows/Linux and version jobs configured and pushed; confirm in the repository's Actions tab that they run and pass |
 | Schedule/event trigger | Missing | GCP procedure documented; deployment and alerts still to test |
 | Signposted changes | Missing | CHANGELOG.md and version 0.2.0 |
 
@@ -50,7 +52,8 @@ validate methodology, review changes and assess outputs against intended use.
   identify people. Pattern guards do not certify anonymity. Approve access,
   retention, region and any future free-text vocabulary restrictions.
 - Name operators and backup, expected source arrivals and a reporting sign-off
-  owner. Require human review and CI checks once a remote is configured.
+  owner. Now that the remote exists, protect `main`: require a human review
+  and passing CI checks before a merge.
 - Freeze uploads for a run or use an immutable batch prefix. Checksums do not
   pin object generations. Prevent overlapping executions through orchestration.
 - Folder rollback handles ordinary errors; process termination and concurrent
@@ -67,8 +70,8 @@ validate methodology, review changes and assess outputs against intended use.
   and report links in pushed history. Refer it to its owner/DPO for replacement
   and any history remediation; this implementation does not edit that repo.
 - Keep organisation overrides private or move them outside the published repo
-  when real organisation names are introduced. Set CODEOWNERS and branch
-  protection when a remote and human reviewer names exist.
+  when real organisation names are introduced. Set CODEOWNERS once the
+  human reviewers are named.
 
 These items prevent a claim of deployed production readiness today. The local
 implementation is ready for human review and cloud acceptance testing.

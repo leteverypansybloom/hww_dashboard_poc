@@ -9,6 +9,7 @@
   `survey_question_results`.
 - The dashboard no longer loads `fact_signup` and `dim_date`, which no page
   used. wrangle still writes both.
+- The coding agent guides, `AGENTS.md` and `CLAUDE.md`.
 
 ## [0.2.0] - 2026-10-18
 

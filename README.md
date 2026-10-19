@@ -99,7 +99,7 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 | `tests/` | Tests grouped by the function under test, the golden-output check and page smoke tests. |
 | `tests/data/` | Synthetic input workbooks and the frozen config the tests use ([README](tests/data/README.md)). |
 | `docs/` | The pipeline guide, the architecture notes, the rule register ([rules.md](docs/rules.md)), the identifiers, the output contract and the data protection notes ([data_protection.md](docs/data_protection.md), for the DPIA). |
-| `CONTRIBUTING.md`, `AGENTS.md` | How to set up, check and change the project, for people and for coding agents. |
+| `CONTRIBUTING.md` | How to set up, check and change the project. |
 | `DECISIONS_en.md` | The decision log: what was decided, when and why. |
 
 ## Checks for developers
