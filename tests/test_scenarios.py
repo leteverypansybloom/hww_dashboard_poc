@@ -11,13 +11,14 @@ same files.
 
 import importlib.util
 import shutil
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import ModuleType
 
 import pandas as pd
 import pytest
 
+from hww_dashboard import dashboard_data as dd
 from hww_dashboard import wrangle
 
 SCENARIOS = Path(__file__).resolve().parent / "scenarios"
@@ -168,18 +169,28 @@ class TestRun:
         """Percent is ticks over respondents to that question (R36).
 
         Two responses answered Q04 and three answered Q14, so a single
-        tick is 50% of Q04 and a third of Q14.
+        tick is 50% of Q04 and a third of Q14. The numbers are worked
+        out as the dashboard shows them, over every date and with no
+        filters; options nobody chose are left out.
 
         Args:
             runs: The scenario's output folders.
         """
-        answers = read(runs["summary_1_sent"] / "fact_survey_answer.csv")
-        q04 = wrangle.survey_percentages(answers, "Q04").set_index("answer")
+        tables = dd.load_tables(runs["summary_1_sent"])
+        start, end = date(2000, 1, 1), date(2099, 12, 31)
+        q04, respondents = dd.survey_question_results(
+            tables, "Q04", start, end, {}
+        )
+        assert respondents == 2
+        q04 = q04[q04["ticks"] > 0].set_index("answer")
         assert q04["percent"].to_dict() == {
             "Fatigue or burnout": 100.0,
             "Other": 50.0,
             "Headaches and migraines": 50.0,
         }
-        q14 = wrangle.survey_percentages(answers, "Q14")
-        assert set(q14["respondents"]) == {3}
+        q14, respondents = dd.survey_question_results(
+            tables, "Q14", start, end, {}
+        )
+        assert respondents == 3
+        q14 = q14[q14["ticks"] > 0]
         assert q14["percent"].tolist() == pytest.approx([100 / 3] * 3)

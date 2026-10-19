@@ -194,16 +194,16 @@ see [docs/output_contract.md](docs/output_contract.md).
 | Table | One row per | Used on |
 |---|---|---|
 | `dim_employer` | organisation (duplicates merged) | all pages: filters and employer picker |
-| `fact_signup` | sign-up row on Account signups (a "user") | page 2 Users |
+| `fact_signup` | sign-up row on Account signups (a "user") | not shown yet (page 2 Users counts `account_signup` in `fact_engagement`) |
 | `fact_engagement` | event: `account_signup`, `survey_completed`, `was_request`, `was_session_held`, `was_completed`, `peer_mentoring_interest` | pages 2 and 3 |
 | `dim_survey_response` | survey response, with its own sector/size/etc. | page 1 filters |
 | `fact_survey_answer` | ticked option or single answer | page 1 chart |
 | `question_catalogue` | question and answer option | page 1 picker and labels |
-| `fact_was_session` | WAS session (sessions 1-3 unpivoted) | WAS detail |
-| `fact_was_session_topic` | WAS session topic | WAS detail |
+| `fact_was_session` | WAS session (sessions 1-3 unpivoted) | not shown yet |
+| `fact_was_session_topic` | WAS session topic | not shown yet |
 | `fact_event` | event action (empty for now) | page 4 |
 | `badges` | employer badge (empty for now) | page 2 |
-| `dim_date` | day, with month and April–March financial year | all date filters |
+| `dim_date` | day, with month and April–March financial year | not shown yet (the date filters use each table's own dates) |
 
 How each key is made, and which survive a new upload, is in [docs/identifiers.md](docs/identifiers.md).
 Keys: `employer_id` links everything to `dim_employer`; `date` links to `dim_date`;

@@ -702,11 +702,6 @@ Each `load_*` function follows the same pattern:
 - **Why:** a calendar table lets dashboards group by financial year or quarter without date maths.
   Whole financial years mean no partial year at either end.
 
-#### `survey_percentages(answers, question_id)`
-- **What:** the Figure 13 maths on long answers: ticks ÷ respondents to that question.
-- **Why:** kept for the tests. They check the rule on a hand-made example. The dashboard uses its
-  own version (`survey_question_results`), which also applies filters and lists unchosen options.
-
 #### `reconcile(signups, survey, was, report)`
 - **What:** for the survey and for WAS, compares employers flagged "Y" on Account signups with
   employers that really have a record, and counts how many are in both, flagged only, or recorded
