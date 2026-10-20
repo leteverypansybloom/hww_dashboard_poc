@@ -1,4 +1,5 @@
-# The package with the dashboard and BigQuery extras, at the tested
+# The package with the dashboard, BigQuery and py-common (landing)
+# extras, at the tested
 # versions. Run from this folder:
 #   pip install -r requirements.txt -c constraints.txt
--e .[dashboard,bigquery]
+-e .[dashboard,bigquery,landing]

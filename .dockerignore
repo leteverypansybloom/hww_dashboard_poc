@@ -1,0 +1,12 @@
+# Only the code, settings and mappings go into the image. Data, outputs,
+# logs, local settings and tools stay out.
+*
+!pyproject.toml
+!constraints.txt
+!README.md
+!LICENSE
+!src/
+!config.gcp.toml
+!mappings/
+**/__pycache__
+**/*.pyc

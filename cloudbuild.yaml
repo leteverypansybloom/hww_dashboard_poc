@@ -1,0 +1,25 @@
+# Builds the HWW job image in GCP and pushes it to Artifact Registry.
+#
+#   gcloud builds submit --config=cloudbuild.yaml \
+#     --substitutions=_BASE_IMAGE=<py-common image URI>,_IMAGE=<this image URI> .
+#
+# Run from this folder. .dockerignore keeps data and local files out of
+# the upload. See docs/gcp_ingestion.md, step 8.
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=BASE_IMAGE=${_BASE_IMAGE}
+      - --tag=${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _BASE_IMAGE: ""
+  _IMAGE: ""
+
+options:
+  logging: CLOUD_LOGGING_ONLY

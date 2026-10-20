@@ -25,11 +25,40 @@ pip install -r requirements.txt -c constraints.txt
 (On macOS or Linux, activate with `source .venv/bin/activate`. On
 Windows, keep the venv in a short path: Streamlit fails to install in
 long ones.) `requirements.txt` installs the package in editable mode
-with its `dashboard` and `bigquery` extras. `constraints.txt` pins every
+with its `dashboard`, `bigquery` and `landing` extras; `landing` is
+py-common, the shared ingestion library. `constraints.txt` pins every
 library to the versions CI tests, so every laptop, CI and GCP run the
 same code; `python scripts/update_constraints.py` regenerates it. For
 the developer tools, install `requirements-dev.txt` instead (the same
 as `pip install -e ".[dev]"`), with the same `-c constraints.txt`.
+
+**py-common comes from GitHub.** The `landing` extra installs it with
+Git from its repository, pinned to a commit. Before installing:
+
+- set `<GITHUB_ORG>` in `pyproject.toml` (the `landing` extra) to the
+  GitHub organisation that hosts py-common;
+- make sure Git is installed and can reach that repository (signed in,
+  if it's private).
+
+If you don't need ingestion, `pip install -e ".[dashboard,bigquery]" -c
+constraints.txt` installs everything else.
+
+**Installing also adds four commands,** which work from any folder:
+
+| Command | Does the same as |
+|---|---|
+| `hww-ingest [config]` | `python ingest.py [config]` |
+| `hww-wrangle [config]` | `python wrangle.py [config]` |
+| `hww-run [config]` | `hww-ingest`, then `hww-wrangle` only if every file loaded: the daily job in GCP |
+| `hww-dashboard` | `streamlit run dashboard.py` (start it from this folder, so it finds `output/` and the theme) |
+
+**`ModuleNotFoundError: No module named 'hww_dashboard'`** (or
+`'py_common'`) means the project isn't installed in the Python you're
+running. Activate the venv you installed into (`.venv\Scripts\activate`)
+and run the commands from this folder, or run the install above. To
+check which Python is running:
+`python -c "import sys; print(sys.executable)"` should print a path
+inside `.venv`. In VS Code, also select `.venv` as the interpreter.
 
 ## Run
 
@@ -148,13 +177,14 @@ The tables built this way are identical to those built from the
 workbooks directly (`tests/test_landing.py` checks this against the
 golden snapshot). `[landed] target = "gcp"` uses a landing bucket, a
 store bucket and a BigQuery dataset instead of the local folders; see
-the comments in `config.toml`. That route is unit-tested against a fake
+[docs/gcp_ingestion.md](docs/gcp_ingestion.md) for every step. That route is unit-tested against a fake
 BigQuery client but has not been run against a real project yet.
 `landing/`, `store/` and `landed/` hold copies of the data, so they are
 not kept in git.
 
 Operator instructions: [docs/runbook.md](docs/runbook.md).
 GCP deployment and acceptance checks: [docs/gcp.md](docs/gcp.md).
+Ingesting on GCP with py-common, start to finish: [docs/gcp_ingestion.md](docs/gcp_ingestion.md).
 
 How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md).
 
@@ -170,7 +200,7 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 | `output/` | The tables `wrangle.py` writes. Not kept in git: with real data it holds organisation names and survey answers. |
 | `tests/` | Tests grouped by the function under test, the golden-output check and page smoke tests. |
 | `tests/data/` | Synthetic input workbooks and the frozen config the tests use ([README](tests/data/README.md)). |
-| `docs/` | The pipeline guide, the architecture notes, the rule register ([rules.md](docs/rules.md)), the identifiers, the output contract and the data protection notes ([data_protection.md](docs/data_protection.md), for the DPIA). |
+| `docs/` | The pipeline guide, the GCP guides ([gcp.md](docs/gcp.md), [gcp_ingestion.md](docs/gcp_ingestion.md)), the architecture notes, the rule register ([rules.md](docs/rules.md)), the identifiers, the output contract and the data protection notes ([data_protection.md](docs/data_protection.md), for the DPIA). |
 | `CONTRIBUTING.md`, `AGENTS.md` | How to set up, check and change the project, for people and for coding agents. |
 | `DECISIONS_en.md` | The decision log: what was decided, when and why. |
 

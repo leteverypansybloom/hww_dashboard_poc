@@ -5,6 +5,11 @@ client. The pipeline writes the interim reporting tables directly; py-common
 continues to land and load raw data, and Dataform later replaces these rules.
 The current Streamlit dashboard still reads local CSV files.
 
+This page runs `wrangle.py` on workbooks mounted from the landing bucket.
+To ingest them with py-common first (`ingest.py`, typed BigQuery tables)
+and have `wrangle.py` read those instead, follow
+[gcp_ingestion.md](gcp_ingestion.md).
+
 ## Resources and access
 
 Use the approved region (for example `europe-west2`) for the job and dataset.

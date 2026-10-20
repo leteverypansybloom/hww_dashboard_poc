@@ -4,6 +4,23 @@
 
 ### Added
 
+- Commands installed with the package: `hww-ingest`, `hww-wrangle`,
+  `hww-dashboard`, and `hww-run`, which runs ingestion and then, only if
+  every file loaded, the pipeline.
+- A Dockerfile for the daily GCP job, built on py-common's image, with
+  `cloudbuild.yaml` to build it in GCP and `config.gcp.toml` for it to
+  run with. `docs/gcp_ingestion.md` covers building, deploying and
+  scheduling it.
+
+### Changed
+
+- `requirements.txt` installs py-common (the `landing` extra). Its GitHub
+  organisation is a placeholder, `<GITHUB_ORG>`, to set before installing.
+- Ingestion logs through the package's logging, so `HWW_LOG_FORMAT=json`
+  gives structured lines for its own and py-common's messages.
+
+### Added
+
 - Ingestion with py-common's typed route: `python ingest.py` checks each
   workbook against its contract (`hww_dashboard.landing`) and loads it into
   a typed table, locally or in BigQuery. With `[landed] read = true`,

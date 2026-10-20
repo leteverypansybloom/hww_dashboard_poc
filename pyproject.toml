@@ -30,6 +30,19 @@ dependencies = [
     "openpyxl>=3.1.5,<4",
 ]
 
+# Commands installed with the package, usable from any folder:
+#   hww-ingest     land the workbooks with py-common (needs [landing])
+#   hww-wrangle    build the tables and the report
+#   hww-run        hww-ingest, then hww-wrangle if it succeeded (the
+#                  scheduled job)
+#   hww-dashboard  start the Streamlit dashboard (needs [dashboard])
+# Each takes the config file as its argument, config.toml by default.
+[project.scripts]
+hww-ingest = "hww_dashboard.landing:main"
+hww-wrangle = "hww_dashboard.wrangle:main"
+hww-run = "hww_dashboard.job:main"
+hww-dashboard = "hww_dashboard.serve:main"
+
 [project.optional-dependencies]
 # The Streamlit dashboard (requirements.txt installs it).
 dashboard = [
@@ -44,9 +57,11 @@ bigquery = [
 ]
 # Ingestion with py-common (python ingest.py; [landed] in config.toml).
 # Pinned to a commit of the shared library; its gcp extra brings the GCS
-# and BigQuery adapters.
+# and BigQuery adapters. Replace <GITHUB_ORG> with the GitHub
+# organisation that hosts py-common before installing this extra (or
+# dev, which includes it).
 landing = [
-    "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@36b7e593f0061488b1ba38940614cab09867416f",
+    "py-common[gcp] @ git+https://github.com/<GITHUB_ORG>/py-common.git@36b7e593f0061488b1ba38940614cab09867416f",
 ]
 dev = [
     "hww-dashboard[dashboard,bigquery,landing]",

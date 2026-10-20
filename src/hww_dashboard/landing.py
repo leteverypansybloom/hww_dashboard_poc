@@ -56,6 +56,12 @@ from py_common.parquet import column_name
 from py_common.pipeline import Pipeline
 from py_common.ports import ObjectStore, Source, Warehouse
 
+from hww_dashboard.logs import (
+    close_logging,
+    configure_logging,
+    log_format,
+    new_run_id,
+)
 from hww_dashboard.wrangle import (
     MAPPING_COLUMNS,
     SOURCES,
@@ -976,15 +982,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         "first (local target only)",
     )
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        results = ingest(args.config, args.stage)
-    except InputError as error:
-        logger.error("Stopped: %s", error)
+        mode = log_format()
+    except ValueError as error:
+        print(f"Stopped: {error}", file=sys.stderr)
         return 1
-    text, ok = summary(results)
-    print(text)
-    return 0 if ok else 1
+    # The project's own log setup, so HWW_LOG_FORMAT=json gives Cloud
+    # Logging structured lines. py-common logs under its own name, so
+    # its lines get the same handlers.
+    handlers = configure_logging(new_run_id(), mode)
+    library = logging.getLogger("py_common")
+    library.setLevel(logging.INFO)
+    for handler in handlers:
+        library.addHandler(handler)
+    try:
+        try:
+            results = ingest(args.config, args.stage)
+        except InputError as error:
+            logger.error("Stopped: %s", error)
+            return 1
+        text, ok = summary(results)
+        for line in text.splitlines():
+            logger.info("%s", line)
+        if not ok:
+            logger.error(
+                "Ingestion did not load every file; see the lines above."
+            )
+        return 0 if ok else 1
+    finally:
+        for handler in handlers:
+            library.removeHandler(handler)
+        close_logging(handlers)
 
 
 __all__ = [
