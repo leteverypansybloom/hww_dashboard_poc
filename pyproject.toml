@@ -61,7 +61,7 @@ bigquery = [
 # organisation that hosts py-common before installing this extra (or
 # dev, which includes it).
 landing = [
-    "py-common[gcp] @ git+https://github.com/<GITHUB_ORG>/py-common.git@36b7e593f0061488b1ba38940614cab09867416f",
+    "py-common[gcp] @ git+https://github.com/<GITHUB_ORG>/py-common.git@27163d25677852811bebc102ffc0a3ea3658bb2b",
 ]
 dev = [
     "hww-dashboard[dashboard,bigquery,landing]",
