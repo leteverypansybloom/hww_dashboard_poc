@@ -201,7 +201,7 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 | `tests/` | Tests grouped by the function under test, the golden-output check and page smoke tests. |
 | `tests/data/` | Synthetic input workbooks and the frozen config the tests use ([README](tests/data/README.md)). |
 | `docs/` | The pipeline guide, the GCP guides ([gcp.md](docs/gcp.md), [gcp_ingestion.md](docs/gcp_ingestion.md)), the architecture notes, the rule register ([rules.md](docs/rules.md)), the identifiers, the output contract and the data protection notes ([data_protection.md](docs/data_protection.md), for the DPIA). |
-| `CONTRIBUTING.md`, `AGENTS.md` | How to set up, check and change the project, for people and for coding agents. |
+| `CONTRIBUTING.md` | How to set up, check and change the project. |
 | `DECISIONS_en.md` | The decision log: what was decided, when and why. |
 
 ## Checks for developers
@@ -242,7 +242,7 @@ that copy. When an output change has been agreed, run
 
 | Page | Mockup | Notes |
 |---|---|---|
-| Home | – | Headline numbers and the latest data quality report. |
+| Home | - | Headline numbers and the latest data quality report. |
 | Employer view | page 2 | Pick one or more employers. Dates after today (booked WAS sessions) are not counted as engagement yet. |
 | Engagement | page 3 | Monthly counts and running total. Shown as two panels sharing the month axis rather than one chart with two y-axes, so the two scales can't be misread against each other. |
 | Events | page 4 | Charts `fact_event.csv` once it has rows; until then shows a message. |
@@ -260,9 +260,9 @@ To show the HWW logo instead of the text name, save it as `assets/logo.png` in t
 1. Put the real files in the input folder and change the file names in `config.toml`.
 2. Run `python wrangle.py` and read **Needs attention** at the top of
    `output/data_quality_report.md`. Each line says what was found and what to do, for example:
-   - values not in the mapping files – add them to the CSVs in `mappings/`;
-   - new or missing survey columns – the form changed; update `mappings/survey_columns.csv`;
-   - answers not in `survey_answers.csv` – add the option, or a Welsh translation to
+   - values not in the mapping files - add them to the CSVs in `mappings/`;
+   - new or missing survey columns - the form changed; update `mappings/survey_columns.csv`;
+   - answers not in `survey_answers.csv` - add the option, or a Welsh translation to
      `survey_answer_translations.csv`.
 3. Run again until Needs attention says `None.`, then `python -m pytest`.
 

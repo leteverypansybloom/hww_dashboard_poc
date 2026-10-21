@@ -13,7 +13,7 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
-## 2026-10-18 — Production readiness
+## 2026-10-18 - Production readiness
 
 The production-readiness review prepared the prototype for two jobs:
 running on real data until the Dataform models exist, and being the
@@ -394,7 +394,7 @@ The CSV files and the report now always use LF, and `.gitattributes`
 keeps text files LF in every working copy. The content is unchanged,
 and so are the committed golden files.
 
-## 2026-10-17 — Code-quality review
+## 2026-10-17 - Code-quality review
 
 A line-by-line review of `wrangle.py` (branch `review/code-quality`)
 changed what stops a run. These are decisions as well as fixes:
@@ -415,7 +415,7 @@ changed what stops a run. These are decisions as well as fixes:
 - **The golden test is read-only.** Tests never rewrite
   `tests/golden/`.
 
-## 2026-10-17 — Package layout
+## 2026-10-17 - Package layout
 
 ### An installable package with one `wrangle` module
 
@@ -444,7 +444,7 @@ quality report of a run on synthetic inputs, at a fixed time, with
 the snapshot in `tests/golden/`. A refactor or dependency upgrade
 can't change the numbers without the test failing.
 
-## 2026-10-10 — Prototype design
+## 2026-10-10 - Prototype design
 
 Recorded on 2026-10-18 from `docs/pipeline_guide.md`, section 8, which
 has the reasoning in full.

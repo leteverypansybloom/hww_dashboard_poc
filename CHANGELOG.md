@@ -64,7 +64,7 @@
 - Privacy guards, source-volume checks, action summaries and protected run logs.
 - Pinned dependencies, pre-commit hooks, dependency audits, coverage gates,
   Windows CI and oldest/newest dependency test jobs.
-- Contributor and agent guidance, decision log, operator and GCP runbooks, MIT
+- Contributor guidance, decision log, operator and GCP runbooks, MIT
   licence, and process-level reproducibility tests.
 
 ### Changed

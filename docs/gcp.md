@@ -57,9 +57,8 @@ run `python -m hww_dashboard.wrangle /app/config.local.toml`. Install from the
 reviewed source; do not include workbooks, outputs, logs, credentials or git
 history in its build context. Set `HWW_GIT_COMMIT` to the source commit and
 `HWW_LOG_FORMAT=json`. Pin the Python base image and deploy an image digest.
-Docker Desktop was unavailable during this implementation; no container was
-built or tested here. The deployment team must build and smoke-test the image
-before enabling a schedule.
+The image has not yet been built or tested. The deployment team must build
+and smoke-test it before enabling a schedule.
 
 ## Job configuration
 

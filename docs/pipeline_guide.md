@@ -274,7 +274,7 @@ this way) and **Gotchas** (what can trip you up).
 - **Gotcha:** when you add a check, raise `InputError` with a message that names the file and what
   to change. Don't raise `SystemExit` or `print` and continue.
 
-#### `class Report` — `add`, `dropped`, `needs`, `to_act_on`, `render`, `write`
+#### `class Report` - `add`, `dropped`, `needs`, `to_act_on`, `render`, `write`
 - **What:** collects markdown lines for `data_quality_report.md`, grouped into the sections in
   `Report.ORDER`. `unmapped` is a `Counter` keyed by `(dimension, source, raw value)`.
   `dropped()` adds a "Rows dropped" line only if the count is non-zero. `needs()` counts something
@@ -817,7 +817,7 @@ allocated 2025-11-27, `10-49` employees, sector `Private sector`, industry `Othe
 |---|---|---|---|---|
 | 1 | 2025-12-14 | Under 90 minutes | 2025-12-21 | `Mental health and wellbeing, burnout etc. ` |
 | 2 | *(blank)* | Under 90 mins | 2026-07-11 | `Physical Activity ;#Mental Health and Wellbeing` |
-| 3 | 2026-09-21 | – | – | – |
+| 3 | 2026-09-21 | - | - | - |
 
 **Peer mentoring**, Excel row 12: Participant ID `0011`, Business Name `Org 11`, interest
 2025-12-27, size `50-249`, sector `Public`, industry blank.

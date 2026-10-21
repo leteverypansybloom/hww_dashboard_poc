@@ -1,74 +1,82 @@
-# Production-readiness acceptance record
+# Production-readiness record
 
-Prepared on 2026-10-18 for both interim real-data runs and the Dataform reference.
-The approved work builds on `review/code-quality`; no remote or merge is created.
+Last assessed on 2026-10-18, for the interim real-data runs and the
+Dataform reference.
 
 ## RAP assessment
 
-The NHS framework is cumulative: higher levels require the lower levels too.
-Before this work the project met most Silver engineering practices but could
-not claim Baseline overall without recorded human review and open publication.
-After this work the engineering requirements for Silver are substantially met;
-a formal level still depends on the process gates below. Gold requires actual
-CI execution, scheduled operation and demonstrated use, not just configuration.
+The NHS framework is cumulative: each level needs the ones below it.
+Before the production-readiness work the project met most Silver
+engineering practices, but could not claim Baseline overall without
+recorded human review and open publication. The engineering
+requirements for Silver are now largely met; a formal level still
+depends on the process gates below. Gold needs CI that actually runs,
+scheduled operation and demonstrated use, not just configuration.
 
-| Criterion | Before | After and evidence |
+| Criterion | Before | Now, and evidence |
 |---|---|---|
 | Open-source language | Met | Python; pyproject.toml |
 | Version-controlled code | Met locally | Git history and logical commits; remote backup still needed |
 | Reproduction instructions | Partial | README, constraints.txt, synthetic demo, runbook |
-| Open publication | Not met | MIT licence supplied; owner must decide publication and review overrides first |
+| Open publication | Not met | MIT licence supplied; owner to decide publication and review overrides first |
 | Minimal manual intervention | Met locally | One command; cloud operation still to prove |
 | Documentation | Mostly met | Runbook, schemas, rules, identifier and protection notes |
 | Standard organisation | Met | src/, tests/, docs/ |
-| Reusable functions | Met | Functional pipeline; new operational modules |
+| Reusable functions | Met | Functional pipeline; separate operational modules |
 | Coding standards | Met | Black, Ruff, strict mypy |
 | Test framework | Met | Golden, unit, scenario, failure and reproducibility tests |
 | Dependency information | Ranges only | constraints.txt and separate extras |
 | Automatic logs | Console only | Per-run logs and structured cloud output |
 | Tidy data | Met | Dimensions and long fact tables, schema contracts |
 | Fully packaged | Met | Installable package and packaged schemas |
-| Automatic CI | Config only | Windows/Linux and version jobs configured; no remote execution yet |
+| Automatic CI | Config only | Windows/Linux and version jobs configured; not yet run on a remote |
 | Schedule/event trigger | Missing | GCP procedure documented; deployment and alerts still to test |
 | Signposted changes | Missing | CHANGELOG.md and version 0.2.0 |
 
-The [NHS levels](https://nhsdigital.github.io/rap-community-of-practice/introduction_to_RAP/levels_of_RAP/)
-and [Duck Book](https://best-practice-and-impact.github.io/qa-of-code-guidance/)
-are the review references. The Duck Book's fixed checklists were withdrawn when
-reviewed; its principles and chapters were used instead. Readable/modular code,
-configuration, dependencies, data documentation, tests and reproducibility now
-have code and documentation evidence. Assurance still requires a human to
-validate methodology, review changes and assess outputs against intended use.
+The assessment used the
+[NHS RAP levels](https://nhsdigital.github.io/rap-community-of-practice/introduction_to_RAP/levels_of_RAP/)
+and the [Duck Book](https://best-practice-and-impact.github.io/qa-of-code-guidance/).
+The Duck Book's fixed checklists have been withdrawn, so its
+principles and chapters were used instead. Readable, modular code,
+configuration, dependencies, data documentation, tests and
+reproducibility all have code and documentation behind them.
+Assurance still needs a person to validate the method, review changes
+and check the outputs against their intended use.
 
 ## Remaining gates and limitations
 
-- Run the optional live BigQuery test in a disposable dataset, then verify
-  failure rollback, job permissions, freshness and alerts in GCP. Fake-client
-  tests do not prove BigQuery service behavior. Build and test the deployment
-  image; Docker Desktop was unavailable here.
-- Complete the DPIA: retained organisation names and some free-form values can
-  identify people. Pattern guards do not certify anonymity. Approve access,
-  retention, region and any future free-text vocabulary restrictions.
-- Name operators and backup, expected source arrivals and a reporting sign-off
-  owner. Require human review and CI checks once a remote is configured.
-- Freeze uploads for a run or use an immutable batch prefix. Checksums do not
-  pin object generations. Prevent overlapping executions through orchestration.
-- Folder rollback handles ordinary errors; process termination and concurrent
-  readers can encounter a rename gap. The dashboard still reads CSV files and
-  has no authentication; its owners must implement cloud reading and access.
-- Keep bare numeric date serials on the 1900 epoch; agree a contract before
-  accepting 1904 serials. Decide conflicting duplicate survey Entry IDs and
-  leading-zero display-formatted numeric identifiers before changing those rules.
-- Request a stable source identifier for signup rows; row-derived ids can move.
-- Coordinate the survey source of truth/fixed landing name, raw heading
-  translation and privacy exclusions with the solution repository. Dataform
-  must validate identifier cases, scenarios and golden results in BigQuery.
-- py-common docs still contain the original dummy survey with an IP address
-  and report links in pushed history. Refer it to its owner/DPO for replacement
-  and any history remediation; this implementation does not edit that repo.
-- Keep organisation overrides private or move them outside the published repo
-  when real organisation names are introduced. Set CODEOWNERS and branch
-  protection when a remote and human reviewer names exist.
+- Run the optional live BigQuery test in a disposable dataset, then
+  check failure rollback, job permissions, freshness and alerts in
+  GCP. Tests against a fake client don't prove what BigQuery does.
+  Build and test the deployment image.
+- Complete the DPIA: retained organisation names and some free-form
+  values can identify people, and pattern checks don't make data
+  anonymous. Approve access, retention, region and any future limits
+  on free-text values.
+- Name the operators and their backup, the expected source arrival
+  dates and who signs off reporting. Require human review and CI
+  checks once there is a remote.
+- Freeze uploads during a run, or use a fixed batch prefix: checksums
+  don't pin object generations. Stop runs overlapping through
+  orchestration.
+- Folder rollback handles ordinary errors, but a killed process or a
+  reader at the wrong moment can see the gap during the rename. The
+  dashboard still reads CSV files and has no authentication; its
+  owners need to add cloud reading and access control.
+- Keep bare numeric date serials on the 1900 epoch, and agree a
+  contract before accepting 1904 serials. Decide how to handle
+  conflicting duplicate survey Entry IDs and display-formatted
+  numeric identifiers with leading zeros before changing those rules.
+- Ask for a stable source identifier for signup rows; ids derived
+  from the row can move.
+- Agree with the solution repository the survey's source of truth and
+  fixed landing name, the raw heading translation and the privacy
+  exclusions. Dataform must check the identifier cases, scenarios and
+  golden results in BigQuery.
+- Keep organisation overrides private, or outside the published
+  repository, once real organisation names are added. Set CODEOWNERS
+  and branch protection once there is a remote and named reviewers.
 
-These items prevent a claim of deployed production readiness today. The local
-implementation is ready for human review and cloud acceptance testing.
+Until these are done the project can't claim to be ready for
+production. It is ready for human review and cloud acceptance
+testing.

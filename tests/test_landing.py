@@ -367,6 +367,15 @@ class TestBigQueryTables:
         queries: list[str] = []
 
         def query(sql: str, job_config: Any = None) -> SimpleNamespace:
+            """Answer the audit query and the table read.
+
+            Args:
+                sql: The query text.
+                job_config: Ignored.
+
+            Returns:
+                A result holding the audit row, or the table as Arrow.
+            """
             queries.append(sql)
             if "FROM `p.d.audit`" in sql:
                 key = "hww/was/dummy_was_database.xlsx_abcdef12"

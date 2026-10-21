@@ -100,10 +100,26 @@ class TestJob:
         calls: list[tuple[str, list[str]]] = []
 
         def ingest(argv: list[str]) -> int:
+            """Record the ingestion call and succeed.
+
+            Args:
+                argv: The arguments it was given.
+
+            Returns:
+                0, for success.
+            """
             calls.append(("ingest", argv))
             return 0
 
         def pipeline(argv: list[str]) -> int:
+            """Record the pipeline call and succeed.
+
+            Args:
+                argv: The arguments it was given.
+
+            Returns:
+                0, for success.
+            """
             calls.append(("wrangle", argv))
             return 0
 
@@ -124,6 +140,14 @@ class TestJob:
         ran: list[str] = []
 
         def pipeline(argv: list[str]) -> int:
+            """Record that the pipeline ran.
+
+            Args:
+                argv: The arguments it was given.
+
+            Returns:
+                0, for success.
+            """
             ran.append("wrangle")
             return 0
 
@@ -148,6 +172,14 @@ class TestServe:
         seen: list[list[str]] = []
 
         def call(command: list[str]) -> int:
+            """Record the command instead of running it.
+
+            Args:
+                command: The command line.
+
+            Returns:
+                0, for success.
+            """
             seen.append(command)
             return 0
 

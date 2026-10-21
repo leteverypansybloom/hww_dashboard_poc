@@ -100,12 +100,26 @@ _BLANK_HEADING = re.compile(r"^col_(?P<letter>[A-Z]+)$")
 
 
 def _strings(*names: str) -> list[Column]:
-    """Optional text columns."""
+    """Declare optional text columns.
+
+    Args:
+        *names: The column headings.
+
+    Returns:
+        One nullable string column per heading.
+    """
     return [Column(name, "string", nullable=True) for name in names]
 
 
 def _dates(*names: str) -> list[Column]:
-    """Optional date columns."""
+    """Declare optional date columns.
+
+    Args:
+        *names: The column headings.
+
+    Returns:
+        One nullable date column per heading.
+    """
     return [Column(name, "date", nullable=True) for name in names]
 
 

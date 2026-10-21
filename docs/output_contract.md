@@ -27,8 +27,8 @@ schemas.
 | `question_catalogue` | question and answer option | `answer_id` |
 | `fact_was_session` | WAS session with any detail recorded | `session_id` |
 | `fact_was_session_topic` | session and topic | `session_id`, `topic` |
-| `fact_event` | event action (placeholder: no source yet) | – |
-| `badges` | badge awarded (placeholder: no source yet) | – |
+| `fact_event` | event action (placeholder: no source yet) | - |
+| `badges` | badge awarded (placeholder: no source yet) | - |
 | `dim_date` | day, in whole financial years | `date` |
 
 How stable each key is across uploads is in
