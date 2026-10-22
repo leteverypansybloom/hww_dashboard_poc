@@ -14,7 +14,10 @@ workbooks uploaded to the landing bucket
 
 It is written to be followed in order, from an empty GCP project. Steps
 1 to 7 run everything from your laptop, which is the quickest way to
-prove it works. Step 8 covers running the ingestion as a scheduled job.
+prove it works. Step 8 runs it in GCP every day as a Cloud Run job.
+Step 9 adds a trigger, so a workbook loads within a minute or so of
+being uploaded, with the daily job kept as a catch-up for anything
+missed.
 
 > **Status.** This route has been tested end to end on local folders,
 > and the GCP parts are unit-tested against a fake BigQuery client. It
@@ -312,19 +315,37 @@ gcloud artifacts repositories create "$REPO" \
 
 ### 8e. Build py-common's image
 
+`gcloud builds submit` uploads your source to a bucket first. By default
+that is `<PROJECT>_cloudbuild`, which many organisations don't let users
+create or use, giving *"The user is forbidden from accessing the bucket
+[<PROJECT>_cloudbuild]"*. So name a bucket you can write to, for
+example the store bucket, and send the build logs to Cloud Logging
+rather than a bucket (both build configs here do that):
+
+```bash
+STAGING="gs://$STORE_BUCKET/cloudbuild-source"
+```
+
 From a copy of the py-common repository at the commit pinned in this
 project's `pyproject.toml` (the `landing` extra):
 
 ```bash
 cd <path to py-common>
 git checkout "$PY_COMMON_COMMIT"
-gcloud builds submit --tag="$REGISTRY/py-common:$PY_COMMON_COMMIT" .
+BASE_IMAGE="$REGISTRY/py-common:$PY_COMMON_COMMIT"
+gcloud builds submit \
+  --config=<path to hww_poc_code>/cloudbuild.py-common.yaml \
+  --substitutions="_IMAGE=$BASE_IMAGE" \
+  --gcs-source-staging-dir="$STAGING" .
 ```
 
-`gcloud builds submit` uploads the folder (leaving out what
-`.gitignore` lists) and builds py-common's `Dockerfile` in GCP. It
-takes a few minutes. Rebuild it only when you move to a new py-common
-commit.
+This uploads the folder (leaving out what `.gitignore` lists) and
+builds py-common's `Dockerfile` in GCP. It takes a few minutes.
+Rebuild it only when you move to a new py-common commit.
+
+If it is still refused, ask for the Service Usage Consumer role
+(`roles/serviceusage.serviceUsageConsumer`) on the project, and
+Storage Object Admin on the staging bucket.
 
 ### 8f. Build this project's image
 
@@ -334,8 +355,12 @@ From this project's folder:
 cd <path to hww_poc_code>
 IMAGE="$REGISTRY/hww-job:$(git rev-parse --short HEAD)"
 gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions="_BASE_IMAGE=$REGISTRY/py-common:$PY_COMMON_COMMIT,_IMAGE=$IMAGE" .
+  --substitutions="_BASE_IMAGE=$BASE_IMAGE,_IMAGE=$IMAGE" \
+  --gcs-source-staging-dir="$STAGING" .
 ```
+
+One image does both jobs: the daily job (step 8g) and the
+upload-triggered service (step 9).
 
 This builds the `Dockerfile` here on top of py-common's image: it
 installs this package, and copies in `config.gcp.toml` and `mappings/`.
@@ -422,6 +447,163 @@ project's image (8f) and deploy the new tag (8g, `gcloud run jobs
 deploy` again). After a py-common change: update the commit in
 `pyproject.toml`, rebuild both images (8e, then 8f) and deploy.
 
+## 9. Run on upload, with the daily job as a catch-up
+
+Step 8 runs once a day. To load a workbook within a minute or so of it
+landing, add an upload trigger, following the team's pattern:
+
+```
+workbook uploaded to the landing bucket (data project)
+  -> bucket notification to a Pub/Sub topic (app project)
+  -> Eventarc trigger
+  -> Cloud Run service (app project), same image as the daily job:
+       ingests the folder the file landed in, then, if nothing was
+       quarantined, rebuilds the reporting tables
+```
+
+**Keep the daily job (step 8i).** Pub/Sub can drop an event, for
+example if the service is down for more than a day, and the daily run
+loads anything that was missed. The two don't get in each other's way:
+
+- **One load at a time.** Both take py-common's lock in the store
+  bucket. If the service and the job meet, one is refused; the job
+  tries again tomorrow, and Pub/Sub delivers the event again.
+- **Nothing loads twice.** A file already loaded is skipped, by the
+  store's marker and by the audit table's check inside the load. A
+  repeated event, or the daily job after an event, finds it loaded.
+- **Rebuilding is repeatable.** The tables are rebuilt from the newest
+  load of every source, so rebuilding twice gives the same tables.
+- **A quarantined file stops the rebuild,** in the service as in the
+  job, so the reporting tables keep the last complete set.
+
+The one thing to know: when the four workbooks arrive at different
+times, each upload rebuilds the tables, so for a while they mix this
+month's file for one source with last month's for another. The daily
+job behaves the same way. If that matters, upload all four together.
+
+### 9a. Names
+
+Your team's guide splits two projects. Add:
+
+```bash
+APP_PROJECT="<APP_PROJECT_ID>"   # Pub/Sub, Cloud Run and Eventarc
+DATA_PROJECT="<DATA_PROJECT_ID>" # the buckets and BigQuery datasets
+TOPIC="<PUBSUB_TOPIC_NAME>"      # e.g. hww-landing-uploads
+SERVICE="<CLOUD_RUN_SERVICE_NAME>" # e.g. hww-on-upload
+```
+
+If everything is in one project, set both to `$PROJECT`. The
+`HWW_GCP_PROJECT`, `HWW_BQ_PROJECT` and bucket and dataset variables
+(step 8g) always name the data project, where the buckets and tables
+are; the service itself runs in the app project.
+
+### 9b. Permissions
+
+Whoever runs these commands needs, as the team's guide lists:
+`pubsub.topics.create`, `pubsub.topics.get`, `pubsub.topics.publish`
+and `pubsub.topics.getIamPolicy` on the app project, and
+`storage.buckets.update` on the landing bucket. Ask the Data
+Engineering team.
+
+The service runs as the service account from step 8c. It needs the
+roles from step 4 and step 8c in the **data** project (buckets and
+datasets), and, in the app project, Eventarc Event Receiver and Cloud
+Run Invoker on the service (below).
+
+### 9c. Topic and bucket notification
+
+```bash
+gcloud pubsub topics create "$TOPIC" --project="$APP_PROJECT"
+
+gcloud storage buckets notifications create "gs://$LANDING_BUCKET" \
+  --project="$DATA_PROJECT" \
+  --topic="projects/$APP_PROJECT/topics/$TOPIC" \
+  --payload-format=json --event-types=OBJECT_FINALIZE
+```
+
+`OBJECT_FINALIZE` means only new uploads publish a message, not deletes
+or changes to a file's details. The command also lets the data
+project's Cloud Storage publish to the topic.
+
+### 9d. Deploy the service
+
+The same image as the daily job (step 8f), started as a service by the
+functions-framework instead of `hww-run`:
+
+```bash
+gcloud run deploy "$SERVICE" \
+  --project="$APP_PROJECT" --region="$REGION" --image="$IMAGE" \
+  --service-account="$SA" --no-allow-unauthenticated \
+  --max-instances=1 --concurrency=1 --timeout=540 \
+  --command="functions-framework" \
+  --args="--source=/app/src/hww_dashboard/service.py,--target=on_upload,--signature-type=cloudevent" \
+  --set-env-vars="HWW_GCP_PROJECT=$DATA_PROJECT,HWW_LANDING_BUCKET=$LANDING_BUCKET,HWW_STORE_BUCKET=$STORE_BUCKET,HWW_LANDED_DATASET=$DATASET,HWW_BQ_PROJECT=$DATA_PROJECT,HWW_BQ_DATASET=$REPORT_DATASET"
+
+gcloud run services add-iam-policy-binding "$SERVICE" \
+  --project="$APP_PROJECT" --region="$REGION" \
+  --member="serviceAccount:$SA" --role="roles/run.invoker"
+
+gcloud projects add-iam-policy-binding "$APP_PROJECT" \
+  --member="serviceAccount:$SA" --role="roles/eventarc.eventReceiver"
+```
+
+| Setting | Why |
+|---|---|
+| `--max-instances=1 --concurrency=1` | One upload is handled at a time. When four files land together, the later events wait their turn rather than being refused by the lock. |
+| `--timeout=540` | Below the Pub/Sub acknowledgement deadline set in 9e, so a long run isn't delivered again while it is still going. |
+| `--no-allow-unauthenticated` | Only Eventarc, as the service account, can call it. |
+
+### 9e. The Eventarc trigger
+
+```bash
+gcloud eventarc triggers create "$TOPIC-trigger" \
+  --project="$APP_PROJECT" --location="$REGION" \
+  --destination-run-service="$SERVICE" \
+  --destination-run-region="$REGION" \
+  --event-filters="type=google.cloud.pubsub.topic.v1.messagePublished" \
+  --transport-topic="projects/$APP_PROJECT/topics/$TOPIC" \
+  --service-account="$SA"
+
+SUBSCRIPTION=$(gcloud eventarc triggers describe "$TOPIC-trigger" \
+  --project="$APP_PROJECT" --location="$REGION" \
+  --format="value(transport.pubsub.subscription)")
+gcloud pubsub subscriptions update "$SUBSCRIPTION" \
+  --project="$APP_PROJECT" --ack-deadline=600
+```
+
+The deadline starts at 10 seconds; 600 gives a run time to finish
+before Pub/Sub tries again.
+
+### 9f. Check it works
+
+1. Upload a workbook again, e.g.
+   `gcloud storage cp ../dummy_was_database.xlsx "gs://$LANDING_BUCKET/hww/was/"`.
+2. In the console, Cloud Run → Services → the service → Logs. Within a
+   minute or so you should see `Upload gs://...: running ...`, then
+   `Upload handled: rebuilt`.
+3. Upload a file to a folder with no pipeline, e.g. `hww/test/`: the
+   logs say `Ignoring upload` and `Upload handled: ignored`.
+
+What the service does with each event:
+
+| Event | Result |
+|---|---|
+| New file in a source's folder | That folder is ingested, then the tables are rebuilt |
+| The same event delivered again | Files are already loaded (skipped), and the tables are rebuilt again: same result |
+| A file is quarantined | Tables not rebuilt; logged at ERROR; not retried, as retrying won't fix the file |
+| The rebuild stops on something a person must fix (a mapping, a setting) | Logged at ERROR; not retried |
+| A file fails, the lock is held, or BigQuery fails | The event is retried by Pub/Sub |
+| Upload to another folder or bucket, or a delete | Ignored |
+
+The alerts in step 8j cover the service too: in their filters, add
+`resource.type="cloud_run_revision"` alongside the job's
+`cloud_run_job`.
+
+If triggers fail with permission errors on older projects, the app
+project's Pub/Sub service agent
+(`service-<APP_PROJECT_NUMBER>@gcp-sa-pubsub.iam.gserviceaccount.com`)
+also needs the Service Account Token Creator role.
+
 ## When something goes wrong
 
 | What you see | What to do |
@@ -430,6 +612,7 @@ deploy` again). After a py-common change: update the commit in
 | `quarantined ... wrong file name, expected ...` | The file was uploaded under the wrong name. Delete it from the landing folder and upload it under the name in `config.toml`. |
 | `no files in its landing folder` | Nothing in `hww/<source>/`. Check the prefix and folder names. |
 | `403` or `Permission denied` | A role from step 4 is missing. |
+| `gcloud builds submit`: forbidden from accessing the bucket `<PROJECT>_cloudbuild` | Add `--gcs-source-staging-dir=gs://<bucket you can write>/cloudbuild-source` and use the build configs in this repo, which keep logs out of buckets (step 8e). |
 | `Not found: Table ... audit` | The audit table wasn't created (step 3). |
 | A run is refused because of a lock | A previous run was stopped. Wait an hour for the lock to expire, or check nothing is running and delete the lock object named in the error. |
 | `wrangle.py` says "No landed table" or "no rows" | Run `ingest.py` first, and check `[landed]` points at the same dataset. |

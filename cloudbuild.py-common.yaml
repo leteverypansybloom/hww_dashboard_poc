@@ -1,0 +1,26 @@
+# Builds py-common's image (its own Dockerfile) in GCP, as the base for
+# this project's image. Run from the py-common folder, naming this file:
+#
+#   gcloud builds submit --config=<path to hww_poc_code>/cloudbuild.py-common.yaml \
+#     --substitutions=_IMAGE=<py-common image URI> \
+#     --gcs-source-staging-dir=gs://<bucket you can write>/cloudbuild-source .
+#
+# A config file, rather than `--tag`, so the build logs go to Cloud
+# Logging only and no default `<project>_cloudbuild` bucket is needed.
+# See docs/gcp_ingestion.md, step 8e.
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _IMAGE: ""
+
+options:
+  logging: CLOUD_LOGGING_ONLY

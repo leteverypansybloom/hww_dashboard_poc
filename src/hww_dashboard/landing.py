@@ -685,6 +685,16 @@ class NewestSource:
     pattern: str
     modified: Callable[[SourceItem], float]
 
+    @property
+    def bucket_name(self) -> str | None:
+        """The wrapped GCSSource's bucket, or None for a local source.
+
+        py-common's upload handler reads it to check an event came from
+        the bucket this pipeline reads.
+        """
+        bucket = getattr(self.source, "bucket_name", None)
+        return bucket if isinstance(bucket, str) else None
+
     def items(self) -> Iterable[SourceItem]:
         """Select by filename date, modification time and filename.
 

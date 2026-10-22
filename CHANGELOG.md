@@ -4,6 +4,13 @@
 
 ### Added
 
+- An upload-triggered Cloud Run service (`hww_dashboard.service`, the
+  `service` extra): it ingests the folder a workbook was uploaded to, then
+  rebuilds the tables unless a file was quarantined. The daily job stays
+  as a catch-up. `docs/gcp_ingestion.md`, step 9, sets it up.
+- `cloudbuild.py-common.yaml`, and build steps that stage the source in a
+  named bucket, for projects that don't allow the default Cloud Build
+  bucket.
 - Commands installed with the package: `hww-ingest`, `hww-wrangle`,
   `hww-dashboard`, and `hww-run`, which runs ingestion and then, only if
   every file loaded, the pipeline.
