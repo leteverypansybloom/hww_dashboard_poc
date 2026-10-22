@@ -69,7 +69,8 @@ section below, everything else is yours.
 
 | Step | Who |
 |---|---|
-| Set-up below: buckets, datasets, `audit` table, repository, roles | Admin |
+| Set-up below: buckets, datasets, repository, roles | Admin |
+| 1b: Create the `audit` table | You |
 | 1–4: Try the ingestion from your laptop (optional) | You |
 | 5–9: Build the images, deploy the daily job, run it, schedule it, alert | You |
 | 10a: Deploy the upload service | You |
@@ -86,16 +87,8 @@ section below, everything else is yours.
   Separate from the landing bucket, or the pipeline would find its own
   copies as new uploads.
 - Datasets `hww_landed` and `hww_reporting`, in `europe-west2`. The
-  pipeline creates its tables, apart from `audit`, which must exist
-  first:
-
-  ```sql
-  CREATE TABLE IF NOT EXISTS `<DATA_PROJECT_ID>.hww_landed.audit` (
-    filename STRING, checksum STRING, destination STRING,
-    source_version STRING, row_count INT64, outcome STRING,
-    timestamp TIMESTAMP
-  );
-  ```
+  pipeline creates its tables, apart from `audit`, which you create
+  yourself once you have BigQuery Data Editor (step 1b).
 
 **App project**
 
@@ -221,6 +214,32 @@ SERVICE="hww-on-upload"
 
 Check there are no blanks: `echo "$REGISTRY" "$SA"` should print two full
 names. (In PowerShell, write each as `$NAME = "value"`.)
+
+## 1b. Create the audit table (BigQuery console or Cloud Shell)
+
+py-common records every load in an `audit` table and checks it before
+loading, so the table must exist before the first run. The pipeline
+creates all its other tables itself. Creating it needs BigQuery Data
+Editor on `hww_landed`, which you have from the set-up. Do it once.
+
+In the BigQuery console, open the data project, click **Compose new
+query**, paste this and click **Run**:
+
+```sql
+CREATE TABLE IF NOT EXISTS `<DATA_PROJECT_ID>.hww_landed.audit` (
+  filename STRING, checksum STRING, destination STRING,
+  source_version STRING, row_count INT64, outcome STRING,
+  timestamp TIMESTAMP
+);
+```
+
+Or in Cloud Shell, with the names from step 1:
+
+```bash
+bq query --project_id="$DATA_PROJECT" --use_legacy_sql=false "CREATE TABLE IF NOT EXISTS \`$DATA_PROJECT.$DATASET.audit\` (filename STRING, checksum STRING, destination STRING, source_version STRING, row_count INT64, outcome STRING, timestamp TIMESTAMP)"
+```
+
+`IF NOT EXISTS` makes it safe to run again.
 
 ## 2. Upload the workbooks (console, or either shell)
 
@@ -603,7 +622,7 @@ datasets:
 | `quarantined ... wrong file name, expected ...` | Uploaded under the wrong name. Delete it from the landing folder and upload it under the name in `config.toml`. |
 | `no files in its landing folder` | Nothing in `hww/<source>/`. Check the folder names. |
 | `403`, `Permission denied`, `Access Denied` | A role from "What the admin sets up" is missing. The message names the account and what it couldn't do; send that to the admin. |
-| `Not found: Table ... audit` | The `audit` table hasn't been created ("What the admin sets up"). |
+| `Not found: Table ... audit` | The `audit` table hasn't been created (step 1b). |
 | `docker push`: permission denied | You need Artifact Registry Writer on the `hww` repository. |
 | Cloud Build errors about `<project>_cloudbuild`, logs or staging | Build in Cloud Shell instead (step 5). |
 | A run is refused because of a lock | A previous run was stopped. Wait an hour for the lock to expire, or check nothing is running and delete the lock object named in the error. |
