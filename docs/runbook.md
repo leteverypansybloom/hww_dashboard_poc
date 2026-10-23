@@ -13,9 +13,9 @@ for reporting. The current output is a complete snapshot of cumulative inputs.
 3. Use a local config (for example `config.local.toml`, ignored by git).
    Paths are relative to that file. Copy `config.toml`, retaining its column
    settings, and change the paths, file names and output settings.
-4. For GCP use a fixed survey file name, matching py-common's contract, rather
-   than the laptop's dated pattern. Agree whether the survey export or the
-   monitoring workbook is the source of truth before deployment.
+4. For GCP use each workbook's fixed file name, matching py-common's contract.
+   The survey comes from the monitoring workbook's Survey info tab, so one
+   upload of that workbook refreshes both sign-ups and the survey.
 
 ## Run on Windows
 

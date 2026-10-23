@@ -108,7 +108,53 @@ class TestContracts:
             ).num_rows
             for source, table in landing.TABLES.items()
         }
-        assert rows == {"signups": 200, "survey": 1, "was": 35, "peer": 11}
+        assert rows == {"signups": 200, "survey": 103, "was": 35, "peer": 11}
+
+    def test_one_upload_loads_signups_and_survey(
+        self, landed_run: Path
+    ) -> None:
+        """Both tables come from the one monitoring workbook upload."""
+        tables = landed.LocalTables(landed_run / "landed")
+        signups = tables.newest_load("hww_signups")
+        survey = tables.newest_load("hww_survey")
+        assert signups.file == survey.file
+        assert signups.file == "dummy_HWW monitoring and reporting.xlsx"
+        assert signups.sha256 == survey.sha256
+
+    def test_survey_info_loads_only_what_the_map_reads(
+        self, landed_run: Path
+    ) -> None:
+        """Email address, Month and free text stay out; sites are text."""
+        schema = pq.read_schema(landed_run / "landed" / "hww_survey.parquet")
+        assert column_name("Email address") not in schema.names
+        assert column_name("Month") not in schema.names
+        assert not [n for n in schema.names if "more_info" in n]
+        assert schema.field("count").type == pa.int64()
+        assert schema.field("number_of_sites").type == pa.string()
+
+    def test_new_survey_column_quarantines_only_the_survey(
+        self, tmp_path: Path, data_folder: Path
+    ) -> None:
+        """A new Survey info heading stops the survey load, not signups."""
+        config = landing_config(tmp_path, data_folder, read=False)
+        cfg = settings_of(config)
+        landing.stage(cfg, data_folder / "inputs", tmp_path / "landing")
+        book = tmp_path / "landing" / "signups" / cfg["survey"]["file"]
+        workbook = load_workbook(book)
+        sheet = workbook["Survey info"]
+        column = sheet.max_column + 1
+        sheet.cell(2, column, "Phone number")
+        sheet.cell(3, column, "Synthetic number")
+        workbook.save(book)
+        workbook.close()
+
+        results = landing.ingest(config)
+
+        (survey,) = results["survey"]
+        (signups,) = results["signups"]
+        assert survey.outcome == Outcome.QUARANTINED
+        assert "Phone number" in "; ".join(survey.errors)
+        assert signups.outcome == Outcome.LOADED
 
     def test_personal_columns_are_not_loaded(
         self, landed_run: Path, data_folder: Path
@@ -342,6 +388,47 @@ class TestLandedInputs:
         right = from_book[columns].map(wrangle.clean_text)
         pd.testing.assert_frame_equal(left, right)
 
+    def test_survey_frame_matches_the_workbook_reader(
+        self, landed_run: Path, data_folder: Path
+    ) -> None:
+        """Survey info read back has read_sheet's headings and values."""
+        cfg = settings_of(landed_run / "config.toml")
+        inputs = landed.landed_inputs(
+            cfg, landed_run, Path(cfg["paths"]["mappings_folder"])
+        )
+        from_table = inputs.read(
+            "survey", cfg["survey"], "Survey info", []
+        ).frame
+        from_book = wrangle.read_sheet(
+            data_folder / "inputs" / cfg["survey"]["file"], "Survey info", 2
+        )
+        columns = list(from_table.columns)
+        assert "Other (more info).6" in from_table.attrs["excluded"]
+        left = from_table[columns].map(wrangle.clean_text)
+        right = from_book[columns].map(wrangle.clean_text)
+        pd.testing.assert_frame_equal(left, right)
+
+    def test_blank_ticks_load_as_not_ticked(
+        self, landed_run: Path, data_folder: Path
+    ) -> None:
+        """A tick cell holding a space or a non-breaking space is blank."""
+        cfg = settings_of(landed_run / "config.toml")
+        inputs = landed.landed_inputs(
+            cfg, landed_run, Path(cfg["paths"]["mappings_folder"])
+        )
+        frame = inputs.read("survey", cfg["survey"], "Survey info", []).frame
+        book = wrangle.read_sheet(
+            data_folder / "inputs" / cfg["survey"]["file"], "Survey info", 2
+        )
+        raw = list(book["Caring responsibilities"])
+        assert " " in raw and "\xa0" in raw
+        ticked = [
+            v
+            for v in frame["Caring responsibilities"]
+            if wrangle.clean_text(v)
+        ]
+        assert ticked == [v for v in raw if isinstance(v, str) and v.strip()]
+
     def test_missing_table_says_to_run_ingest(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
@@ -445,7 +532,7 @@ class TestEndToEnd:
         }
         assert tables == {
             "Account signups": "hww_signups",
-            "Survey export": "hww_survey",
+            "Survey info": "hww_survey",
             "WAS database": "hww_was",
             "Peer mentoring": "hww_peer",
         }
@@ -454,13 +541,44 @@ class TestEndToEnd:
 def test_stage_copies_each_named_workbook(
     tmp_path: Path, data_folder: Path
 ) -> None:
-    """--stage puts each source's workbook in its landing subfolder."""
+    """--stage puts each workbook in its landing folder, once."""
     config = landing_config(tmp_path, data_folder, read=False)
     copies = landing.stage(
         settings_of(config), data_folder / "inputs", tmp_path / "landing"
     )
-    assert sorted(p.parent.name for p in copies) == sorted(wrangle.SOURCES)
+    assert sorted(p.parent.name for p in copies) == ["peer", "signups", "was"]
+    signups = tmp_path / "landing" / "signups"
+    assert [p.name for p in signups.iterdir()] == [
+        "dummy_HWW monitoring and reporting.xlsx"
+    ]
     shutil.rmtree(tmp_path / "landing")
+
+
+class TestLandingFolders:
+    """landing_folders(): which folder each source reads."""
+
+    def test_sources_sharing_a_workbook_share_a_folder(
+        self, fixture_config: Path
+    ) -> None:
+        """Signups and survey both read the monitoring workbook's folder."""
+        folders = landing.landing_folders(settings_of(fixture_config))
+        assert folders == {
+            "signups": "signups",
+            "survey": "signups",
+            "was": "was",
+            "peer": "peer",
+        }
+
+    def test_separate_workbooks_get_their_own_folders(
+        self, fixture_config: Path
+    ) -> None:
+        """A source with its own file, or a file_pattern, reads its own."""
+        cfg = deepcopy(settings_of(fixture_config))
+        cfg["survey"]["file"] = "survey.xlsx"
+        cfg["peer"] = {**cfg["peer"], "file_pattern": "*peer*.xlsx"}
+        folders = landing.landing_folders(cfg)
+        assert folders["survey"] == "survey"
+        assert folders["peer"] == "peer"
 
 
 class TestLandingRegressions:
@@ -529,27 +647,29 @@ class TestLandingRegressions:
     def test_pattern_selects_newest_export_before_loading(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """Filename dates win over discovery order and unrelated files."""
+        """Filename dates win over discovery order and unrelated files.
+
+        A source with file_pattern reads a folder named after itself.
+        """
         config = landing_config(tmp_path, data_folder, read=True)
-        cfg = settings_of(config)
-        survey_file = cfg["survey"]["file"]
+        workbook = settings_of(config)["survey"]["file"]
         pattern = "*healthy-working-wales-employer-survey-tool-*.xlsx"
         text = config.read_text(encoding="utf-8")
+        survey_lines = f'file = "{workbook}"\nsheet = "Survey info"'
+        assert text.count(survey_lines) == 1
         config.write_text(
             text.replace(
-                f'file = "{survey_file}"', f'file_pattern = "{pattern}"'
+                survey_lines,
+                f'file_pattern = "{pattern}"\nsheet = "Survey info"',
             ),
             encoding="utf-8",
         )
-        cfg = settings_of(config)
-        landing.stage(cfg, data_folder / "inputs", tmp_path / "landing")
         folder = tmp_path / "landing" / "survey"
+        folder.mkdir(parents=True)
         newest = "a-healthy-working-wales-employer-survey-tool-2026-10-01.xlsx"
         older = "z-healthy-working-wales-employer-survey-tool-2026-09-01.xlsx"
         for name in (newest, older, "unrelated-2026-12-01.xlsx"):
-            shutil.copyfile(
-                data_folder / "inputs" / survey_file, folder / name
-            )
+            shutil.copyfile(data_folder / "inputs" / workbook, folder / name)
 
         results = landing.ingest(config)["survey"]
 

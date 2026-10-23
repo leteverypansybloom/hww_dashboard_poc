@@ -65,14 +65,15 @@ and check the outputs against their intended use.
   owners need to add cloud reading and access control.
 - Keep bare numeric date serials on the 1900 epoch, and agree a
   contract before accepting 1904 serials. Decide how to handle
-  conflicting duplicate survey Entry IDs and display-formatted
-  numeric identifiers with leading zeros before changing those rules.
-- Ask for a stable source identifier for signup rows; ids derived
-  from the row can move.
-- Agree with the solution repository the survey's source of truth and
-  fixed landing name, the raw heading translation and the privacy
-  exclusions. Dataform must check the identifier cases, scenarios and
-  golden results in BigQuery.
+  repeated survey Counts and display-formatted numeric identifiers
+  with leading zeros before changing those rules.
+- Ask for stable source identifiers for signup rows and survey
+  responses (the survey tool's Entry Id on Survey info); ids derived
+  from the row or from Count can move.
+- Agree with the solution repository the raw heading translation and
+  the privacy exclusions. Survey info, in the monitoring workbook, is
+  the survey's source. Dataform must check the identifier cases,
+  scenarios and golden results in BigQuery.
 - Keep organisation overrides private, or outside the published
   repository, once real organisation names are added. Set CODEOWNERS
   and branch protection once there is a remote and named reviewers.

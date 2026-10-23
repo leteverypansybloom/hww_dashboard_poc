@@ -218,10 +218,13 @@ class TestSyntheticInputs:
     """The committed inputs hold only reserved, synthetic personal data."""
 
     def test_personal_values_are_present(self, input_cells: list[str]) -> None:
-        """Emails, IPs and links exist, so the privacy tests can fail."""
+        """Email addresses exist, so the privacy tests can fail.
+
+        The workbooks the pipeline reads hold no IP addresses or links;
+        TestCheckPublicText checks those with made-up values.
+        """
         assert any(EMAIL.search(cell) for cell in input_cells)
-        assert any(IP.search(cell) for cell in input_cells)
-        assert any(LINK.search(cell) for cell in input_cells)
+        assert "Email address" in input_cells
 
     def test_personal_values_are_reserved_examples(
         self, input_cells: list[str]
@@ -241,7 +244,7 @@ class TestSyntheticInputs:
 
 
 class TestUnpivotSurvey:
-    """``unpivot_survey``: the wide export becomes one row per answer."""
+    """``unpivot_survey``: the wide sheet becomes one row per answer."""
 
     def test_free_text_stays_out(
         self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
@@ -294,6 +297,29 @@ class TestUnpivotSurvey:
                 {},
                 False,
             )
+
+    @pytest.mark.parametrize("blank", [" ", "\xa0", " \xa0 ", "_x000D_"])
+    def test_whitespace_tick_is_not_ticked(self, blank: str) -> None:
+        """Survey info leaves unticked boxes holding a space.
+
+        A plain or non-breaking space (or Excel's escaped line break)
+        means the box was left empty, so it gives no answer row.
+
+        Args:
+            blank: The cell's text.
+        """
+        specs = pd.DataFrame(
+            [["A", "tick", "Q04", "Fatigue or burnout"]],
+            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
+        )
+        answers, _, _ = wrangle.unpivot_survey(
+            pd.DataFrame({"response_id": ["R1", "R2"], "A": [blank, "x"]}),
+            specs,
+            {},
+            {},
+            False,
+        )
+        assert list(answers["response_id"]) == ["R2"]
 
     def test_tick_uses_catalogue_answer_case(self) -> None:
         """Case differences in tick labels cannot break catalogue links."""

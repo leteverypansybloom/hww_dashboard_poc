@@ -295,10 +295,10 @@ class TestPublish:
         employer = client.rows("dim_employer")[0]
         assert employer["in_signups"] in (True, False)
         assert isinstance(client.rows("dim_date")[0]["year"], int)
-        unlinked = [
-            r for r in client.rows("fact_engagement") if not r["employer_id"]
+        undated = [
+            r for r in client.rows("fact_signup") if not r["survey_dates"]
         ]
-        assert unlinked and unlinked[0]["employer_id"] is None
+        assert undated and undated[0]["survey_dates"] is None
 
     def test_a_second_run_replaces_tables_and_adds_a_run(
         self, client: FakeClient

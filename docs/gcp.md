@@ -47,8 +47,8 @@ location = "europe-west2"
 ```
 
 Set each source's `file` to its exact relative landing path, for example
-`was/agreed-was-name.xlsx`. For the survey remove `file_pattern` and set `file`
-to its agreed fixed name. Match the py-common contract; changing a source file
+`was/agreed-was-name.xlsx`. The survey is read from the monitoring workbook's
+`Survey info` sheet, so `[survey] file` is the same as `[signups] file`. Match the py-common contract; changing a source file
 name is a coordinated change. Keep `keep_other_free_text = false`.
 
 The image must install this package with the `bigquery` extra and

@@ -14,7 +14,7 @@ The prototype does every one of those jobs itself, in Python:
 
 ```
 input folder  →  hww_dashboard.wrangle  →  output/*.csv       →  Streamlit pages
-(4 workbooks)    (read, clean, model)     or an interim         (dashboard_data
+(3 workbooks)    (read, clean, model)     or an interim         (dashboard_data
                                           BigQuery dataset         + dashboard)
                                           (star schema)
 ```
@@ -60,7 +60,7 @@ design (its `INGESTION_FRAMEWORK_GUIDE.md`, section 8).
 
 | Prototype piece | What it does | Production home |
 |---|---|---|
-| `input_folder`, `input_file`, `newest_match` | Find each workbook in a local folder; the survey export is the newest by the date in its name | py-common `GCSSource`, one landing folder per workbook, fixed names |
+| `input_folder`, `input_file`, `newest_match` | Find each workbook in a local folder by its name (or the newest matching a `file_pattern`); the monitoring workbook holds both Account signups and Survey info | py-common `GCSSource`, one landing folder per workbook, fixed names; the monitoring workbook's folder feeds the signups and survey tables |
 | `read_sheet`, `require`, `check_config` | Read a sheet by name or position below a heading row; stop with a clear message on missing files, sheets or columns | py-common `Contract` (heading row, listed columns, warn or quarantine) |
 | `COLUMNS`, survey `drop` roles, `keep_other_free_text` | Never write personal columns or free text (the tests check against `[privacy]` in the config) | py-common contracts' `excluded` columns (personal data never loaded), then Dataform's selected columns |
 | `clean_text`, `to_date`, `drop_blank_rows` | Tidy cells, read dates day-first, skip blank rows | Dataform staging models (`SAFE_CAST`, trimming) |
@@ -99,12 +99,11 @@ needs. Nothing fits without changing what the prototype does:
 
 - **Different source.** py-common lists files in a GCS bucket (or a
   local folder, for development), each workbook with one agreed file
-  name; a renamed upload is quarantined. The prototype reads four local
-  files and picks the survey export by the date in its name.
+  name; a renamed upload is quarantined. The prototype reads three
+  local files, and can pick a file by the date in its name.
 - **Sheets by name only.** py-common's contracts find worksheets by
-  name. The exports' sheets are named `in`, `query` and `query (1)` by
-  the systems that make them, so the prototype picks three of them by
-  position.
+  name. The exports' sheets are named `query` and `query (1)` by the
+  systems that make them, so the prototype picks them by position.
 - **Different column names.** py-common names columns exactly as
   written (`Organisation Industry ` keeps its trailing space), blank
   headings `col_B` and repeats `Other_2`. The prototype trims headings
@@ -113,7 +112,7 @@ needs. Nothing fits without changing what the prototype does:
   would change those identifiers for no gain in the prototype.
 - **Different output.** py-common's pipeline ends in a warehouse load
   with audit records and stored copies. The prototype rebuilds every
-  table from all four files on every run, and has no warehouse.
+  table from all four sheets on every run, and has no warehouse.
 
 Adding py-common anyway would mean wrapping it to undo these
 differences. An earlier attempt did exactly that (a `py-common-ingestion`
@@ -126,17 +125,17 @@ These came up while comparing the two projects. None blocks the
 prototype; each needs an answer before the production route can
 reproduce the dashboard.
 
-1. **Where survey answers come from.** The prototype reads the survey
-   tool's own export, downloaded with a date in its name. py-common's
-   examples load the monitoring workbook's `Survey info` sheet
-   (`raw_hww.hww_survey_info`), and its "one file name per workbook"
-   rule would treat dated export names as separate files. Decide which
-   is the source of truth; if it is the export, it needs a fixed name
-   on upload.
+1. **Where survey answers come from.** Settled (`DECISIONS_en.md`,
+   2026-10-23): the `Survey info` sheet of the monitoring workbook, as
+   in py-common's examples (`raw_hww.hww_survey_info`). It arrives with
+   the monitoring workbook under its one fixed name, so the export's
+   dated names no longer matter. Its `Count` column is the response
+   id, which is not stable across uploads
+   ([identifiers.md](identifiers.md)).
 2. **Column names in mappings.** If Dataform reuses
    `survey_columns.csv`, its column names must be translated to the raw
-   payload keys (`Other.1` becomes `Other_2`, trimmed headings get
-   their spaces back).
+   payload keys (`Other (more info).1` becomes `Other (more info)_2`,
+   trimmed headings get their spaces back).
 3. **Cleaning rules move to SQL.** `clean_text`, day-first dates, the
    `Y (Dec)` flag parser and the employer tie-breaks are Python here.
    The `ASSUMPTIONS` list at the end of every data quality report is

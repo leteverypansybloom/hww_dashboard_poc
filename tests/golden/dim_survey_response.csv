@@ -1,2 +1,104 @@
 response_id,employer_id,date,sector,industry,size_band,sites_band
-19460,,2026-09-08,Unknown,Unknown,Unknown,Unknown
+103,Ed5bb318b,2026-09-08,Other,Other,1000+,2-5
+102,Ee5043f73,2026-09-04,Private,Human Health & Social Work Activities,1000+,2-5
+101,E8308eb53,2026-09-04,Other,Human Health & Social Work Activities,250-999,2-5
+100,Ec789d568,2026-08-28,Charity or voluntary,Human Health & Social Work Activities,0-9,1
+99,Eb634f870,2026-08-24,Charity or voluntary,Education,10-49,2-5
+98,Efdeceb25,2026-08-13,Charity or voluntary,Education,250-999,2-5
+97,Ebc43b46a,2026-08-11,Charity or voluntary,Human Health & Social Work Activities,250-999,2-5
+96,E06b54441,2026-08-10,Other,Human Health & Social Work Activities,250-999,2-5
+95,E8e41c795,2026-08-07,Charity or voluntary,Other,250-999,2-5
+94,E7f29becf,2026-08-05,Charity or voluntary,Other,10-49,1
+93,E22270a22,2026-08-05,Charity or voluntary,"Public Administration, Defence, & Social Security",50-249,2-5
+92,E6e270e4a,2026-08-05,Charity or voluntary,Property & Real Estate Services,10-49,2-5
+91,E8758777a,2026-08-04,Charity or voluntary,Other,10-49,1
+90,E3c2c7766,2026-08-04,Public,"Public Administration, Defence, & Social Security",10-49,6+
+89,E5f6d6e31,2026-07-27,Public,"Public Administration, Defence, & Social Security",1000+,6+
+88,Ebe9f60b2,2026-07-22,Other,Other,1000+,6+
+87,Eada26654,2026-07-17,Public,Other,250-999,2-5
+86,Ec543e7e4,2026-07-17,Private,Other,0-9,1
+85,E0ea57f51,2026-07-17,Charity or voluntary,Other,10-49,1
+84,Ee265c02b,2026-07-15,Other,Human Health & Social Work Activities,250-999,2-5
+83,Eb99a3aa5,2026-07-14,Public,Human Health & Social Work Activities,250-999,2-5
+82,Ecd0ef611,2026-07-08,Public,Other,250-999,1
+81,Ee6efca00,2026-07-06,Private,Other,250-999,2-5
+80,E8a6bfad7,2026-07-02,Charity or voluntary,"Public Administration, Defence, & Social Security",250-999,1
+79,E4abc24ae,2026-07-02,Other,Property & Real Estate Services,50-249,1
+78,Ea7885286,2026-07-02,Public,Education,10-49,2-5
+77,Eae2282ab,2026-07-02,Private,Wholesale,10-49,2-5
+76,E88f78f23,2026-07-01,Private,Information & Communication,10-49,2-5
+75,Eb493898d,2026-06-09,Private,Manufacturing,50-249,1
+74,E562f9dab,2026-06-03,Private,Motor Trades,10-49,1
+73,E78676da7,2026-05-21,Private,"Mining, Quarrying, & Utilities",250-999,1
+72,E0b0ebd14,2026-05-19,Private,Financial & Insurance,250-999,2-5
+71,E62b73cb6,2026-05-05,Private,Education,250-999,2-5
+70,E61d70320,2026-04-27,Public,Human Health & Social Work Activities,1000+,6+
+69,Eadff7275,2026-04-20,Public,Education,10-49,2-5
+68,E3b951236,2026-04-20,Public,Human Health & Social Work Activities,1000+,6+
+67,Ef2e61294,2026-04-15,Private,Manufacturing,50-249,1
+66,Ef8e6f0b1,2026-03-30,Public,Human Health & Social Work Activities,1000+,1
+65,Ef6ae0edf,2026-03-26,Public,Human Health & Social Work Activities,10-49,6+
+64,Ecb6ead41,2026-03-19,Charity or voluntary,Other,1000+,Not applicable (remote)
+63,E0d2e31ac,2026-03-12,Public,Other,1000+,2-5
+62,E3d1e3bb8,2026-03-11,Charity or voluntary,Human Health & Social Work Activities,10-49,2-5
+61,E0a8a1995,2026-03-10,Private,Other,10-49,1
+60,E97d66af1,2026-03-09,Public,Other,1000+,6+
+59,Eb04c6833,2026-03-09,Private,"Public Administration, Defence, & Social Security",50-249,1
+58,Ea34f5ca0,2026-03-05,Private,Property & Real Estate Services,50-249,1
+57,E27c0b8b7,2026-03-04,Private,Education,10-49,2-5
+56,Eb822dc66,2026-02-23,Public,Manufacturing,1000+,2-5
+55,Ed1ab8648,2026-02-24,Public,Other,1000+,6+
+54,Ea6037456,2026-02-25,Public,"Public Administration, Defence, & Social Security",1000+,6+
+53,Ea7fffe36,2026-02-25,Charity or voluntary,Other,50-249,6+
+52,E4967e63d,2026-02-24,Public,Construction,50-249,1
+51,E71d41197,2026-02-24,Charity or voluntary,Manufacturing,250-999,2-5
+50,E7d61283f,2026-02-23,Private,Other,250-999,6+
+49,E39d4585a,2026-02-18,Public,"Public Administration, Defence, & Social Security",10-49,1
+48,E8bd7a8e6,2026-02-18,Private,Other,0-9,1
+47,E99c8c91d,2026-02-17,Public,Human Health & Social Work Activities,10-49,6+
+46,Ea6a8bbe3,2026-02-16,Public,Other,50-249,1
+45,E0016300d,2026-02-10,Private,Wholesale,10-49,1
+44,E4f8d0112,2026-02-02,Charity or voluntary,Education,250-999,6+
+43,E864ef490,2026-02-02,Charity or voluntary,Education,250-999,6+
+42,E8690c6f9,2026-01-28,Charity or voluntary,Education,0-9,1
+41,E66389a61,2026-01-26,Public,Human Health & Social Work Activities,1000+,6+
+40,Eca10ef48,2026-01-26,Charity or voluntary,Other,10-49,2-5
+39,E7fc38ca0,2026-01-23,Private,Other,1000+,1
+38,E68e85caa,2026-01-22,Private,Information & Communication,1000+,1
+37,E21be1572,2026-01-22,Public,Information & Communication,50-249,6+
+36,Ea96a1825,2026-01-22,Private,Information & Communication,50-249,1
+35,E2b9e4c7c,2026-01-22,Public,Human Health & Social Work Activities,10-49,6+
+34,E1205b7ad,2026-01-22,Public,Human Health & Social Work Activities,250-999,2-5
+33,Ebb96ea89,2026-01-21,Private,Information & Communication,50-249,2-5
+32,Eb8ee93d1,2026-01-20,Public,Human Health & Social Work Activities,10-49,1
+31,E3cc23e4f,2026-01-20,Private,Human Health & Social Work Activities,10-49,1
+30,E47cb72c0,2026-01-13,Public,Human Health & Social Work Activities,250-999,2-5
+29,Effc55f04,2026-01-12,Public,Human Health & Social Work Activities,50-249,2-5
+28,Ef997c0e9,2026-01-07,Charity or voluntary,Accommodation & Food Services,10-49,1
+27,E9a693649,2026-01-07,Public,Other,50-249,1
+26,E34df2372,2026-01-05,Private,Education,10-49,2-5
+25,Ead6e65b3,2025-12-22,Private,"Mining, Quarrying, & Utilities",1000+,6+
+24,Ee7b805a5,2025-12-17,Public,Human Health & Social Work Activities,1000+,2-5
+23,E88f78f23,2025-12-17,Private,Other,10-49,1
+22,Ee7b805a5,2025-12-16,Charity or voluntary,Other,50-249,2-5
+21,Ead6e65b3,2025-12-16,Public,Other,1000+,6+
+20,Efc701306,2025-12-10,Public,Human Health & Social Work Activities,1000+,6+
+19,Ebf391565,2025-12-01,Private,Human Health & Social Work Activities,50-249,1
+18,Ec408cde1,2025-11-26,Public,Human Health & Social Work Activities,50-249,2-5
+17,E3e50dfca,2025-11-24,Private,Manufacturing,1000+,1
+16,E15b32acb,2025-11-23,Charity or voluntary,Human Health & Social Work Activities,10-49,1
+15,E5ca15789,2025-11-20,Public,Human Health & Social Work Activities,1000+,6+
+14,Edc1c98b6,2025-11-18,Charity or voluntary,Human Health & Social Work Activities,50-249,2-5
+13,E1411cc24,2025-11-18,Public,Human Health & Social Work Activities,10-49,2-5
+12,E45d8483f,2025-11-18,Private,Human Health & Social Work Activities,250-999,1
+11,Ec7a4a12a,2025-11-18,Public,Education,1000+,6+
+10,E5956a68d,2025-11-18,Other,Human Health & Social Work Activities,0-9,1
+9,Ead6e65b3,2025-11-18,Private,Financial & Insurance,250-999,1
+8,E9eebc298,2025-11-17,Public,Human Health & Social Work Activities,10-49,1
+7,Eefa6adf0,2025-11-17,Other,Other,10-49,1
+6,Ee7b805a5,2025-11-17,Private,Transport & Storage (including postal),250-999,2-5
+5,E421aa61a,2025-11-17,Private,Human Health & Social Work Activities,50-249,2-5
+4,E762354d5,2025-11-17,Private,Human Health & Social Work Activities,10-49,Not applicable (remote)
+3,Ec242f199,2025-11-15,Public,Human Health & Social Work Activities,250-999,1
+2,E4fe07cc8,2025-11-13,Private,Human Health & Social Work Activities,50-249,1
+1,E30e4d81b,2025-11-12,Private,"Arts, Entertainment, Recreation, & Other Services",10-49,2-5

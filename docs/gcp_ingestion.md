@@ -243,12 +243,13 @@ bq query --project_id="$DATA_PROJECT" --use_legacy_sql=false "CREATE TABLE IF NO
 
 ## 2. Upload the workbooks (console, or either shell)
 
-Each source has its own folder in the landing bucket, under `hww/`. The
-folder names must be exactly `signups`, `survey`, `was` and `peer`:
+Each workbook has its own folder in the landing bucket, under `hww/`.
+The folder names must be exactly `signups`, `was` and `peer`. The
+monitoring workbook in `signups` holds both Account signups and Survey
+info, so one upload loads the sign-ups and the survey:
 
 ```
 gs://<landing bucket>/hww/signups/<the monitoring and reporting workbook>
-gs://<landing bucket>/hww/survey/<the survey export>
 gs://<landing bucket>/hww/was/<the WAS database>
 gs://<landing bucket>/hww/peer/<the peer mentoring workbook>
 ```
@@ -258,16 +259,13 @@ Upload files), or with `gcloud storage cp`: in Cloud Shell,
 `gcloud storage cp <file> "gs://$LANDING_BUCKET/hww/was/"`; in
 PowerShell, `gcloud storage cp "<file>" gs://<landing bucket>/hww/was/`.
 
-- **File names matter.** Sign-ups, WAS and peer mentoring must keep the
+- **File names matter.** Each workbook must keep the
   exact names given by `file` in `config.toml`; a file under any other
   name is quarantined. To change a name, change `file` in the config
   first (and rebuild the image, step 5).
 - **Upload the whole workbook each time,** not just new rows. The
   pipeline reads only the newest load of each source.
 - **Only the folder itself is read,** not sub-folders.
-- **The survey** can have any name that matches `file_pattern`. Only the
-  newest export in the folder is loaded (latest date in its name, then
-  most recently uploaded); older ones are ignored.
 
 ## 3. Optional: try the ingestion from your laptop (PowerShell)
 
@@ -306,7 +304,7 @@ It prints one line per file:
 
 ```
 signups: dummy_HWW monitoring and reporting.xlsx: loaded, 200 row(s)
-survey: dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx: loaded, 1 row(s)
+survey: dummy_HWW monitoring and reporting.xlsx: loaded, 103 row(s)
 was: dummy_was_database.xlsx: loaded, 35 row(s)
 peer: dummy_peer_montoring.xlsx: loaded, 11 row(s)
 ```
@@ -539,10 +537,10 @@ missed. The two don't get in each other's way:
 - **A quarantined file stops the rebuild,** so the reporting tables keep
   the last complete set.
 
-When the four workbooks arrive at different times, each upload rebuilds
+When the three workbooks arrive at different times, each upload rebuilds
 the tables, so for a while they mix this month's file for one source
 with last month's for another. The daily job does the same. Uploading
-all four together avoids it.
+all three together avoids it.
 
 **10a. Deploy the service** (you, Cloud Shell):
 

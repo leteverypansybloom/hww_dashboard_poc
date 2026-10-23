@@ -96,6 +96,11 @@ def header_only_config(
 ) -> Path:
     """Write a config whose inputs keep only their headings for some sources.
 
+    A workbook that no emptied source reads is copied as it is. One that
+    an emptied source reads is written again with the sheets the config
+    reads, the emptied ones cut to their headings (the monitoring
+    workbook holds both signups and survey).
+
     Args:
         tmp_path: Holds the copied workbooks.
         fixture_config: The frozen config, whose inputs are copied.
@@ -109,20 +114,24 @@ def header_only_config(
     inputs = tmp_path / "inputs"
     inputs.mkdir()
     original = fixture_config.parent / "inputs"
+    books: dict[Path, dict[str, list[list[object]]]] = {}
+    emptied: set[Path] = set()
     for source in wrangle.SOURCES:
         cfg = settings[source]
         path = wrangle.input_file(original, cfg, source)
-        if source not in empty:
-            shutil.copy(path, inputs / path.name)
-            continue
         with pd.ExcelFile(path) as book:
             sheet = cfg["sheet"]
             name = book.sheet_names[sheet] if isinstance(sheet, int) else sheet
             raw = book.parse(sheet_name=sheet, header=None, dtype=object)
-        save_xlsx(
-            inputs / path.name,
-            {str(name): raw.head(cfg["header_row"]).values.tolist()},
-        )
+        if source in empty:
+            raw = raw.head(cfg["header_row"])
+            emptied.add(path)
+        books.setdefault(path, {})[str(name)] = raw.values.tolist()
+    for path, sheets in books.items():
+        if path in emptied:
+            save_xlsx(inputs / path.name, sheets)
+        else:
+            shutil.copy(path, inputs / path.name)
     config = write_config(settings)
     settings["paths"]["input_folder"] = inputs.as_posix()
     config.write_text(to_toml(settings), encoding="utf-8")
@@ -452,11 +461,13 @@ class TestCheckConfig:
         """Every required setting is there, with a valid value."""
         wrangle.check_config(shipped)
 
-    def test_finds_the_survey_by_pattern(
+    def test_survey_is_on_the_monitoring_workbook(
         self, shipped: wrangle.Config
     ) -> None:
-        """A new survey download needs no config change."""
-        assert "file_pattern" in shipped["survey"]
+        """Survey info is read from the same workbook as Account signups."""
+        assert shipped["survey"]["file"] == shipped["signups"]["file"]
+        assert shipped["survey"]["sheet"] == "Survey info"
+        assert "file_pattern" not in shipped["survey"]
 
     def test_matches_the_frozen_test_config(
         self, shipped: wrangle.Config, settings: wrangle.Config
@@ -512,7 +523,7 @@ class TestMain:
         code = wrangle.main([str(write_config(settings))])
         assert code == 1
         assert (
-            "Stopped: Survey export: no file matching 'no-such-export-*.xlsx'"
+            "Stopped: Survey info: no file matching 'no-such-export-*.xlsx'"
             in caplog.text
         )
         assert not list((tmp_path / "out").glob("*.csv"))

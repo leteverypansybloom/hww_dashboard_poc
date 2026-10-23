@@ -21,6 +21,16 @@
 
 ### Changed
 
+- Survey answers come from the Survey info tab of the monitoring workbook
+  instead of the survey tool's export: `[survey]` in both configs and the
+  test config, and `mappings/survey_columns.csv`, describe that tab.
+  `response_id` is its Count, which can move if rows are renumbered or
+  deleted (`docs/identifiers.md`). No output table's columns change.
+- One upload of the monitoring workbook, to `hww/signups/` (or
+  `landing/signups/`), loads both `hww_signups` and `hww_survey`. Sources
+  that name the same workbook share a landing folder
+  (`landing.landing_folders`), and the upload service runs every pipeline
+  that reads the upload's folder.
 - `requirements.txt` installs py-common (the `landing` extra). Its GitHub
   organisation is a placeholder, `<GITHUB_ORG>`, to set before installing.
 - Ingestion logs through the package's logging, so `HWW_LOG_FORMAT=json`
@@ -42,6 +52,8 @@
 
 ### Removed
 
+- The synthetic survey export in `tests/data/inputs/`. The synthetic
+  monitoring workbook has a Survey info sheet instead.
 - `wrangle.survey_percentages` and `output_schema.tables`, which only the
   tests called. The Figure 13 scenario test now checks the dashboard's own
   `survey_question_results`.

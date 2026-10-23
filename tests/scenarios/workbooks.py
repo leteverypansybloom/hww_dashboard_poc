@@ -1,4 +1,4 @@
-"""Build the scenario workbooks: four tiny inputs chosen to test the rules.
+"""Build the scenario workbooks: three tiny inputs chosen to test the rules.
 
     python tests/scenarios/workbooks.py OUT_FOLDER
 
@@ -94,41 +94,48 @@ Q14 = (
     "organisational changes?"
 )
 SURVEY_HEADINGS: list[object] = [
-    "Entry Id",
+    "Count",
+    "Month",
     "Entry Date",
-    "Company",
-    "Organisation Size",
-    "Organisation Sector",
+    "Organisation",
+    "Email address",
+    "Size",
+    "Sector",
     "Industry",
-    "Organisation Welsh Sites",
+    "Number of sites",
     Q13,
     Q14,
     "Fatigue or burnout",
     "Headaches and migraines",
     "Other",
-    # A second "Other": the free-text box, read as "Other.1".
-    "Other",
+    # The free-text box after the tick boxes.
+    "Other (more info)",
 ]
 SURVEY: list[list[object]] = [
     [
-        "101",
-        date(2026, 1, 10),
+        101,
+        date(2026, 1, 1),
+        datetime(2026, 1, 10, 9, 30),
         "Alpha Ltd",
+        "alpha@example.org",
         "10-49",
         "Private",
         "Education",
-        "1",
+        1,
         "Yes, widely available",
         "Weithiau",
         "Fatigue or burnout",
-        None,
+        # An unticked box holding a space.
+        " ",
         "Other",
         "Free text, never output",
     ],
     [
-        "102",
-        date(2026, 2, 20),
+        102,
+        date(2026, 2, 1),
+        datetime(2026, 2, 20, 14, 5, 12),
         "beta café",
+        None,
         None,
         None,
         None,
@@ -137,16 +144,19 @@ SURVEY: list[list[object]] = [
         "Maybe",
         "x",
         "x",
-        None,
+        # An unticked box holding a non-breaking space.
+        "\xa0",
         None,
     ],
     [
-        "103",
-        date(2026, 3, 5),
+        103,
+        date(2026, 3, 1),
+        datetime(2026, 3, 5, 11, 0),
+        None,
         None,
         "0-9",
         "Public",
-        "Education",
+        "other_options",
         "1",
         None,
         "No",
@@ -155,18 +165,38 @@ SURVEY: list[list[object]] = [
         None,
         None,
     ],
-    # A repeated Entry Id: only the first row counts.
+    # A repeated Count: only the first row counts.
     [
-        "101",
-        date(2026, 1, 11),
+        101,
+        None,
+        datetime(2026, 1, 11, 8, 0),
         "Alpha Ltd",
+        "alpha@example.org",
         "10-49",
         "Private",
         "Education",
-        "1",
+        1,
         "Rarely or not at all",
         "No",
         None,
+        None,
+        None,
+        None,
+    ],
+    # No Count: dropped.
+    [
+        None,
+        None,
+        datetime(2026, 3, 6, 10, 0),
+        "Gamma Group",
+        None,
+        "1000+",
+        "Public",
+        "Construction",
+        "6+",
+        "Yes, widely available",
+        "Yes",
+        "Fatigue or burnout",
         None,
         None,
         None,
@@ -269,22 +299,26 @@ PEER: list[list[object]] = [
     ["0008", "Alpha Ltd", date(2026, 4, 1), "250-999", "Private", "Education"],
 ]
 
-FILES: dict[str, tuple[str, list[list[object]]]] = {
-    "dummy_HWW monitoring and reporting.xlsx": (
-        "Account signups",
-        [["Synthetic account signups"], SIGNUPS_HEADINGS, *SIGNUPS],
-    ),
-    "dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx": (
-        "in",
-        [SURVEY_HEADINGS, *SURVEY],
-    ),
-    "dummy_was_database.xlsx": ("query", [WAS_HEADINGS, *WAS]),
-    "dummy_peer_montoring.xlsx": ("query (1)", [PEER_HEADINGS, *PEER]),
+#: Each workbook's sheets and their rows. The monitoring workbook holds
+#: both Account signups and Survey info.
+FILES: dict[str, list[tuple[str, list[list[object]]]]] = {
+    "dummy_HWW monitoring and reporting.xlsx": [
+        (
+            "Account signups",
+            [["Synthetic account signups"], SIGNUPS_HEADINGS, *SIGNUPS],
+        ),
+        (
+            "Survey info",
+            [["Last updated: 06/03/2026"], SURVEY_HEADINGS, *SURVEY],
+        ),
+    ],
+    "dummy_was_database.xlsx": [("query", [WAS_HEADINGS, *WAS])],
+    "dummy_peer_montoring.xlsx": [("query (1)", [PEER_HEADINGS, *PEER])],
 }
 
 
 def write(folder: Path) -> list[Path]:
-    """Write the four scenario workbooks.
+    """Write the three scenario workbooks.
 
     Args:
         folder: Where to write them (created if needed).
@@ -294,16 +328,18 @@ def write(folder: Path) -> list[Path]:
     """
     folder.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, (sheet, rows) in FILES.items():
+    for name, sheets in FILES.items():
         book = Workbook()
         book.properties.creator = "HWW scenario builder"
         book.properties.created = datetime(2026, 10, 18)
         book.properties.modified = datetime(2026, 10, 18)
-        worksheet = book.active
-        assert worksheet is not None
-        worksheet.title = sheet
-        for row in rows:
-            worksheet.append(row)
+        default = book.active
+        assert default is not None
+        book.remove(default)
+        for sheet, rows in sheets:
+            worksheet = book.create_sheet(sheet)
+            for row in rows:
+                worksheet.append(row)
         path = folder / name
         book.save(path)
         written.append(path)

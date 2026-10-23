@@ -56,7 +56,7 @@ class TestRun:
         inputs = {entry["source"]: entry for entry in record["inputs"]}
         assert list(inputs) == [
             "Account signups",
-            "Survey export",
+            "Survey info",
             "WAS database",
             "Peer mentoring",
         ]

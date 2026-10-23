@@ -13,6 +13,35 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-10-23 - Survey source
+
+### Survey info is the survey source
+
+Survey responses come from the Survey info tab of the monitoring
+workbook, not the survey tool's export. The team keeps Survey info as
+the record (about 100 responses in the dummy data, against one in the
+export), and py-common's examples load it too. It replaces the survey
+source in "The flags on Account signups are not the source of truth"
+(2026-10-10).
+
+The monitoring workbook lands once, in the signups folder, and loads
+both `hww_signups` and `hww_survey`: sources naming the same `file`
+share a landing folder, and the upload service runs every pipeline of
+that folder. py-common is unchanged; its "already loaded" markers and
+run lock are per warehouse, so the two loads don't interfere.
+
+`response_id` is Survey info's `Count`, a running number. One snapshot
+can't show whether Count stays with a response between uploads, so it
+is documented as unstable, like `signup_id`.
+
+Not chosen: a hash of Entry Date and organisation (it changes when
+either cell is corrected or pasted at another precision), and waiting
+for an Entry Id column on Survey info (it blocks the switch).
+
+**Trade-off**: response ids can move if rows are renumbered or deleted.
+Benefit: the survey pages show every response the team records, from
+the same upload as the sign-ups.
+
 ## 2026-10-18 - Production readiness
 
 The production-readiness review prepared the prototype for two jobs:
@@ -481,6 +510,9 @@ There is no fuzzy matching: a wrong automatic merge is worse than a
 visible duplicate.
 
 ### The flags on Account signups are not the source of truth
+
+Survey source superseded by 2026-10-23, "Survey info is the survey
+source".
 
 Survey completions come from the survey export and WAS requests from
 the WAS database. The hand-typed flags are kept for reconciliation

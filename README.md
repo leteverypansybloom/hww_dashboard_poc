@@ -79,8 +79,9 @@ python wrangle.py tests/data/config.toml
 ```
 
 Inputs are read from the folder above this one (set in `config.toml`).
-The survey export is found by `file_pattern`: drop a new download in the input folder and the
-newest one (by the date in its name) is used. The other files are named exactly.
+Each file is named exactly in `config.toml`. The monitoring workbook holds both Account signups
+and the Survey info tab, which has the survey responses. A source can use `file_pattern`
+instead, to take the newest download (by the date in its name).
 If a file, sheet, column, mapping file or setting is missing, `wrangle.py` stops with a message
 saying which one before writing anything. So does a source with no data rows, because an empty
 upload usually means a broken export; set `allow_empty = true` in that source's section if no rows
@@ -136,8 +137,10 @@ python wrangle.py landed.local.toml
 streamlit run dashboard.py
 ```
 
-`--stage ..` copies the four workbooks into `landing/<source>/`, as if
-they had been dropped there. Without it, `ingest.py` loads whatever is
+`--stage ..` copies the three workbooks into their landing folders, as
+if they had been dropped there: the monitoring workbook into
+`landing/signups/`, where it loads both the signups and the survey
+tables, and the others into `landing/was/` and `landing/peer/`. Without it, `ingest.py` loads whatever is
 in those folders; a file it has already loaded is skipped.
 
 The contracts are in `src/hww_dashboard/landing.py`. Each lists the
@@ -146,9 +149,10 @@ out (personal and unused ones), which are never loaded. A workbook with
 a column the contract doesn't know, a listed column missing, or a value
 of the wrong type is quarantined (copied to `store/quarantine/`) and
 nothing from it loads; `ingest.py` then exits with code 1 and says why.
-Signups' "Number of sites" mixes numbers and text, so it is loaded as
-text without a type check. Its heading is still required, and extra
-signup columns are rejected just as they are for the other sources.
+"Number of sites" on Account signups and Survey info mixes numbers and
+text, so it is loaded as text without a type check. Its heading is
+still required, and extra columns on those sheets are rejected just as
+they are for the other sources.
 
 A source with `file_pattern` ingests only the newest matching workbook,
 using the date in its filename, then its modification time and filename
@@ -279,7 +283,7 @@ The tests never read the real data, so they keep passing whatever `config.toml` 
 | `org_overrides.csv` | Force two spellings to be the same organisation: `raw_name,canonical_name`. |
 | `agreed_values.csv` | The agreed values of each band, topic and duration, in the order people expect them. Every `agreed_value` in the files above must be listed here, so a typo stops the run instead of creating a new band. |
 | `was_duration.csv`, `was_topic.csv` | Tidy WAS session durations and topics. |
-| `survey_columns.csv` | What each survey export column is (question, tick-box option, employer field, or `drop`). Repeated headers are numbered like pandas: `Other`, `Other.1`, ... |
+| `survey_columns.csv` | What each column on Survey info is (question, tick-box option, employer field, or `drop`). Repeated headers are numbered like pandas: `Other`, `Other.1`, ..., `Other (more info)`, `Other (more info).1`, ... |
 | `survey_questions.csv` | Question id, full text, short name for the picker, single or multi. |
 | `survey_answers.csv` | Answer options per question, with short chart labels and sort order. |
 | `survey_answer_translations.csv` | Welsh answers -> English answers. |

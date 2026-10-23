@@ -273,7 +273,8 @@ SURVEY_ROLES = (
 ASSUMPTIONS = [
     "Sign-up date is the first day of the sign-up month "
     "(date_precision = month); the sheet only records the month.",
-    "Survey completions come from the survey export and WAS requests from "
+    "Survey completions come from the Survey info tab of the monitoring "
+    "workbook and WAS requests from "
     "the WAS database. The 'Completed survey?' and 'Requested WAS?' "
     "columns on Account signups are kept in fact_signup and only used for "
     "the reconciliation section below.",
@@ -332,8 +333,8 @@ ATTENTION = {
         "add each to mappings/survey_columns.csv (see Survey checks)",
     ),
     "missing_columns": (
-        "survey column(s) missing from the export",
-        "check whether the form changed, and update "
+        "survey column(s) missing from Survey info",
+        "check whether the sheet changed, and update "
         "mappings/survey_columns.csv (see Survey checks)",
     ),
     "new_answers": (
@@ -1950,10 +1951,10 @@ def unpivot_survey(
     translations: Mapping[tuple[str, str], str],
     keep_other_text: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, Counter[tuple[str, str]]]:
-    """Turn the wide survey export into long rows.
+    """Turn the wide Survey info sheet into long rows.
 
     Args:
-        df: The survey export, with a ``response_id`` column added.
+        df: The Survey info sheet, with a ``response_id`` column added.
         columns_map: survey_columns.csv as a DataFrame (column, role,
             question_id, option_or_note).
         answer_lookup: (question_id, lower-case answer) -> answer as
@@ -2031,9 +2032,9 @@ def load_survey(
     report: Report,
     personal_columns: Sequence[str] = (),
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Read the employer survey export.
+    """Read the employer survey responses on Survey info.
 
-    The export has one row per response and one column per question or
+    The sheet has one row per response and one column per question or
     tick box.
 
     Args:
@@ -2057,7 +2058,7 @@ def load_survey(
 
     Raises:
         InputError: survey_columns.csv has no column for a needed role,
-            or that column is not in the export.
+            or that column is not on Survey info.
     """
     columns_map = read_csv_text(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
@@ -2075,13 +2076,13 @@ def load_survey(
     validate_survey_columns(columns_map)
 
     def column_for(role: str) -> str:
-        """Return the export column that survey_columns.csv gives a role.
+        """Return the column that survey_columns.csv gives a role.
 
         Args:
             role: A role in ``SURVEY_ROLES``, e.g. ``"date"``.
 
         Returns:
-            The export column's name.
+            The column's name.
 
         Raises:
             InputError: No column has that role.
@@ -2101,12 +2102,12 @@ def load_survey(
 
     role_columns = {role: column_for(role) for role in SURVEY_ROLES}
     sheet = inputs.read(
-        "survey", cfg, "Survey export", list(role_columns.values())
+        "survey", cfg, "Survey info", list(role_columns.values())
     )
     df = sheet.frame
     path = sheet.name
     note_input(
-        report, "Survey export", sheet, f", {len(df.columns) - 1} columns,"
+        report, "Survey info", sheet, f", {len(df.columns) - 1} columns,"
     )
 
     known = set(columns_map["column"])
@@ -2121,7 +2122,7 @@ def load_survey(
     ]
     report.add(
         "Survey checks",
-        f"- {len(in_file)} columns in the export, {len(known)} in "
+        f"- {len(in_file)} columns on Survey info, {len(known)} in "
         "mappings/survey_columns.csv.",
     )
     if unexpected:
@@ -2131,18 +2132,18 @@ def load_survey(
             f"{unexpected}",
         )
         logger.warning(
-            "Survey export has %d column(s) not in survey_columns.csv",
+            "Survey info has %d column(s) not in survey_columns.csv",
             len(unexpected),
         )
         report.needs("new_columns", len(unexpected))
     if missing:
         report.add(
             "Survey checks",
-            "- **Columns in survey_columns.csv but not in the export:** "
+            "- **Columns in survey_columns.csv but not on Survey info:** "
             f"{missing}",
         )
         logger.warning(
-            "Survey export lacks %d column(s) in survey_columns.csv",
+            "Survey info lacks %d column(s) in survey_columns.csv",
             len(missing),
         )
         report.needs("missing_columns", len(missing))
@@ -2156,12 +2157,12 @@ def load_survey(
     df = drop_blank_rows(df)
     df["response_id"] = df[role_columns["response_id"]].map(clean_text)
     no_id = df["response_id"] == ""
-    report.dropped("Survey export", int(no_id.sum()), "no Entry Id")
+    report.dropped("Survey info", int(no_id.sum()), "no Count")
     df = df[~no_id]
     repeated = df["response_id"].duplicated()
-    report.dropped("Survey export", int(repeated.sum()), "repeated Entry Id")
+    report.dropped("Survey info", int(repeated.sum()), "repeated Count")
     df = df[~repeated].copy()
-    require_rows(df, cfg, "Survey export", "survey", path)
+    require_rows(df, cfg, "Survey info", "survey", path)
 
     df["date"] = df[role_columns["date"]].map(to_date)
     df["org"] = df[role_columns["org"]].map(lambda v: org_name(v, overrides))
@@ -2176,7 +2177,7 @@ def load_survey(
     if no_org:
         report.add(
             "Warnings",
-            f"- Survey export: {no_org} response(s) have a blank Company, "
+            f"- Survey info: {no_org} response(s) have a blank Organisation, "
             "so they cannot be linked to an employer (kept with a blank "
             "employer_id).",
         )

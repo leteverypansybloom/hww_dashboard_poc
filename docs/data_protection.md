@@ -6,18 +6,20 @@ lists at the end belong to the data owner and the DPO.*
 
 ## What the inputs hold
 
-The four workbooks hold more than the pipeline needs. The columns
+The three workbooks hold more than the pipeline needs. The columns
 listed under `[privacy] personal_columns` in `config.toml` are the known
-personal ones: names, email addresses, job roles, contact details,
-accessibility requirements, adviser names, and the survey tool's user
-IP address, user agent, user id, payment fields and report links. As
-well:
+personal ones: names, email addresses (among them `Email address` on
+Survey info, the respondent's own address), job roles, contact
+details, accessibility requirements and adviser names. The list also
+covers the survey tool's own export: user IP address, user agent, user
+id, payment fields and report links. As well:
 
 - **Organisation names.** For a sole trader or a very small employer,
   the name can identify a person.
-- **Free text.** The survey's "Other" boxes and "What parts could be
-  improved?", the job role on Account signups, and the "Completed
-  survey?" and "Requested WAS?" cells, which staff type by hand.
+- **Free text.** The survey's "Other (more info)" boxes and "What parts
+  could be improved?", the job role on Account signups, and the
+  "Completed survey?" and "Requested WAS?" cells, which staff type by
+  hand.
 
 ## What the pipeline reads
 
@@ -28,8 +30,12 @@ dashboard's output tables.
 
 With `[landed] read = true`, the separate py-common ingestion job checks
 each workbook and loads only the contract's allowed columns into typed
-tables. Unknown signup columns are also rejected; the mixed-value
-Number of sites exception applies only to that named column. However,
+tables. Unknown signup and survey columns are also rejected; the
+mixed-value Number of sites exception applies only to that named column
+on each sheet. On Survey info, `Email address`, `Month`, "What parts
+could be improved?" and the "Other (more info)" boxes are excluded, so
+they never reach `hww_survey` (the boxes load only with
+`keep_other_free_text = true`). However,
 ingestion archives the complete original workbook in its object store,
 including excluded columns. Rejected files are retained in raw and
 quarantine storage. Exclusions do not redact those archived originals.
@@ -39,7 +45,8 @@ Two checks run before any workbook is opened:
 - a setting in `config.toml` that names a column on the `[privacy]`
   list stops the run;
 - a survey column on that list must have the `drop` role in
-  `mappings/survey_columns.csv`, or the run stops.
+  `mappings/survey_columns.csv`, or the run stops. `Email address` on
+  Survey info has that role.
 
 ## What it writes
 
@@ -52,7 +59,7 @@ Only the columns in each table's schema are written
 | every `employer_id` | a hash of the organisation name | pseudonymous, not anonymous: anyone with a list of names can recompute it |
 | `fact_signup` | one row per user: employer, sign-up month, flags | job roles and the flag cells' text are not written |
 | `fact_was_session`, `fact_was_session_topic` | session topics and durations | a value missing from the mapping files is kept as typed |
-| `survey_other_text` | free text from "Other" boxes | only written when `keep_other_free_text = true`; off by default |
+| `survey_other_text` | free text from "Other (more info)" boxes | only written when `keep_other_free_text = true`; off by default |
 | `data_quality_report.md` | organisation names, and raw values that didn't map or couldn't be read | the dashboard's Home page shows the whole report |
 
 Before anything is written, every table and the report are checked for

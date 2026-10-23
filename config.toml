@@ -34,13 +34,14 @@ target = "folder"
 read = false
 # Where the files are dropped and the tables kept:
 #   "local" - folders below, relative to this file (laptops, tests).
-#             Drop each workbook in <landing_folder>/<source>/, where
-#             source is signups, survey, was or peer.
+#             Drop each workbook in <landing_folder>/<folder>/, where
+#             folder is signups (the monitoring workbook, which loads
+#             both hww_signups and hww_survey), was or peer.
 #   "gcp"   - a landing bucket and a BigQuery dataset, e.g.:
 #               target = "gcp"
 #               project = "${HWW_GCP_PROJECT}"
 #               landing_bucket = "${HWW_LANDING_BUCKET}"
-#               landing_prefix = "hww"   # files in hww/<source>/
+#               landing_prefix = "hww"   # files in hww/<folder>/
 #               store_bucket = "${HWW_STORE_BUCKET}"
 #               dataset = "${HWW_LANDED_DATASET}"
 target = "local"
@@ -64,14 +65,13 @@ completed_survey = "Completed survey?"
 requested_was = "Requested WAS?"
 
 [survey]
-# A new export is downloaded each time, with the date in its name. The newest one wins:
-# the latest YYYY-MM-DD date in the file name, then the most recently saved file.
-# Use file = "exact name.xlsx" instead to pin one export. (Any source can use file_pattern.)
-file_pattern = "*healthy-working-wales-employer-survey-tool-*.xlsx"
-sheet = 0                 # first sheet
-header_row = 1
+# The Survey info tab of the monitoring workbook: one row per response,
+# newest first. The same workbook as [signups].
+file = "dummy_HWW monitoring and reporting.xlsx"
+sheet = "Survey info"
+header_row = 2            # Excel row that holds the column headings
 # Which column is which question lives in mappings/survey_columns.csv.
-# Free text typed into "Other" boxes may contain personal details, so it is off by default.
+# Free text typed into "Other (more info)" boxes may contain personal details, so it is off by default.
 keep_other_free_text = false
 
 [was]

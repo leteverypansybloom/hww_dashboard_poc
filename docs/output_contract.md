@@ -21,9 +21,9 @@ schemas.
 | `dim_employer` | organisation, with duplicate spellings merged | `employer_id` |
 | `fact_signup` | row on Account signups (a user) | `signup_id` |
 | `fact_engagement` | engagement event | `engagement_id` |
-| `dim_survey_response` | survey response | `response_id` |
+| `dim_survey_response` | survey response (a row on Survey info) | `response_id` (the row's Count) |
 | `fact_survey_answer` | response and option chosen | `response_id`, `question_id`, `answer` |
-| `survey_other_text` | free text typed into an "Other" box (only when switched on) | `response_id`, `question_id` |
+| `survey_other_text` | free text typed into an "Other (more info)" box (only when switched on) | `response_id`, `question_id` |
 | `question_catalogue` | question and answer option | `answer_id` |
 | `fact_was_session` | WAS session with any detail recorded | `session_id` |
 | `fact_was_session_topic` | session and topic | `session_id`, `topic` |

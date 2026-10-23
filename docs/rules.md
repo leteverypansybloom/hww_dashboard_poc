@@ -61,11 +61,11 @@ says the same rules in a few lines, for readers of the report.
 
 | Id | Rule | Code | Tests | Dataform |
 |---|---|---|---|---|
-| R30 | `survey_columns.csv` says what each export column is; an export column it doesn't list is ignored and reported, and a listed column missing from the export is reported. | `load_survey`, `validate_survey_columns` | TestValidateSurveyColumns, TestLoadSurvey | |
-| R31 | A response with no Entry Id is dropped; of repeated Entry Ids, the first is kept. | `load_survey` | scenario (101) | |
-| R32 | Any value in a tick-box column means that option was chosen, named as in the catalogue. | `unpivot_survey` | TestUnpivotSurvey; scenario | |
+| R30 | Survey responses are the rows of the `Survey info` sheet of the monitoring workbook (headings on row 2). `survey_columns.csv` says what each of its columns is; a column it doesn't list is ignored and reported, and a listed column missing from the sheet is reported. | `load_survey`, `validate_survey_columns` | TestValidateSurveyColumns, TestLoadSurvey | |
+| R31 | `response_id` is the cleaned `Count`. A response with no Count is dropped; of repeated Counts, the first in sheet order is kept. | `load_survey` | scenario (101, the row with no Count) | |
+| R32 | Any value in a tick-box column means that option was chosen, named as in the catalogue, whatever the value says (a Welsh label counts too). A cell holding only whitespace, such as a space or a non-breaking space, is not a tick (R10). | `unpivot_survey` | TestUnpivotSurvey, TestLandedInputs (test_landing.py); scenario | |
 | R33 | A single-choice answer is translated from Welsh for its question, then spelt as in the catalogue. An answer not in the catalogue is kept and reported. | `unpivot_survey`, `load_survey` | TestUnpivotSurvey; scenario (Weithiau, Maybe) | |
-| R34 | Free text from "Other" boxes is output only when `keep_other_free_text = true`. | `unpivot_survey` | TestUnpivotSurvey | |
+| R34 | Free text from the "Other (more info)" boxes is output only when `keep_other_free_text = true`. | `unpivot_survey` | TestUnpivotSurvey | |
 | R35 | A response's bands are its own; one that is Unknown takes the employer's value. | `build_survey_tables` | TestBuildSurveyTables; scenario (102) | |
 | R36 | Figure 13: the percent for an answer is the respondents who chose it divided by the respondents who gave any answer to that question. | the dashboard's `survey_question_results` | TestSurveyQuestionResults (test_dashboard_data.py); scenario | |
 | R37 | The catalogue lists every option in `survey_answers.csv` order, then options seen only in the data (order 999). `answer_id` is the question id and the option's 2-digit position. | `build_question_catalogue` | TestBuildQuestionCatalogue; scenario (Q14-04) | |

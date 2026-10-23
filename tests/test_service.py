@@ -2,10 +2,12 @@
 
 py-common's handle_upload, which ingests the upload's folder, is
 replaced by a stand-in returning chosen results, so these tests check
-the service's own decisions: when to rebuild the tables, and which
-problems are retried.
+the service's own decisions: which pipelines run for an upload, when
+to rebuild the tables, and which problems are retried.
 """
 
+import base64
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -17,6 +19,14 @@ pytest.importorskip("py_common")
 from py_common.model import Outcome, Result, SourceItem  # noqa: E402
 
 from hww_dashboard import landing, service, wrangle  # noqa: E402
+
+#: Stand-ins for the pipelines, by landing folder, as the shipped config
+#: groups them: the monitoring workbook feeds signups and survey.
+PIPELINES: dict[str, list[Any]] = {
+    "hww/signups": ["signups pipeline", "survey pipeline"],
+    "hww/was": ["was pipeline"],
+    "hww/peer": ["peer pipeline"],
+}
 
 
 def result(outcome: Outcome, errors: list[str] | None = None) -> Result:
@@ -33,37 +43,132 @@ def result(outcome: Outcome, errors: list[str] | None = None) -> Result:
     return Result(item, outcome, "abc", 1, errors or [], 0.1)
 
 
+def event(name: str) -> dict[str, Any]:
+    """The CloudEvent data Eventarc delivers for an upload.
+
+    Args:
+        name: The uploaded object's name, e.g. "hww/was/was.xlsx".
+
+    Returns:
+        A Pub/Sub push body holding the GCS notification.
+    """
+    notification = {"bucket": "landing", "name": name, "generation": "1"}
+    return {
+        "message": {
+            "data": base64.b64encode(
+                json.dumps(notification).encode("utf-8")
+            ).decode("ascii"),
+            "attributes": {"eventType": "OBJECT_FINALIZE"},
+        }
+    }
+
+
+WAS_UPLOAD = event("hww/was/was.xlsx")
+
+
 @pytest.fixture
-def uploads(monkeypatch: pytest.MonkeyPatch) -> list[list[Result]]:
+def calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Record the pipelines each handle_upload call is given.
+
+    Args:
+        monkeypatch: Replaces folder_pipelines.
+
+    Returns:
+        A list that fills with each call's folder -> pipeline mapping.
+    """
+    monkeypatch.setattr(
+        "hww_dashboard.service.folder_pipelines", lambda path: PIPELINES
+    )
+    return []
+
+
+@pytest.fixture
+def uploads(
+    monkeypatch: pytest.MonkeyPatch, calls: list[dict[str, Any]]
+) -> list[list[Result]]:
     """Replace handle_upload with one returning the next listed results.
 
     Args:
-        monkeypatch: Replaces handle_upload and the pipelines.
+        monkeypatch: Replaces handle_upload.
+        calls: Records what each call was given.
 
     Returns:
-        A list the test fills with handle_upload's next return value.
+        A list the test fills with handle_upload's next return values.
     """
     queue: list[list[Result]] = []
 
-    def fake_handle_upload(data: Any, pipelines: Any) -> list[Result]:
-        """Return the queued results.
+    def fake_handle_upload(
+        data: Any, pipelines: dict[str, Any]
+    ) -> list[Result]:
+        """Record the call and return the queued results.
 
         Args:
             data: The event data (ignored).
-            pipelines: The pipelines (ignored).
+            pipelines: The pipelines, by folder.
 
         Returns:
             The next queued results.
         """
+        calls.append(dict(pipelines))
         return queue.pop(0)
 
     monkeypatch.setattr(
         "hww_dashboard.service.handle_upload", fake_handle_upload
     )
-    monkeypatch.setattr(
-        "hww_dashboard.service.folder_pipelines", lambda path: {}
-    )
     return queue
+
+
+class TestIngestUpload:
+    """ingest_upload(): every pipeline that reads the upload's folder."""
+
+    def test_monitoring_workbook_runs_signups_then_survey(
+        self, uploads: list[list[Result]], calls: list[dict[str, Any]]
+    ) -> None:
+        """An upload to hww/signups/ loads both tables.
+
+        Args:
+            uploads: Queue of handle_upload results.
+            calls: What each handle_upload call was given.
+        """
+        uploads += [[result(Outcome.LOADED)], [result(Outcome.LOADED)]]
+
+        results = service.ingest_upload(
+            event("hww/signups/monitoring.xlsx"), PIPELINES
+        )
+
+        assert len(results) == 2
+        assert calls == [
+            {folder: group[0] for folder, group in PIPELINES.items()},
+            {"hww/signups": "survey pipeline"},
+        ]
+
+    def test_other_folders_run_one_pipeline(
+        self, uploads: list[list[Result]], calls: list[dict[str, Any]]
+    ) -> None:
+        """An upload to hww/was/ makes one call.
+
+        Args:
+            uploads: Queue of handle_upload results.
+            calls: What each handle_upload call was given.
+        """
+        uploads.append([result(Outcome.LOADED)])
+
+        assert len(service.ingest_upload(WAS_UPLOAD, PIPELINES)) == 1
+        assert len(calls) == 1
+
+    def test_ignored_event_makes_one_call(
+        self, uploads: list[list[Result]], calls: list[dict[str, Any]]
+    ) -> None:
+        """An event handle_upload ignores runs no further pipeline.
+
+        Args:
+            uploads: Queue of handle_upload results.
+            calls: What each handle_upload call was given.
+        """
+        uploads.append([])
+
+        assert service.ingest_upload({}, PIPELINES) == []
+        assert len(calls) == 1
 
 
 class TestHandle:
@@ -99,11 +204,34 @@ class TestHandle:
         uploads.append([result(Outcome.QUARANTINED, ["Missing column 'X'"])])
         rebuilt: list[Path] = []
 
-        outcome = service.handle({}, Path("c.toml"), rebuilt.append)
+        outcome = service.handle(WAS_UPLOAD, Path("c.toml"), rebuilt.append)
 
         assert outcome == "quarantined"
         assert rebuilt == []
         assert "Missing column 'X'" in caplog.text
+
+    def test_survey_quarantine_stops_the_rebuild(
+        self, uploads: list[list[Result]]
+    ) -> None:
+        """Signups loaded but survey quarantined: the tables stay as they are.
+
+        Args:
+            uploads: Queue of handle_upload results.
+        """
+        uploads += [
+            [result(Outcome.LOADED)],
+            [result(Outcome.QUARANTINED, ["Unexpected columns"])],
+        ]
+        rebuilt: list[Path] = []
+
+        outcome = service.handle(
+            event("hww/signups/monitoring.xlsx"),
+            Path("c.toml"),
+            rebuilt.append,
+        )
+
+        assert outcome == "quarantined"
+        assert rebuilt == []
 
     @pytest.mark.parametrize("outcome", [Outcome.LOADED, Outcome.SKIPPED])
     def test_clean_ingest_rebuilds(
@@ -118,7 +246,7 @@ class TestHandle:
         uploads.append([result(outcome)])
         rebuilt: list[Path] = []
 
-        assert service.handle({}, Path("c.toml"), rebuilt.append) == (
+        assert service.handle(WAS_UPLOAD, Path("c.toml"), rebuilt.append) == (
             "rebuilt"
         )
         assert rebuilt == [Path("c.toml")]
@@ -144,7 +272,7 @@ class TestHandle:
             """
             raise wrangle.InputError("a mapping is missing")
 
-        assert service.handle({}, Path("c.toml"), rebuild) == (
+        assert service.handle(WAS_UPLOAD, Path("c.toml"), rebuild) == (
             "rebuild stopped"
         )
 
@@ -170,16 +298,16 @@ class TestHandle:
             raise RuntimeError("BigQuery unavailable")
 
         with pytest.raises(RuntimeError, match="unavailable"):
-            service.handle({}, Path("c.toml"), rebuild)
+            service.handle(WAS_UPLOAD, Path("c.toml"), rebuild)
 
 
 class TestFolderPipelines:
-    """folder_pipelines(): one pipeline per landing folder."""
+    """folder_pipelines(): the pipelines grouped by landing folder."""
 
     def test_keys_are_the_landing_folders(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """With no prefix, each folder is the source's name.
+        """With no prefix, the monitoring workbook's folder has two.
 
         Args:
             tmp_path: Folder for the config.
@@ -196,11 +324,20 @@ class TestFolderPipelines:
 
         pipelines = service.folder_pipelines(config)
 
-        assert sorted(pipelines) == sorted(wrangle.SOURCES)
+        assert {folder: len(group) for folder, group in pipelines.items()} == {
+            "signups": 2,
+            "was": 1,
+            "peer": 1,
+        }
+        tables = [
+            p.warehouse.identity.rsplit(".", 1)[-1]
+            for p in pipelines["signups"]
+        ]
+        assert tables == ["hww_signups", "hww_survey"]
 
 
 class TestNewestSourceBucket:
-    """The survey's NewestSource exposes its bucket for the event check."""
+    """A file_pattern source's NewestSource exposes its bucket."""
 
     def test_passes_through_the_bucket(self) -> None:
         """A GCS-like source's bucket is visible; a local one gives None."""

@@ -6,7 +6,10 @@ runs one py-common ``Pipeline`` on py-common's typed route
 (``output_format="parquet"``):
 
 1. the source lists the workbooks dropped in that source's landing
-   folder (a local folder, or a prefix in a GCS bucket);
+   folder (a local folder, or a prefix in a GCS bucket). Sources that
+   read the same workbook share a folder: the monitoring workbook,
+   dropped in ``signups/``, loads both ``hww_signups`` and
+   ``hww_survey``;
 2. the workbook is checked against the source's contract (below):
    every column must be one the contract lists or excludes, and every
    listed column must hold its declared type, or the file is
@@ -125,7 +128,8 @@ def _dates(*names: str) -> list[Column]:
 
 # Headings are exactly as in the workbooks: py-common matches them
 # character for character, trailing spaces included. Sheet names are
-# the exports' own ("query", "in"), as py-common finds sheets by name.
+# the workbooks' own ("query", "Survey info"), as py-common finds
+# sheets by name.
 
 SIGNUPS = Worksheet(
     name="Account signups",
@@ -230,8 +234,10 @@ PEER = Worksheet(
     on_mismatch="quarantine",
 )
 
-#: Sheet name of the survey export.
-SURVEY_SHEET = "in"
+#: The survey's sheet in the monitoring workbook, and its heading row
+#: (row 1 holds "Last updated" and the question titles).
+SURVEY_SHEET = "Survey info"
+SURVEY_HEADER_ROW = 2
 
 
 @dataclass
@@ -331,7 +337,7 @@ class SourceContract:
         names: Column name in the table -> the heading wrangle.py knows
             it by (trimmed, repeats numbered as pandas does).
         undeclared: Headings loaded as text without a type check
-            (signups' "Number of sites").
+            ("Number of sites" on Account signups and Survey info).
     """
 
     contract: RowNumberedContract
@@ -375,27 +381,30 @@ def py_common_name(name: str) -> str:
 
 def survey_worksheet(
     maps: Path, keep_other_text: bool
-) -> tuple[Worksheet, dict[str, str]]:
-    """The survey export's contract, from mappings/survey_columns.csv.
+) -> tuple[Worksheet, dict[str, str], list[str]]:
+    """The Survey info contract, from mappings/survey_columns.csv.
 
-    The column map lists every column of the export with its role, so
+    The column map lists every column of the sheet with its role, so
     the contract follows it: role columns and answers are loaded, the
-    rest (personal, technical) excluded. "Other" free text loads only
-    when keep_other_free_text is on.
+    rest (personal, unused) excluded. "Other (more info)" free text
+    loads only when keep_other_free_text is on. The sites column holds
+    numbers and text (1, "2-5"), so it is loaded untyped, as on
+    Account signups.
 
     Args:
         maps: The mappings folder.
         keep_other_text: The survey's keep_other_free_text setting.
 
     Returns:
-        The worksheet, and py-common name -> wrangle.py name for each
-        loaded column.
+        The worksheet; py-common name -> wrangle.py name for each
+        loaded column; and the untyped headings.
     """
     table = read_csv_text(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
     )
     columns: list[Column] = []
     excluded: list[str] = []
+    untyped: list[str] = []
     names: dict[str, str] = {}
     data_types: dict[str, Literal["integer", "date", "string"]] = {
         "response_id": "integer",
@@ -406,17 +415,24 @@ def survey_worksheet(
         if role == "drop" or (role == "other_text" and not keep_other_text):
             excluded.append(name)
             continue
-        columns.append(
-            Column(name, data_types.get(role, "string"), nullable=True)
-        )
+        if role == "sites":
+            untyped.append(name)
+        else:
+            columns.append(
+                Column(name, data_types.get(role, "string"), nullable=True)
+            )
         names[name] = heading
     worksheet = Worksheet(
         name=SURVEY_SHEET,
+        header_row=SURVEY_HEADER_ROW,
+        # RowNumberedContract requires the untyped headings and refuses
+        # any other column that is neither listed nor excluded.
+        column_selection="all_except",
         columns=columns,
         excluded=excluded,
         on_mismatch="quarantine",
     )
-    return worksheet, names
+    return worksheet, names, untyped
 
 
 def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
@@ -433,10 +449,11 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
     Returns:
         SourceContract per source, in SOURCES order.
     """
-    survey, survey_names = survey_worksheet(
+    survey, survey_names, survey_untyped = survey_worksheet(
         maps, bool(cfg["survey"]["keep_other_free_text"])
     )
     sheets = {"signups": SIGNUPS, "survey": survey, "was": WAS, "peer": PEER}
+    untyped = {"signups": ["Number of sites"], "survey": survey_untyped}
     result: dict[str, SourceContract] = {}
     for source in SOURCES:
         sheet = replace(
@@ -445,7 +462,7 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
         file_name = (
             None if "file_pattern" in cfg[source] else cfg[source].get("file")
         )
-        undeclared = ["Number of sites"] if source == "signups" else []
+        undeclared = untyped.get(source, [])
         contract = RowNumberedContract(
             worksheets=[sheet],
             file_name=str(file_name) if file_name else None,
@@ -838,6 +855,31 @@ def long_path(folder: Path) -> Path:
     return Path(prefix + str(folder.resolve()))
 
 
+def landing_folders(cfg: Config) -> dict[str, str]:
+    """The landing folder each source reads, below the landing prefix.
+
+    Sources whose ``file`` names the same workbook share the folder of
+    the first of them in SOURCES order, so one upload loads each: the
+    monitoring workbook feeds signups and survey, which both read
+    ``signups``. Every other source reads a folder named after itself.
+
+    Args:
+        cfg: The checked config.
+
+    Returns:
+        Folder per source, in SOURCES order.
+    """
+    first: dict[str, str] = {}
+    folders: dict[str, str] = {}
+    for source in SOURCES:
+        if "file_pattern" in cfg[source]:
+            folders[source] = source
+        else:
+            name = str(cfg[source]["file"])
+            folders[source] = first.setdefault(name, source)
+    return folders
+
+
 def build_pipelines(
     cfg: Config, maps: Path, settings: LandingSettings
 ) -> dict[str, Pipeline]:
@@ -852,6 +894,7 @@ def build_pipelines(
         Pipeline per source, in SOURCES order.
     """
     contracts = source_contracts(cfg, maps)
+    folders = landing_folders(cfg)
     store: ObjectStore
     if settings.target == "gcp":
         from py_common.adapters.bigquery import BigQueryWarehouse
@@ -864,9 +907,10 @@ def build_pipelines(
     for source, contract in contracts.items():
         files: Source
         warehouse: Warehouse
+        folder = folders[source]
         if settings.target == "gcp":
             prefix = "/".join(
-                p for p in (settings.landing_prefix, source) if p
+                p for p in (settings.landing_prefix, folder) if p
             )
             files = GCSSource(
                 settings.project, settings.landing_bucket, prefix
@@ -875,14 +919,14 @@ def build_pipelines(
                 settings.project, settings.dataset, contract.table
             )
         else:
-            files = LocalSource(settings.landing / source)
+            files = LocalSource(settings.landing / folder)
             warehouse = LocalTableWarehouse(settings.tables, contract.table)
         if "file_pattern" in cfg[source]:
             modified: Callable[[SourceItem], float]
             if settings.target == "gcp":
                 modified = partial(gcs_modified, files)
             else:
-                modified = partial(local_modified, settings.landing / source)
+                modified = partial(local_modified, settings.landing / folder)
             files = NewestSource(files, cfg[source]["file_pattern"], modified)
         pipelines[source] = Pipeline(
             source=files,
@@ -898,8 +942,9 @@ def stage(cfg: Config, inputs: Path, landing: Path) -> list[Path]:
     """Copy each source's workbook from a folder into its landing folder.
 
     The local stand-in for dropping the files in the landing bucket:
-    the files the config names (the newest survey export, by pattern)
-    are copied to ``<landing>/<source>/``.
+    the files the config names (the newest match, for a source with
+    ``file_pattern``) are copied to their landing folders. A workbook
+    that feeds several sources is copied once.
 
     Args:
         cfg: The checked config.
@@ -911,14 +956,17 @@ def stage(cfg: Config, inputs: Path, landing: Path) -> list[Path]:
     """
     labels = {
         "signups": "Account signups",
-        "survey": "Survey export",
+        "survey": "Survey info",
         "was": "WAS database",
         "peer": "Peer mentoring",
     }
-    copies = []
+    folders = landing_folders(cfg)
+    copies: list[Path] = []
     for source in SOURCES:
         path = input_file(inputs, cfg[source], labels[source])
-        target = landing / source / path.name
+        target = landing / folders[source] / path.name
+        if target in copies:
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, target)
         copies.append(target)
@@ -1047,6 +1095,7 @@ __all__ = [
     "SourceContract",
     "build_pipelines",
     "ingest",
+    "landing_folders",
     "source_contracts",
 ]
 

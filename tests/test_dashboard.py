@@ -117,7 +117,7 @@ class TestHomePage:
         assert metrics == {
             "Employers": "168",
             "Website account sign ups": "185",
-            "Employer survey responses": "1",
+            "Employer survey responses": "103",
             "WAS requests": "35",
         }
 
@@ -181,11 +181,19 @@ class TestSurveyFindingsPage:
     """The Survey findings page (mockup page 1)."""
 
     def test_draws_the_answer_chart(self, open_page: PageOpener) -> None:
-        """The default question draws, with the small-numbers warning."""
+        """The default question draws from every response, with no warning."""
         at = open_page("Survey findings")
         assert not at.exception, at.exception
         assert at.get("plotly_chart")
-        assert any("Only 1 respondent(s)" in w.value for w in at.warning)
+        assert not any("respondent(s)" in w.value for w in at.warning)
+
+    def test_warns_on_few_respondents(self, open_page: PageOpener) -> None:
+        """The 8 responses up to 17 November 2025 get the warning."""
+        at = open_page("Survey findings")
+        at.date_input(key="survey_end").set_value(date(2025, 11, 17)).run()
+        assert not at.exception, at.exception
+        assert at.get("plotly_chart")
+        assert any("Only 8 respondent(s)" in w.value for w in at.warning)
 
 
 class TestLauncher:

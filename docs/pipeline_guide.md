@@ -45,7 +45,7 @@ The four inputs:
 | Source | File (dummy) | One row is | Key columns |
 |---|---|---|---|
 | Account signups | `dummy_HWW monitoring and reporting.xlsx`, sheet `Account signups` | one person signing up for a website account | month (merged cell), organisation, role, size, sector, industry, sites, "Completed survey?", "Requested WAS?" |
-| Employer survey | newest `*healthy-working-wales-employer-survey-tool-*.xlsx` | one survey response | Entry Id, Entry Date, Company, ~80 question and tick-box columns |
+| Employer survey | `dummy_HWW monitoring and reporting.xlsx`, sheet `Survey info` (headings on row 2) | one survey response | Count, Entry Date, Organisation, ~80 question and tick-box columns |
 | WAS database | `dummy_was_database.xlsx` | one Workplace Advisor Support request | Participant ID, Title (organisation), dates, sessions 1–3 |
 | Peer mentoring | `dummy_peer_montoring.xlsx` | one expression of interest | Participant ID, Business Name, date, size, sector, industry |
 
@@ -140,7 +140,7 @@ so speed doesn't matter.
 flowchart LR
     subgraph IN["Input folder (..)"]
         SU["Account signups<br/>monitoring and reporting.xlsx"]
-        SV["Survey export<br/>newest *-survey-tool-YYYY-MM-DD.xlsx"]
+        SV["Survey info<br/>monitoring and reporting.xlsx"]
         WA["WAS database.xlsx"]
         PE["Peer mentoring.xlsx"]
     end
@@ -183,7 +183,7 @@ erDiagram
 ```
 
 `employer_id` can be blank (`""`) in the fact tables. That happens when a row has no organisation
-name, such as the dummy survey response with a blank Company. Blank ids are allowed. They count as
+name, such as a survey response with a blank Organisation. Blank ids are allowed. They count as
 "Unknown" in dashboard filters.
 
 ---
@@ -211,8 +211,7 @@ What you see in the terminal (dummy data):
 2026-10-18 13:53:13 INFO    Run 20261018T125313Z-1753c3
 2026-10-18 13:53:13 INFO    Config: ...\hww_poc_code\config.toml
 2026-10-18 13:53:13 INFO    Account signups: read 200 row(s) from dummy_HWW monitoring and reporting.xlsx (sheet 'Account signups')
-2026-10-18 13:53:13 INFO    Survey export: using dummy-healthy-working-wales-employer-survey-tool-2026-09-23.xlsx (newest of 1 matching file(s))
-2026-10-18 13:53:13 INFO    Survey export: read 1 row(s) from dummy-healthy-...-2026-09-23.xlsx (sheet 'in')
+2026-10-18 13:53:13 INFO    Survey info: read 103 row(s) from dummy_HWW monitoring and reporting.xlsx (sheet 'Survey info')
 2026-10-18 13:53:13 INFO    WAS database: read 35 row(s) from dummy_was_database.xlsx (sheet 'query')
 2026-10-18 13:53:13 INFO    Peer mentoring: read 11 row(s) from dummy_peer_montoring.xlsx (sheet 'query (1)')
 2026-10-18 13:53:14 INFO    Wrote 11 tables and data_quality_report.md to ...\output
@@ -334,7 +333,7 @@ this way) and **Gotchas** (what can trip you up).
 #### `make_unique(names)`
 - **What:** numbers repeated headings: `Other`, `Other.1`, `Other.2`. Literal suffixed
   headings are reserved so generated names cannot collide with them.
-- **Why:** the survey export has several columns called "Other". The pipeline reads headings
+- **Why:** Survey info has several columns called "Other" and "Other (more info)". The pipeline reads headings
   itself (see `read_sheet`), so it has to do this itself. `mappings/survey_columns.csv` refers
   to the numbered names.
 - **Gotcha:** the numbering follows column order. If the form moves a question, `Other.3` may now be
@@ -401,8 +400,8 @@ this way) and **Gotchas** (what can trip you up).
   - Checking `required` here means a missing column is reported as the file is read.
 - **Gotchas:** errors from opening the file are translated: not found, permission denied (Windows
   sometimes reports a file open in another program this way) and "not a valid .xlsx"
-  (`BadZipFile`/`ValueError`). `sheet = 0` means the first sheet, not "Sheet0". The real sheet
-  names are `in`, `query` and `query (1)`, which is why the config uses numbers for them.
+  (`BadZipFile`/`ValueError`). `sheet = 0` means the first sheet, not "Sheet0". The WAS and peer
+  sheets are named `query` and `query (1)`, which is why the config uses numbers for them.
 
 #### `require(df, columns, source, where="")`
 - **What:** raises `InputError` listing missing columns, with suggestions and where they were expected.
@@ -549,15 +548,15 @@ Each `load_*` function follows the same pattern:
 - Personal source headings may only have the `drop` mapping role.
 - Translation keys must reference a known question and have one nonblank target per cleaned raw answer.
 - **What:**
-  1. Read `survey_columns.csv` and find the export columns for the roles `response_id`, `date`,
+  1. Read `survey_columns.csv` and find the Survey info columns for the roles `response_id`, `date`,
      `org`, `sector`, `industry`, `size` and `sites`.
-  2. Read the newest export, requiring those columns.
+  2. Read the Survey info sheet (headings on row 2), requiring those columns.
   3. Report new and missing columns compared with the mapping.
-  4. Drop blank rows, rows with no Entry Id and repeated Entry Ids. The first one is kept.
+  4. Drop blank rows, rows with no Count and repeated Counts. The first one is kept.
   5. Parse the date, clean the organisation and map the bands.
-  6. Warn about responses with a blank Company.
+  6. Warn about responses with a blank Organisation.
   7. Load the answer catalogue and translations, then unpivot.
-- **Why:** the export's columns change when the form changes. `survey_columns.csv` is the single
+- **Why:** Survey info's columns change when the form changes. `survey_columns.csv` is the single
   place that says what each column means, and the "Survey checks" section tells you when it no
   longer fits.
 - **Gotcha:** a new column in the export is **ignored** (and reported) until someone adds it to
@@ -798,7 +797,7 @@ Each `load_*` function follows the same pattern:
 
 ## 7. One organisation, start to finish: Org 11
 
-Org 11 is a good example because it is in three of the four sources, it signed up twice, and the
+Org 11 is a good example because it is in all four sources, it signed up twice, and the
 sources disagree about it.
 
 ### In the raw files
@@ -822,7 +821,9 @@ allocated 2025-11-27, `10-49` employees, sector `Private sector`, industry `Othe
 **Peer mentoring**, Excel row 12: Participant ID `0011`, Business Name `Org 11`, interest
 2025-12-27, size `50-249`, sector `Public`, industry blank.
 
-**Survey export:** no response from Org 11. The one dummy response has a blank Company.
+**Survey info**, Excel row 12: Count `94`, Entry Date 2026-08-05 14:16, Organisation `Org 11`,
+size `10-19`, sector `Charity or voluntary sector (including social enterprises)`, industry
+`other_options`, sites `1`.
 
 ### Step 1: each source is cleaned
 
@@ -835,6 +836,8 @@ allocated 2025-11-27, `10-49` employees, sector `Private sector`, industry `Othe
 - **Sign-up row 136** gets `signup_month = 2026-07-01`. Its role isn't the organisation name,
   so it isn't cleared (roles aren't output either way). Bands: `Public`, `250-999`, `1`.
   `signup_id = SU0136`.
+- **Survey** becomes `response_id = 94`, dated 2026-08-05. Bands: `Charity or voluntary`,
+  industry `other_options` → `Other`, size `10-19` → `10-49`, sites `1`.
 - **WAS** becomes `was_request_id = WAS-11` with enquiry date 2026-03-04. The "allocated" date is
   ignored because the enquiry date is there. Bands: `Private`, industry `Other..` → `Other`,
   size `10-49`, sites `Unknown`.
@@ -851,23 +854,24 @@ allocated 2025-11-27, `10-49` employees, sector `Private sector`, industry `Othe
 ### Step 2: one employer row
 
 `combine_org_rows` stacks all four sources. Org 11's rows are at positions 9 and 133 (sign-ups),
-196 (WAS) and 231 (peer). `pick_value` then decides each attribute:
+194 (survey), 298 (WAS) and 333 (peer). `pick_value` then decides each attribute:
 
 | Attribute | Values seen (count, best source rank) | Decided by | Result |
 |---|---|---|---|
-| sector | Private ×2 (signups, WAS), Public ×2 (signups, peer) | tie on count, tie on source (both seen in signups) → **latest row**: peer (231) beats WAS (196) | **Public** |
-| industry | Accommodation & Food Services ×2, Other ×1 (Unknown ignored) | count | **Accommodation & Food Services** |
-| size_band | 1000+, 250-999 (signups), 10-49 (WAS), 50-249 (peer), 1 each | tie on count → source priority: both signup values beat WAS and peer → latest row: 133 beats 9 | **250-999** |
-| sites_band | 1 ×2 (Unknown ignored) | count | **1** |
+| sector | Private ×2 (signups, WAS), Public ×2 (signups, peer), Charity or voluntary ×1 (survey) | tie on count, tie on source (both seen in signups) → **latest row**: peer (333) beats WAS (298) | **Public** |
+| industry | Accommodation & Food Services ×2 (signups), Other ×2 (survey, WAS) (Unknown ignored) | tie on count → a specific value beats Other | **Accommodation & Food Services** |
+| size_band | 10-49 ×2 (survey, WAS); 1000+, 250-999 (signups) and 50-249 (peer) once each | count | **10-49** |
+| sites_band | 1 ×3 (Unknown ignored) | count | **1** |
 
 `dim_employer`:
 
 ```
 employer_id  E7f29becf          (md5 of "org 11", first 8 hex digits)
 employer_name Org 11
-sector Public | industry Accommodation & Food Services | size_band 250-999 | sites_band 1
-in_signups True | in_survey False | in_was True | in_peer True
-attribute_conflicts  sector: Private | Public; industry: Accommodation & Food Services | Other;
+sector Public | industry Accommodation & Food Services | size_band 10-49 | sites_band 1
+in_signups True | in_survey True | in_was True | in_peer True
+attribute_conflicts  sector: Charity or voluntary | Private | Public;
+                     industry: Accommodation & Food Services | Other;
                      size_band: 10-49 | 1000+ | 250-999 | 50-249
 ```
 
@@ -875,12 +879,13 @@ The report shows `Org 11: 2 rows` under Duplicates and the same conflicts under 
 
 ### Step 3–5: ids attached, events built
 
-Every Org 11 row gets `employer_id = E7f29becf`. `fact_engagement` then has seven rows:
+Every Org 11 row gets `employer_id = E7f29becf`. `fact_engagement` then has eight rows:
 
 | engagement_id | date | precision | event_type |
 |---|---|---|---|
 | account_signup-SU0012 | 2025-11-01 | month | account_signup |
 | account_signup-SU0136 | 2026-07-01 | month | account_signup |
+| survey_completed-94 | 2026-08-05 | day | survey_completed |
 | was_request-WAS-11 | 2026-03-04 | day | was_request |
 | was_session_held-WAS-11-S1 | 2025-12-14 | day | was_session_held |
 | was_session_held-WAS-11-S3 | 2026-09-21 | day | was_session_held |
@@ -894,8 +899,8 @@ enquiry date". The dates are kept as they are, for someone to check.
 
 **Reconciliation:**
 
-- Org 11 is flagged `Y` for the survey but has no survey response, so it counts in "104 flagged
-  with no record".
+- Org 11 is flagged `Y` for the survey and has a survey response, so it counts in "61 in
+  both".
 - It has a WAS record but no WAS flag, so it counts in "30 with a record but no flag".
 
 `fact_signup` keeps both users, with SU0012's `survey_flag = True` and `survey_dates = 2026-01-01`.
@@ -909,7 +914,7 @@ from all the dates in the outputs, not only Org 11's.
 ### On the dashboard
 
 - **Employer view → Org 11** (on 10 October 2026):
-  - 2 Users, 0 Responses to employer survey, 1 WAS relationship, 1 Peer mentoring relationship.
+  - 2 Users, 1 Response to employer survey, 1 WAS relationship, 1 Peer mentoring relationship.
   - First engagement **November 2025**, with a note that sign-ups only have a month.
   - Most recent engagement **21st September 2026** (session 3).
   - Badges: None recorded.
@@ -919,8 +924,8 @@ from all the dates in the outputs, not only Org 11's.
   shows up in a filter. With sector = Public, industry = Accommodation & Food Services and sites = 1
   selected, Org 11's two sign-ups are the only ones left.
 - **Engagement → WAS requests:** one in March 2026. **WAS completed requests:** one in December 2025.
-- **Survey findings:** nothing for Org 11. The survey's one response is shown under `Unknown`
-  because its Company was blank.
+- **Survey findings:** Org 11's response (94) counts under its own bands (Charity or
+  voluntary, Other, 10-49, sites 1), not the employer's resolved values (R35).
 
 ---
 
@@ -973,10 +978,10 @@ organisation changes its id (use `org_overrides.csv`).
 are unpivoted to one row per answer or session. Every chart then becomes filter → group → count,
 and new questions or sessions need no new columns.
 
-**The flags on Account signups are not the source of truth.** The survey export and the WAS
+**The flags on Account signups are not the source of truth.** Survey info and the WAS
 database are. The hand-typed flags are kept and compared (Reconciliation) but don't create events,
-because they disagree with the records in most cases (104 flagged vs 0 survey responses in the
-dummy data).
+because they disagree with the records in many cases (in the dummy data, 43 employers flagged
+for the survey have no response, and 37 with a response aren't flagged).
 
 **Privacy by allow-list.** Only columns named in `COLUMNS` are written. Survey columns marked `drop`
 are never read. Free text is off by default. Two tests check the output for personal column names,
@@ -995,9 +1000,10 @@ Smoke tests still open every page using Streamlit's `AppTest`, with today fixed.
 on two y-axes. Two stacked panels sharing the month axis avoid inviting a comparison between two
 unrelated scales.
 
-**Newest survey export by the date in its name.** Explained under `newest_match`. Only the
-survey uses a pattern, because it is the only file that is downloaded again for each refresh. The
-others are working spreadsheets edited in place.
+**Survey info, not the survey tool's export.** The team keeps Survey info as the record of
+responses, and it arrives in the monitoring workbook under one fixed name, so the survey and the
+sign-ups load from one upload. `file_pattern` (explained under `newest_match`) stays for a source
+that is downloaded again with a date in its name.
 
 **An installable package, with one `wrangle` module.** The code is the package `hww_dashboard`
 in `src/`, installed with `pip install -e .`, so the tests and tools import it like any other
@@ -1013,8 +1019,8 @@ A natural split point, if one is needed later, is a separate module per source o
 source (events, badges) adds its own loader.
 
 **No py-common in the prototype.** py-common, the shared ingestion library, lands files in
-BigQuery for the production route. The prototype's own reading (a local folder, the newest
-survey export, sheets by position, pandas-style column names) doesn't match it, and using it
+BigQuery for the production route. The prototype's own reading (a local folder, sheets by
+position, pandas-style column names) doesn't match it, and using it
 would change the names in `config.toml` and `mappings/`. The comparison, and what to share
 instead, is in [architecture.md](architecture.md).
 
@@ -1052,7 +1058,7 @@ Probably nothing stops. The report's **Survey checks** lists new columns (ignore
 columns that disappeared. For each new column, add a row to `survey_columns.csv` with its role
 (`single`, `tick`, `other_text` or `drop`). For a new question, also add it to
 `survey_questions.csv` and its options to `survey_answers.csv`. Watch for repeated headings
-(`Other.3`) shifting when the form's order changes. If a **role** column (Entry Id, Company, …) is
+(`Other.3`) shifting when the form's order changes. If a **role** column (Count, Organisation, …) is
 renamed, the run stops and names it.
 
 #### Q: Which files did a run use?
@@ -1062,9 +1068,9 @@ file, the code's version and git commit, and the library versions. The report's 
 repeats each file's name and the first 12 digits of its checksum. Two runs with the same checksums
 read the same files.
 
-#### Q: How do I point it at a newer survey export?
-Put the file in the input folder. The newest by date in the name is used, and the log says which.
-To pin a specific export, replace `file_pattern` with `file = "exact name.xlsx"` in `[survey]`.
+#### Q: How do I update the survey responses?
+Save the monitoring workbook with the new rows on Survey info and run again (in GCP, upload it to
+`hww/signups/`). Survey info and Account signups are read from the same file.
 
 #### Q: The same organisation shows up as two employers.
 Their names differ by more than case or spacing. Add a line to `mappings/org_overrides.csv`
@@ -1138,9 +1144,9 @@ The flag column holds `True`, `False` and `None` objects. `col == True` gives a 
 mask, treating `None` as False. Using `col` directly as a mask fails because of the `None` values.
 Ruff's E712 rule would prefer `col is True`, which is wrong for a Series.
 
-#### Q: Duplicate survey Entry Ids: which one wins?
-The first one in the file. If the export ever contains edited resubmissions, decide whether the
-latest should win. That would be an output change.
+#### Q: Duplicate survey Counts: which one wins?
+The first one in the sheet; Survey info lists the newest response first. If the tab ever holds
+edited resubmissions, decide which should win. That would be an output change.
 
 #### Q: Is it safe to commit `output/`?
 No, and git won't: `output/` is in `.gitignore`. With real data it holds real organisation names
