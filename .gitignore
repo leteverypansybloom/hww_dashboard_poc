@@ -15,7 +15,7 @@ output/
 .hww-*/
 
 # py-common ingestion (python ingest.py, [landed] in config.toml): the
-# dropped workbooks, kept copies and typed tables hold the source data,
+# dropped workbooks, kept copies and raw tables hold the source data,
 # personal details included, so they are never committed.
 landing/
 store/
