@@ -3,7 +3,7 @@
 # Two ways to run it, from the same image:
 # - the daily Cloud Run job (the default command): `hww-run
 #   /app/config.gcp.toml` loads every folder of the landing bucket into
-#   typed BigQuery tables with py-common, then, if every file loaded,
+#   raw BigQuery tables with py-common, then, if every file loaded,
 #   builds the reporting tables;
 # - the upload-triggered Cloud Run service: functions-framework runs
 #   hww_dashboard/service.py's on_upload, which does the same for the
@@ -42,7 +42,7 @@ COPY mappings ./mappings
 
 # Check the code and both libraries load, and the config is readable
 # (its ${NAME} values are filled in at run time, so only parse it).
-RUN python -c "import tomllib, hww_dashboard.job, hww_dashboard.service, functions_framework, py_common.adapters.bigquery; tomllib.load(open('/app/config.gcp.toml', 'rb')); print('hww job image ready')"
+RUN python -c "import tomllib, hww_dashboard.job, hww_dashboard.service, functions_framework, py_common.adapters.bigquery_raw; tomllib.load(open('/app/config.gcp.toml', 'rb')); print('hww job image ready')"
 
 # Back to the base image's unprivileged user.
 USER app

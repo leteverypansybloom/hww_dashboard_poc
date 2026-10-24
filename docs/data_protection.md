@@ -29,8 +29,9 @@ columns are read into memory but are not used or written to the
 dashboard's output tables.
 
 With `[landed] read = true`, the separate py-common ingestion job checks
-each workbook and loads only the contract's allowed columns into typed
-tables. Unknown signup and survey columns are also rejected; the
+each workbook and loads only the contract's allowed columns into raw
+tables, as a JSON payload per row with the file, version and Excel row
+it came from. Excluded columns never reach BigQuery. Unknown signup and survey columns are also rejected; the
 mixed-value Number of sites exception applies only to that named column
 on each sheet. On Survey info, `Email address`, `Month`, "What parts
 could be improved?" and the "Other (more info)" boxes are excluded, so
@@ -91,9 +92,10 @@ audit records.
 - **Laptops**: the input workbooks (outside the repository), `output/`
   and `logs/`. git ignores both folders, and a pre-commit hook refuses
   workbooks, stray CSV files and anything under `output/`.
-- **Optional typed ingestion**: `landing/` contains source workbooks,
-  `store/` retains originals, rejected copies and processed files, and
-  `landed/` retains typed load history. In GCP the configured buckets
+- **Optional py-common ingestion**: `landing/` contains source
+  workbooks, `store/` retains originals, rejected copies and processed
+  files (the loaded rows as NDJSON), and `landed/` retains every
+  committed load of the raw tables. In GCP the configured buckets
   and landed BigQuery dataset serve those roles. Original workbooks
   retain excluded personal columns. Restrict access accordingly; git
   ignores the local folders but does not enforce storage access.
@@ -120,10 +122,12 @@ deleted once the new one is in place, unless restoring it failed (it is
 then kept in a `.hww-*` folder next to the output, for recovery). Run
 logs: the newest 20.
 
-Typed ingestion retains original workbooks and previous typed uploads;
-replacing dashboard outputs does not remove them. The data owner must
-set retention and deletion rules for landing, raw, quarantine, processed
-and typed-history storage separately.
+py-common ingestion retains original workbooks and every previous
+upload's rows in the raw tables; replacing dashboard outputs does not
+remove them. The data owner must set retention and deletion rules for
+landing, raw, quarantine, processed and raw-table storage separately
+(py-common's `docs/RUNBOOK.md` says how to remove one upload
+completely).
 
 ## Decisions for the DPIA
 

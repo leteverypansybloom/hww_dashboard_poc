@@ -1,18 +1,19 @@
-"""Read the inputs from the typed tables py-common loaded.
+"""Read the inputs from the raw tables py-common loaded.
 
 ``python ingest.py`` (:mod:`hww_dashboard.landing`) loads each workbook
-into a typed table. With ``[landed] read = true`` in config.toml,
-``wrangle.py`` reads those tables instead of the workbooks:
-``LandedInputs`` selects committed audit records, including empty loads,
-honouring each source's file or file_pattern selection. It shapes rows
-as ``wrangle.read_sheet`` would read the workbook
-(same headings, Excel types and ``excel_row``), so everything after
-that step is unchanged.
+sheet into a raw table, one JSON payload per row. With
+``[landed] read = true`` in config.toml, ``wrangle.py`` reads those
+tables instead of the workbooks: ``LandedInputs`` selects committed
+audit records, including empty loads, honouring each source's file or
+file_pattern selection. It shapes rows as ``wrangle.read_sheet`` would
+read the workbook (same headings, Excel types and ``excel_row``), so
+everything after that step is unchanged.
 
-The tables are local Parquet files (``target = "local"``) or BigQuery
+The tables are local NDJSON files (``target = "local"``) or BigQuery
 tables (``target = "gcp"``).
 """
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -21,16 +22,12 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pandas as pd
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.parquet as pq
 
 from hww_dashboard.landing import (
-    LOADED_AT,
-    ROW_FIELD,
-    LocalTableWarehouse,
     SourceContract,
     landing_settings,
+    local_audit,
+    local_rows,
     source_contracts,
 )
 from hww_dashboard.wrangle import (
@@ -41,26 +38,29 @@ from hww_dashboard.wrangle import (
     require,
 )
 
+#: A raw table row's sheet row number and its payload.
+RawRow = tuple[int, dict[str, Any]]
+
 
 @dataclass
 class Load:
-    """The newest load of a typed table.
+    """The selected load of a raw table.
 
     Attributes:
-        rows: Its rows, without the warehouse's ``_loaded_at``.
+        rows: Its rows: (Excel row number, payload), in table order.
         file: Name of the workbook it came from.
         sha256: The workbook's SHA-256.
         loaded_at: When it was loaded.
     """
 
-    rows: pa.Table
+    rows: list[RawRow]
     file: str
     sha256: str
     loaded_at: datetime
 
 
 class Tables(Protocol):
-    """Where the typed tables are."""
+    """Where the raw tables are."""
 
     def newest_load(self, table: str, settings: Config | None = None) -> Load:
         """The rows and facts of a table's newest load.
@@ -157,7 +157,7 @@ def selected_audit(
 
 @dataclass
 class LocalTables:
-    """Typed tables written by LocalTableWarehouse.
+    """Raw tables written by LocalRawWarehouse.
 
     Attributes:
         folder: The tables folder.
@@ -166,7 +166,7 @@ class LocalTables:
     folder: Path
 
     def newest_load(self, table: str, settings: Config | None = None) -> Load:
-        """Read the newest load of a table and its audit row.
+        """Read the selected load of a table and its audit record.
 
         Args:
             table: Table name.
@@ -176,39 +176,33 @@ class LocalTables:
             The load.
 
         Raises:
-            InputError: No such table, or no audit row for its load.
+            InputError: No such table, no committed load matches, or
+                the load's row count differs from its audit record.
         """
-        warehouse = LocalTableWarehouse(self.folder, table)
-        if not warehouse.table_path.exists():
+        records = local_audit(self.folder, table)
+        if not records:
             raise InputError(
                 f"No landed table {table} in {self.folder}. Run "
                 "python ingest.py first, or set [landed] read = false to "
                 "read the workbooks."
             )
-        data = pq.read_table(warehouse.table_path)
-        record = selected_audit(
-            [
-                row
-                for row in warehouse.audit(data)
-                if row.get("destination") == table
-            ],
-            table,
-            settings,
-        )
-        loaded_at = datetime.fromisoformat(record["timestamp"])
-        stamps = data.column(LOADED_AT)
-        stamp = pa.scalar(loaded_at, type=stamps.type)
-        rows = data.filter(pc.equal(stamps, stamp)).drop_columns([LOADED_AT])
-        if rows.num_rows != record["row_count"]:
+        record = selected_audit(records, table, settings)
+        rows = local_rows(self.folder, table, record)
+        if len(rows) != record["row_count"]:
             raise InputError(
                 f"Landed table {table}: audited row count differs."
             )
-        return Load(rows, record["source_file"], record["checksum"], loaded_at)
+        return Load(
+            [(int(row["row_number"]), dict(row["payload"])) for row in rows],
+            record["source_file"],
+            record["checksum"],
+            datetime.fromisoformat(record["timestamp"]),
+        )
 
 
 @dataclass
 class BigQueryTables:
-    """Typed tables loaded by py-common's BigQueryWarehouse.
+    """Raw tables loaded by py-common's RawJsonWarehouse.
 
     Attributes:
         project: GCP project.
@@ -221,7 +215,12 @@ class BigQueryTables:
     client: Any
 
     def newest_load(self, table: str, settings: Config | None = None) -> Load:
-        """Query the newest load of a table and its audit row.
+        """Query the selected load of a table and its audit row.
+
+        The audit row names the upload (its source version) and the
+        commit time, which every row of that load carries as
+        ``ingested_at``, so exactly one load is read, as the "latest
+        upload" query in py-common's docs/RAW_TABLE_LAYOUT.md does.
 
         Args:
             table: Table name.
@@ -247,8 +246,9 @@ class BigQueryTables:
         )
         audit = list(
             self.client.query(
-                f"SELECT filename, checksum, timestamp, row_count "
-                f"FROM `{audit_id}` WHERE destination = @destination "
+                f"SELECT filename, checksum, timestamp, row_count, "
+                f"source_version FROM `{audit_id}` "
+                "WHERE destination = @destination "
                 "AND outcome = 'LOADED' ORDER BY timestamp DESC"
                 + (" LIMIT 1" if settings is None else ""),
                 job_config=config,
@@ -261,6 +261,7 @@ class BigQueryTables:
                     "checksum": row[1],
                     "timestamp": row[2].isoformat(),
                     "row_count": row[3],
+                    "source_version": row[4],
                     "outcome": "LOADED",
                 }
                 for row in audit
@@ -272,46 +273,87 @@ class BigQueryTables:
         config = bigquery.QueryJobConfig(
             query_parameters=[
                 bigquery.ScalarQueryParameter(
+                    "generation", "STRING", record["source_version"]
+                ),
+                bigquery.ScalarQueryParameter(
                     "loaded_at", "TIMESTAMP", loaded_at
-                )
+                ),
             ]
         )
-        rows = self.client.query(
-            f"SELECT * FROM `{table_id}` WHERE {LOADED_AT} = @loaded_at",
-            job_config=config,
-        ).to_arrow()
-        if rows.num_rows != record["row_count"]:
+        rows = [
+            (int(row[0]), _payload(row[1]))
+            for row in self.client.query(
+                f"SELECT row_number, payload FROM `{table_id}` "
+                "WHERE source_generation = @generation "
+                "AND ingested_at = @loaded_at",
+                job_config=config,
+            ).result()
+        ]
+        if len(rows) != record["row_count"]:
             raise InputError(
                 f"Landed table {table_id}: audited row count differs."
             )
-        return Load(
-            rows.drop_columns([LOADED_AT]),
-            record["source_file"],
-            record["checksum"],
-            loaded_at,
-        )
+        return Load(rows, record["source_file"], record["checksum"], loaded_at)
+
+
+def _payload(value: Any) -> dict[str, Any]:
+    """A payload as BigQuery returns a JSON column.
+
+    Args:
+        value: The column's value: parsed already, or JSON text.
+
+    Returns:
+        The payload.
+    """
+    parsed = json.loads(value) if isinstance(value, str) else value
+    return dict(parsed)
+
+
+def _from_json_date(value: Any) -> Any:
+    """Turn a date the raw table holds as ISO text back into a datetime.
+
+    py-common writes Excel dates as "YYYY-MM-DD" or
+    "YYYY-MM-DDTHH:MM:SS" (docs/RAW_TABLE_LAYOUT.md), and openpyxl
+    reads both as datetimes, as wrangle.read_sheet gives them.
+
+    Args:
+        value: A payload value from a date column.
+
+    Returns:
+        The datetime, or the value itself if it is not ISO date text.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return value
 
 
 def to_sheet(load: Load, contract: SourceContract) -> pd.DataFrame:
     """Shape a load as ``wrangle.read_sheet`` shapes the workbook.
 
-    Table columns are renamed back to the workbook headings wrangle.py
-    knows, values become plain Python values (text, whole numbers,
-    datetimes, NaN for empty), and rows are put back in Excel order
-    with their ``excel_row``.
+    Payload keys are renamed back to the workbook headings wrangle.py
+    knows, values stay as Excel gave them (text, numbers, datetimes for
+    the contract's date columns, NaN for empty), and rows are put back
+    in Excel order with their ``excel_row``.
 
     Args:
-        load: The table's newest load.
+        load: The table's selected load.
         contract: The source's contract.
 
     Returns:
         The sheet. ``attrs`` holds the sheet name and the columns the
         contract excluded (by wrangle.py's names).
     """
-    records = load.rows.to_pylist()
-    frame = pd.DataFrame.from_records(records, columns=load.rows.column_names)
+    payloads = [payload for _, payload in load.rows]
+    columns = list(payloads[0]) if payloads else list(contract.names)
+    frame = pd.DataFrame.from_records(payloads, columns=columns)
+    for column in contract.worksheet.columns:
+        if column.data_type == "date" and column.name in frame:
+            frame[column.name] = frame[column.name].map(_from_json_date)
     frame = frame.astype(object).where(frame.notna(), float("nan"))
-    frame["excel_row"] = [int(row) for row in frame.pop(ROW_FIELD)]
+    frame["excel_row"] = [row for row, _ in load.rows]
     frame = frame.rename(columns=contract.names)
     known = [*contract.names.values(), "excel_row"]
     frame = frame[[c for c in frame.columns if c in known]]
@@ -346,7 +388,7 @@ def _wrangle_name(name: str, contract: SourceContract) -> str:
 
 @dataclass
 class LandedInputs:
-    """wrangle.Inputs that read py-common's typed tables.
+    """wrangle.Inputs that read py-common's raw tables.
 
     Attributes:
         tables: Where the tables are.
@@ -363,7 +405,7 @@ class LandedInputs:
         source: str,
         required: Sequence[str],
     ) -> SheetInput:
-        """Read the newest load of one source's table.
+        """Read the selected load of one source's table.
 
         Args:
             section: The source's config section, e.g. ``"was"``.

@@ -80,11 +80,12 @@ Black, Ruff and mypy versions as py-common.
 
 Kept on purpose:
 
-- **The backend.** The prototype still reads the workbooks from a
-  folder with pandas and openpyxl. It writes CSV files that the
-  Streamlit app reads or, since 2026-10-18, BigQuery tables through
-  the optional `bigquery` extra (google-cloud-bigquery). It has no
-  dependency on py-common.
+- **The backend.** By default the prototype reads the workbooks from
+  a folder with pandas and openpyxl. It writes CSV files that the
+  Streamlit app reads, or BigQuery tables through the optional
+  `bigquery` extra (google-cloud-bigquery). With the optional
+  `landing` extra it can instead land the workbooks with py-common
+  and read them back from py-common's raw tables (next section).
 - **Every output.** The CSVs, their columns, the identifiers
   (`employer_id`, `signup_id`, `answer_id`, ...) and the data quality
   report are byte-for-byte what the code wrote before the refactor
@@ -92,32 +93,34 @@ Kept on purpose:
 - **The commands**: `python wrangle.py [config.toml]` and
   `streamlit run dashboard.py`, run from the project folder.
 
-## Why the prototype does not use py-common
+## How the prototype uses py-common
 
-py-common was checked for anything the prototype's own ingestion
-needs. Nothing fits without changing what the prototype does:
+`python ingest.py` (`src/hww_dashboard/landing.py`) lands the
+workbooks with py-common's raw JSON route, as the production route
+will: one pipeline per workbook, one landing folder per workbook, and
+each sheet's loaded columns in a raw table as JSON payloads
+(`hww_signups`, `hww_survey`, `hww_was`, `hww_peer`). The monitoring
+workbook's two sheets load together or not at all. With
+`[landed] read = true`, `wrangle.py` reads the newest committed load
+of each table back (`src/hww_dashboard/landed.py`) and builds the same
+tables as from the workbooks; `tests/test_landing.py` checks them
+against the golden snapshot.
 
-- **Different source.** py-common lists files in a GCS bucket (or a
-  local folder, for development), each workbook with one agreed file
-  name; a renamed upload is quarantined. The prototype reads three
-  local files, and can pick a file by the date in its name.
-- **Sheets by name only.** py-common's contracts find worksheets by
-  name. The exports' sheets are named `query` and `query (1)` by the
-  systems that make them, so the prototype picks them by position.
-- **Different column names.** py-common names columns exactly as
+What the prototype keeps of its own, and why:
+
+- **Sheets by position as well as name.** The exports' sheets are
+  named `query` and `query (1)` by the systems that make them. The
+  contracts name them; `config.toml` still picks them by position for
+  the direct workbook read.
+- **Its own column names.** py-common names columns exactly as
   written (`Organisation Industry ` keeps its trailing space), blank
   headings `col_B` and repeats `Other_2`. The prototype trims headings
   and uses `B` and pandas-style `Other.1`, and `config.toml` and
-  `mappings/survey_columns.csv` are written in those names. Switching
-  would change those identifiers for no gain in the prototype.
-- **Different output.** py-common's pipeline ends in a warehouse load
-  with audit records and stored copies. The prototype rebuilds every
-  table from all four sheets on every run, and has no warehouse.
-
-Adding py-common anyway would mean wrapping it to undo these
-differences. An earlier attempt did exactly that (a `py-common-ingestion`
-branch); this refactor keeps the boundary instead: py-common lands
-data, and the HWW rules stay here until Dataform takes them over.
+  `mappings/survey_columns.csv` are written in those names, so
+  `landed.py` renames the payload keys back.
+- **A local stand-in for BigQuery.** `LocalRawWarehouse` writes the
+  same rows and audit records as py-common's `RawJsonWarehouse`, to
+  NDJSON files, so laptops and tests need no GCP project.
 
 ## Before a migration: differences to settle
 
@@ -168,8 +171,7 @@ A suggested order, each step useful on its own:
 
 ## Sharing with py-common
 
-Concrete opportunities, none of which needs the prototype to import
-py-common:
+Concrete opportunities:
 
 - **One personal-column list.** `[privacy] personal_columns` in
   `config.toml` and the `drop` roles in `survey_columns.csv` list the
@@ -185,6 +187,5 @@ py-common:
 - **Golden outputs as acceptance tests.** `tests/golden/` is a
   ready-made expected result for the Dataform layer (step 3 above).
 - **A public naming function.** If py-common exposed the heading names
-  its `read_sheet` produces (as it already exposes
-  `parquet.column_name()` for typed tables), the translation in point 2
-  of the previous section could call it instead of copying the rules.
+  its `read_sheet` produces, the translation in point 2 of the previous
+  section could call it instead of copying the rules.

@@ -21,11 +21,11 @@ from py_common.model import Outcome, Result, SourceItem  # noqa: E402
 from hww_dashboard import landing, service, wrangle  # noqa: E402
 
 #: Stand-ins for the pipelines, by landing folder, as the shipped config
-#: groups them: the monitoring workbook feeds signups and survey.
-PIPELINES: dict[str, list[Any]] = {
-    "hww/signups": ["signups pipeline", "survey pipeline"],
-    "hww/was": ["was pipeline"],
-    "hww/peer": ["peer pipeline"],
+#: has them: one per workbook.
+PIPELINES: dict[str, Any] = {
+    "hww/signups": "monitoring workbook pipeline",
+    "hww/was": "was pipeline",
+    "hww/peer": "peer pipeline",
 }
 
 
@@ -119,33 +119,12 @@ def uploads(
 
 
 class TestIngestUpload:
-    """ingest_upload(): every pipeline that reads the upload's folder."""
+    """ingest_upload(): the pipeline that reads the upload's folder."""
 
-    def test_monitoring_workbook_runs_signups_then_survey(
+    def test_py_common_is_given_every_folders_pipeline(
         self, uploads: list[list[Result]], calls: list[dict[str, Any]]
     ) -> None:
-        """An upload to hww/signups/ loads both tables.
-
-        Args:
-            uploads: Queue of handle_upload results.
-            calls: What each handle_upload call was given.
-        """
-        uploads += [[result(Outcome.LOADED)], [result(Outcome.LOADED)]]
-
-        results = service.ingest_upload(
-            event("hww/signups/monitoring.xlsx"), PIPELINES
-        )
-
-        assert len(results) == 2
-        assert calls == [
-            {folder: group[0] for folder, group in PIPELINES.items()},
-            {"hww/signups": "survey pipeline"},
-        ]
-
-    def test_other_folders_run_one_pipeline(
-        self, uploads: list[list[Result]], calls: list[dict[str, Any]]
-    ) -> None:
-        """An upload to hww/was/ makes one call.
+        """handle_upload picks the folder's pipeline; it gets them all.
 
         Args:
             uploads: Queue of handle_upload results.
@@ -153,13 +132,17 @@ class TestIngestUpload:
         """
         uploads.append([result(Outcome.LOADED)])
 
-        assert len(service.ingest_upload(WAS_UPLOAD, PIPELINES)) == 1
-        assert len(calls) == 1
+        results = service.ingest_upload(
+            event("hww/signups/monitoring.xlsx"), PIPELINES
+        )
 
-    def test_ignored_event_makes_one_call(
+        assert len(results) == 1
+        assert calls == [PIPELINES]
+
+    def test_ignored_event_returns_nothing(
         self, uploads: list[list[Result]], calls: list[dict[str, Any]]
     ) -> None:
-        """An event handle_upload ignores runs no further pipeline.
+        """An event handle_upload ignores gives no results.
 
         Args:
             uploads: Queue of handle_upload results.
@@ -210,18 +193,15 @@ class TestHandle:
         assert rebuilt == []
         assert "Missing column 'X'" in caplog.text
 
-    def test_survey_quarantine_stops_the_rebuild(
+    def test_monitoring_quarantine_stops_the_rebuild(
         self, uploads: list[list[Result]]
     ) -> None:
-        """Signups loaded but survey quarantined: the tables stay as they are.
+        """A bad Survey info sheet stops both sheets and the rebuild.
 
         Args:
             uploads: Queue of handle_upload results.
         """
-        uploads += [
-            [result(Outcome.LOADED)],
-            [result(Outcome.QUARANTINED, ["Unexpected columns"])],
-        ]
+        uploads.append([result(Outcome.QUARANTINED, ["Unexpected columns"])])
         rebuilt: list[Path] = []
 
         outcome = service.handle(
@@ -302,12 +282,12 @@ class TestHandle:
 
 
 class TestFolderPipelines:
-    """folder_pipelines(): the pipelines grouped by landing folder."""
+    """folder_pipelines(): one pipeline per landing folder."""
 
     def test_keys_are_the_landing_folders(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """With no prefix, the monitoring workbook's folder has two.
+        """With no prefix, the monitoring workbook loads both tables.
 
         Args:
             tmp_path: Folder for the config.
@@ -324,16 +304,15 @@ class TestFolderPipelines:
 
         pipelines = service.folder_pipelines(config)
 
-        assert {folder: len(group) for folder, group in pipelines.items()} == {
-            "signups": 2,
-            "was": 1,
-            "peer": 1,
+        tables = {
+            folder: pipeline.warehouse.identity.rsplit(".", 1)[-1]
+            for folder, pipeline in pipelines.items()
         }
-        tables = [
-            p.warehouse.identity.rsplit(".", 1)[-1]
-            for p in pipelines["signups"]
-        ]
-        assert tables == ["hww_signups", "hww_survey"]
+        assert tables == {
+            "signups": "hww_signups+hww_survey",
+            "was": "hww_was",
+            "peer": "hww_peer",
+        }
 
 
 class TestNewestSourceBucket:

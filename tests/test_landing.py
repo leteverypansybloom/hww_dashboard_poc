@@ -1,12 +1,13 @@
-"""Checks on ingestion with py-common's typed route, and reading it back.
+"""Checks on ingestion into py-common's raw tables, and reading them back.
 
-``python ingest.py`` lands the synthetic workbooks in local typed tables
+``python ingest.py`` lands the synthetic workbooks in local raw tables
 (landing.py); ``wrangle.py`` with ``[landed] read = true`` reads them
 back (landed.py). The end-to-end check runs both and compares every
 table with the golden snapshot made from the workbooks directly.
 """
 
 import json
+import os
 import shutil
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -15,16 +16,15 @@ from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
 from openpyxl import load_workbook
 
 pytest.importorskip("py_common")
 
-from py_common.errors import ServiceError, ValidationError  # noqa: E402
+from py_common.contract import SheetRows  # noqa: E402
+from py_common.errors import ServiceError  # noqa: E402
 from py_common.model import Outcome, SourceItem  # noqa: E402
-from py_common.parquet import column_name  # noqa: E402
+from py_common.raw import to_ndjson  # noqa: E402
 
 from hww_dashboard import landed, landing, wrangle  # noqa: E402
 
@@ -64,6 +64,59 @@ def landing_config(
     return path
 
 
+def newest_rows(folder: Path, table: str) -> list[dict[str, Any]]:
+    """The rows of a local raw table's newest committed load.
+
+    Args:
+        folder: The tables folder.
+        table: Table name, e.g. "hww_was".
+
+    Returns:
+        The rows, each with the raw table's columns.
+    """
+    record = landing.local_audit(folder, table)[-1]
+    return landing.local_rows(folder, table, record)
+
+
+def payload_keys(folder: Path, table: str) -> set[str]:
+    """Every payload key in a local raw table's newest load.
+
+    Args:
+        folder: The tables folder.
+        table: Table name.
+
+    Returns:
+        The keys.
+    """
+    return {
+        key for row in newest_rows(folder, table) for key in row["payload"]
+    }
+
+
+def ndjson(sheets: dict[str, list[str]], version: str = "v1") -> bytes:
+    """Raw NDJSON rows, one text column per sheet, as py-common writes it.
+
+    Args:
+        sheets: Sheet name -> the "name" value of each row.
+        version: The upload's source version.
+
+    Returns:
+        The NDJSON.
+    """
+    data, _ = to_ndjson(
+        {
+            sheet: SheetRows(
+                ["name"],
+                [(n, (value,)) for n, value in enumerate(values, start=2)],
+            )
+            for sheet, values in sheets.items()
+        },
+        SourceItem("f.xlsx", "f.xlsx", version, 1),
+        "abc",
+    )
+    return data
+
+
 def settings_of(config: Path) -> wrangle.Config:
     """The config, loaded and checked as the pipeline loads it.
 
@@ -101,11 +154,9 @@ class TestContracts:
     """The HWW contracts accept the workbooks and keep personal data out."""
 
     def test_every_source_loads(self, landed_run: Path) -> None:
-        """Each source's typed table has the workbook's data rows."""
+        """Each source's raw table has the workbook's data rows."""
         rows = {
-            source: pq.read_table(
-                landed_run / "landed" / f"{table}.parquet"
-            ).num_rows
+            source: len(newest_rows(landed_run / "landed", table))
             for source, table in landing.TABLES.items()
         }
         assert rows == {"signups": 200, "survey": 103, "was": 35, "peer": 11}
@@ -121,21 +172,34 @@ class TestContracts:
         assert signups.file == "dummy_HWW monitoring and reporting.xlsx"
         assert signups.sha256 == survey.sha256
 
+    def test_rows_say_where_they_came_from(self, landed_run: Path) -> None:
+        """Each row has the raw table's columns and its Excel row."""
+        first, *_ = newest_rows(landed_run / "landed", "hww_signups")
+        assert tuple(first) == landing.RAW_COLUMNS
+        assert first["sheet_name"] == "Account signups"
+        assert (
+            first["source_file"] == "dummy_HWW monitoring and reporting.xlsx"
+        )
+        assert first["row_number"] == 3
+
     def test_survey_info_loads_only_what_the_map_reads(
         self, landed_run: Path
     ) -> None:
-        """Email address, Month and free text stay out; sites are text."""
-        schema = pq.read_schema(landed_run / "landed" / "hww_survey.parquet")
-        assert column_name("Email address") not in schema.names
-        assert column_name("Month") not in schema.names
-        assert not [n for n in schema.names if "more_info" in n]
-        assert schema.field("count").type == pa.int64()
-        assert schema.field("number_of_sites").type == pa.string()
+        """Email address, Month and free text stay out; sites are in."""
+        keys = payload_keys(landed_run / "landed", "hww_survey")
+        assert "Email address" not in keys
+        assert "Month" not in keys
+        assert not [key for key in keys if "more info" in key]
+        assert "Number of sites" in keys
 
-    def test_new_survey_column_quarantines_only_the_survey(
+    def test_new_survey_column_quarantines_the_whole_workbook(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """A new Survey info heading stops the survey load, not signups."""
+        """A new Survey info heading stops both sheets of the upload.
+
+        Signups and survey come from one upload, so neither loads
+        without the other.
+        """
         config = landing_config(tmp_path, data_folder, read=False)
         cfg = settings_of(config)
         landing.stage(cfg, data_folder / "inputs", tmp_path / "landing")
@@ -150,31 +214,56 @@ class TestContracts:
 
         results = landing.ingest(config)
 
-        (survey,) = results["survey"]
-        (signups,) = results["signups"]
-        assert survey.outcome == Outcome.QUARANTINED
-        assert "Phone number" in "; ".join(survey.errors)
-        assert signups.outcome == Outcome.LOADED
+        (monitoring,) = results["signups"]
+        assert monitoring.outcome == Outcome.QUARANTINED
+        assert "Phone number" in "; ".join(monitoring.errors)
+        assert not landing.local_audit(tmp_path / "landed", "hww_signups")
+        assert not landing.local_audit(tmp_path / "landed", "hww_survey")
 
-    def test_personal_columns_are_not_loaded(
-        self, landed_run: Path, data_folder: Path
+    @pytest.mark.parametrize("source", wrangle.SOURCES)
+    def test_excluded_headings_are_not_loaded(
+        self, source: str, landed_run: Path
     ) -> None:
-        """No column named in [privacy] reaches a typed table."""
-        cfg = settings_of(landed_run / "config.toml")
-        personal = {column_name(c) for c in cfg["privacy"]["personal_columns"]}
-        for table in landing.TABLES.values():
-            names = set(
-                pq.read_table(
-                    landed_run / "landed" / f"{table}.parquet"
-                ).column_names
-            )
-            assert not names & personal, table
+        """No heading a source's contract excludes is a payload key.
 
-    def test_typed_columns_keep_their_types(self, landed_run: Path) -> None:
-        """Dates load as timestamps and the WAS id as a whole number."""
-        schema = pq.read_schema(landed_run / "landed" / "hww_was.parquet")
-        assert schema.field("date_of_enquiry").type == pa.timestamp("us")
-        assert schema.field("participant_id").type == pa.int64()
+        Args:
+            source: The source checked.
+            landed_run: The landed synthetic workbooks.
+        """
+        cfg = settings_of(landed_run / "config.toml")
+        contract = landing.source_contracts(
+            cfg, Path(cfg["paths"]["mappings_folder"])
+        )[source]
+        keys = payload_keys(landed_run / "landed", contract.table)
+        assert contract.worksheet.excluded
+        assert not keys & set(contract.worksheet.excluded)
+
+    def test_personal_columns_are_not_loaded(self, landed_run: Path) -> None:
+        """No column named in [privacy] reaches a raw table."""
+        cfg = settings_of(landed_run / "config.toml")
+        personal = set(cfg["privacy"]["personal_columns"])
+        for table in landing.TABLES.values():
+            keys = {
+                landing.pandas_name(key)
+                for key in payload_keys(landed_run / "landed", table)
+            }
+            assert not keys & personal, table
+
+    def test_values_keep_their_excel_types(self, landed_run: Path) -> None:
+        """Dates are ISO text and the WAS id a whole number."""
+        rows = newest_rows(landed_run / "landed", "hww_was")
+        dates = [
+            row["payload"]["Date of Enquiry"]
+            for row in rows
+            if row["payload"]["Date of Enquiry"] is not None
+        ]
+        ids = [
+            row["payload"]["Participant ID"]
+            for row in rows
+            if row["payload"]["Participant ID"] is not None
+        ]
+        assert dates and all(datetime.fromisoformat(d) for d in dates)
+        assert ids and all(type(value) is int for value in ids)
 
     def test_every_config_column_is_in_its_contract(
         self, landed_run: Path
@@ -222,7 +311,7 @@ class TestContracts:
         (was,) = results["was"]
         assert was.outcome == Outcome.QUARANTINED
         assert "Home address" in "; ".join(was.errors)
-        assert not (tmp_path / "landed" / "hww_was.parquet").exists()
+        assert not (tmp_path / "landed" / "hww_was").exists()
 
     def test_wrong_type_quarantines_the_file(
         self, tmp_path: Path, data_folder: Path
@@ -255,8 +344,35 @@ class TestContracts:
         assert all(
             r.outcome == Outcome.SKIPPED for rs in again.values() for r in rs
         )
-        table = pq.read_table(tmp_path / "landed" / "hww_peer.parquet")
-        assert table.num_rows == 11
+        (record,) = landing.local_audit(tmp_path / "landed", "hww_peer")
+        assert record["row_count"] == 11
+
+
+class TestWorkbooks:
+    """workbooks(): one contract and pipeline per landing folder."""
+
+    def test_the_monitoring_workbook_holds_two_sheets(
+        self, fixture_config: Path, project_folder: Path
+    ) -> None:
+        """Signups and survey share one contract, each with its table."""
+        books = landing.workbooks(
+            settings_of(fixture_config), project_folder / "mappings"
+        )
+
+        assert list(books) == ["signups", "was", "peer"]
+        monitoring = books["signups"]
+        assert monitoring.sources == ["signups", "survey"]
+        assert monitoring.tables == {
+            "Account signups": "hww_signups",
+            "Survey info": "hww_survey",
+        }
+        assert monitoring.contract.file_name == (
+            "dummy_HWW monitoring and reporting.xlsx"
+        )
+        assert set(monitoring.contract.untyped_columns) == {
+            "Account signups",
+            "Survey info",
+        }
 
 
 class TestRepeatedHeadings:
@@ -272,62 +388,137 @@ class TestRepeatedHeadings:
         )
 
 
-class TestLocalTableWarehouse:
-    """The local stand-in follows py-common's Warehouse protocol."""
+class TestLocalRawWarehouse:
+    """The local stand-in follows RawJsonWarehouse's rules."""
 
     @staticmethod
-    def parquet(rows: int) -> bytes:
-        """Parquet bytes with one text column.
+    def warehouse(folder: Path) -> landing.LocalRawWarehouse:
+        """A warehouse with two sheets, S and T.
 
         Args:
-            rows: Number of rows.
+            folder: The tables folder.
 
         Returns:
-            The bytes.
+            The warehouse.
         """
-        table = pa.table({"name": [f"Org {n}" for n in range(rows)]})
-        sink = pa.BufferOutputStream()
-        pq.write_table(table, sink)
-        return bytes(sink.getvalue().to_pybytes())
+        return landing.LocalRawWarehouse(folder, {"S": "s_raw", "T": "t_raw"})
 
-    def test_load_appends_and_is_idempotent(self, tmp_path: Path) -> None:
-        """A load appends with _loaded_at; the same upload is skipped."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
+    def test_load_inserts_once_per_upload(self, tmp_path: Path) -> None:
+        """A load inserts each sheet's rows; the same upload is skipped."""
+        warehouse = self.warehouse(tmp_path)
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
+        data = ndjson({"S": ["a", "b"], "T": ["c"]})
 
-        assert warehouse.load("f.xlsx_abc", "abc", self.parquet(2), 2, item)
-        assert not warehouse.load(
-            "f.xlsx_abc", "abc", self.parquet(2), 2, item
-        )
+        assert warehouse.load("f.xlsx_abc", "abc", data, 3, item)
+        assert not warehouse.load("f.xlsx_abc", "abc", data, 3, item)
 
-        table = pq.read_table(warehouse.table_path)
-        assert table.num_rows == 2
-        assert landing.LOADED_AT in table.column_names
-        assert [row["source_file"] for row in warehouse.audit()] == ["f.xlsx"]
+        assert len(newest_rows(tmp_path, "s_raw")) == 2
+        assert len(newest_rows(tmp_path, "t_raw")) == 1
+        assert [
+            r["source_file"] for r in landing.local_audit(tmp_path, "s_raw")
+        ] == ["f.xlsx"]
 
-    def test_row_count_mismatch_is_a_service_error(
+    def test_a_revert_loads_again(self, tmp_path: Path) -> None:
+        """A, then B, then A again: each upload loads (latest wins)."""
+        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "s_raw"})
+        uploads = [("v1", ["a"]), ("v2", ["a", "b"]), ("v3", ["a"])]
+
+        loaded = [
+            warehouse.load(
+                "f.xlsx_abc",
+                "abc",
+                ndjson({"S": values}, version),
+                len(values),
+                SourceItem("f.xlsx", "f.xlsx", version, 1),
+            )
+            for version, values in uploads
+        ]
+
+        assert loaded == [True, True, True]
+        audit = landing.local_audit(tmp_path, "s_raw")
+        assert [r["source_version"] for r in audit] == ["v1", "v2", "v3"]
+
+    def test_rows_have_the_bigquery_raw_columns(self, tmp_path: Path) -> None:
+        """Local rows have exactly RawJsonWarehouse's raw table columns."""
+        bigquery_raw = pytest.importorskip("py_common.adapters.bigquery_raw")
+        warehouse = self.warehouse(tmp_path)
+        item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
+        warehouse.load("k", "abc", ndjson({"S": ["a"]}), 1, item)
+
+        (row,) = newest_rows(tmp_path, "s_raw")
+
+        assert list(row) == [f.name for f in bigquery_raw.RAW_SCHEMA]
+        assert list(landing.RAW_COLUMNS) == list(row)
+
+    def test_a_table_added_later_loads_on_its_own(
         self, tmp_path: Path
     ) -> None:
-        """A wrong expected count fails the load (retried, not rejected)."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
+        """Adding T to the mapping loads T, without loading S again."""
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
-        with pytest.raises(ServiceError, match="row count"):
-            warehouse.load("k", "abc", self.parquet(2), 3, item)
+        data = ndjson({"S": ["a"], "T": ["b"]})
+        landing.LocalRawWarehouse(tmp_path, {"S": "s_raw"}).load(
+            "k", "abc", ndjson({"S": ["a"]}), 1, item
+        )
 
-    def test_reserved_column_is_rejected(self, tmp_path: Path) -> None:
-        """Data with its own _loaded_at can't be loaded."""
-        table = pa.table({landing.LOADED_AT: [1]})
-        sink = pa.BufferOutputStream()
-        pq.write_table(table, sink)
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
+        assert self.warehouse(tmp_path).load("k", "abc", data, 2, item)
+
+        assert len(landing.local_audit(tmp_path, "s_raw")) == 1
+        assert len(landing.local_audit(tmp_path, "t_raw")) == 1
+
+    def test_row_count_mismatch_is_refused(self, tmp_path: Path) -> None:
+        """A wrong expected count fails the load, as in BigQuery."""
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
-        with pytest.raises(ValidationError, match="_loaded_at"):
-            warehouse.load("k", "abc", sink.getvalue().to_pybytes(), 1, item)
+        with pytest.raises(ValueError, match="Row count mismatch"):
+            self.warehouse(tmp_path).load(
+                "k", "abc", ndjson({"S": ["a"]}), 3, item
+            )
+
+    def test_a_sheet_with_no_table_is_refused(self, tmp_path: Path) -> None:
+        """Rows from a sheet the mapping doesn't name are not loaded."""
+        item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
+        with pytest.raises(ValueError, match="No raw table"):
+            self.warehouse(tmp_path).load(
+                "k", "abc", ndjson({"X": ["a"]}), 1, item
+            )
 
     def test_identity_is_a_plain_name(self, tmp_path: Path) -> None:
-        """py-common puts the identity in keys: no colon or slash."""
-        identity = landing.LocalTableWarehouse(tmp_path, "t").identity
+        """Like RawJsonWarehouse's, with no colon or slash for keys."""
+        identity = self.warehouse(tmp_path).identity
+        assert identity.endswith(".s_raw+t_raw")
         assert ":" not in identity and "/" not in identity
+
+    def test_a_failed_commit_is_retried_exactly_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rows written without their audit record are not committed."""
+        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "s_raw"})
+        item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
+        data = ndjson({"S": ["a", "b"]})
+        real = os.replace
+
+        def refuse_audit(source: Any, destination: Any) -> None:
+            """Fail only the replace that would commit the audit record.
+
+            Args:
+                source: The temporary file.
+                destination: The file it would replace.
+
+            Raises:
+                OSError: For the audit record.
+            """
+            if str(destination).endswith(".audit.json"):
+                raise OSError("simulated audit failure")
+            real(source, destination)
+
+        with monkeypatch.context() as context:
+            context.setattr("hww_dashboard.landing.os.replace", refuse_audit)
+            with pytest.raises(ServiceError, match="audit failure"):
+                warehouse.load("k", "abc", data, 2, item)
+
+        assert landing.local_audit(tmp_path, "s_raw") == []
+        assert warehouse.load("k", "abc", data, 2, item)
+        assert not warehouse.load("k", "abc", data, 2, item)
+        assert len(newest_rows(tmp_path, "s_raw")) == 2
 
 
 class TestLongPath:
@@ -438,48 +629,68 @@ class TestLandedInputs:
             wrangle.run(config, output_folder=tmp_path / "out")
 
 
+def fake_bigquery(
+    audit: list[tuple[Any, ...]],
+    rows: list[tuple[Any, ...]],
+    queries: list[tuple[str, Any]] | None = None,
+) -> SimpleNamespace:
+    """A stand-in BigQuery client for BigQueryTables.
+
+    Args:
+        audit: Rows the audit query returns: (load key, checksum,
+            timestamp, row count, source version).
+        rows: Rows the table query returns: (row number, payload).
+        queries: Where to record each (SQL, job config), if given.
+
+    Returns:
+        An object with the client's query() method.
+    """
+
+    def query(sql: str, job_config: Any = None) -> SimpleNamespace:
+        """Answer the audit query or the raw table query.
+
+        Args:
+            sql: The query text.
+            job_config: Its parameters.
+
+        Returns:
+            A job whose result() holds the rows.
+        """
+        if queries is not None:
+            queries.append((sql, job_config))
+        if "FROM `p.d.audit`" in sql:
+            return SimpleNamespace(result=lambda: audit)
+        return SimpleNamespace(result=lambda: rows)
+
+    return SimpleNamespace(query=query)
+
+
 class TestBigQueryTables:
     """The BigQuery reader's queries, against a fake client."""
 
-    def test_reads_the_newest_load_and_its_audit_row(self) -> None:
-        """Rows come from the newest load; facts from the audit table."""
-        loaded = datetime(2026, 10, 1, 9, 0)
-        rows = pa.table(
-            {
-                "participant_id": [7],
-                landing.ROW_FIELD: ["2"],
-                landing.LOADED_AT: [loaded],
-            }
+    def test_reads_the_selected_load_and_its_audit_row(self) -> None:
+        """Rows come from the audited upload; facts from the audit table."""
+        loaded = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+        key = "hww/was/dummy_was_database.xlsx_abcdef12"
+        queries: list[tuple[str, Any]] = []
+        client = fake_bigquery(
+            [(key, "abcdef1234", loaded, 1, "17")],
+            [(2, '{"Participant ID": 7}')],
+            queries,
         )
-        queries: list[str] = []
 
-        def query(sql: str, job_config: Any = None) -> SimpleNamespace:
-            """Answer the audit query and the table read.
-
-            Args:
-                sql: The query text.
-                job_config: Ignored.
-
-            Returns:
-                A result holding the audit row, or the table as Arrow.
-            """
-            queries.append(sql)
-            if "FROM `p.d.audit`" in sql:
-                key = "hww/was/dummy_was_database.xlsx_abcdef12"
-                return SimpleNamespace(
-                    result=lambda: [(key, "abcdef1234", loaded, 1)]
-                )
-            return SimpleNamespace(to_arrow=lambda: rows)
-
-        tables = landed.BigQueryTables("p", "d", SimpleNamespace(query=query))
-        load = tables.newest_load("hww_was")
+        load = landed.BigQueryTables("p", "d", client).newest_load("hww_was")
 
         assert load.file == "dummy_was_database.xlsx"
         assert load.sha256 == "abcdef1234"
-        assert landing.LOADED_AT not in load.rows.column_names
-        assert "FROM `p.d.audit`" in queries[0]
-        assert "destination = @destination" in queries[0]
-        assert "WHERE _loaded_at = @loaded_at" in queries[1]
+        assert load.rows == [(2, {"Participant ID": 7})]
+        audit_sql, _ = queries[0]
+        assert "FROM `p.d.audit`" in audit_sql
+        assert "destination = @destination" in audit_sql
+        rows_sql, config = queries[1]
+        assert "WHERE source_generation = @generation" in rows_sql
+        assert "AND ingested_at = @loaded_at" in rows_sql
+        assert [q.value for q in config.query_parameters] == ["17", loaded]
 
 
 class TestCheckLanded:
@@ -501,7 +712,7 @@ class TestCheckLanded:
 
 
 class TestEndToEnd:
-    """Workbooks -> py-common typed tables -> wrangle -> same tables."""
+    """Workbooks -> py-common raw tables -> wrangle -> same tables."""
 
     def test_tables_match_the_golden_snapshot(
         self, landed_run: Path, tmp_path: Path, run_time: datetime
@@ -582,12 +793,12 @@ class TestLandingFolders:
 
 
 class TestLandingRegressions:
-    """Failures found while reviewing the typed ingestion boundary."""
+    """Failures found while reviewing the ingestion boundary."""
 
     def test_signups_rejects_unexpected_personal_column(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """An extra signup column never reaches its typed table."""
+        """An extra signup column never reaches its raw table."""
         config = landing_config(tmp_path, data_folder, read=True)
         cfg = settings_of(config)
         landing.stage(cfg, data_folder / "inputs", tmp_path / "landing")
@@ -604,7 +815,7 @@ class TestLandingRegressions:
 
         assert result.outcome == Outcome.QUARANTINED
         assert "Home address" in "; ".join(result.errors)
-        assert not (tmp_path / "landed" / "hww_signups.parquet").exists()
+        assert not (tmp_path / "landed" / "hww_signups").exists()
 
     def test_signups_requires_the_mixed_type_column(
         self, tmp_path: Path, data_folder: Path
@@ -682,128 +893,35 @@ class TestLandingRegressions:
             == newest
         )
 
-    def test_audit_failure_cannot_publish_an_unreadable_load(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A failed metadata write preserves a readable committed load."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
-        data = TestLocalTableWarehouse.parquet(2)
-        old = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
-        new = SourceItem("f.xlsx", "f.xlsx", "v2", 1)
-        warehouse.load("old", "old", data, 2, old)
-        original_open = Path.open
-
-        def fail_audit(path: Path, *args: Any, **kwargs: Any) -> Any:
-            """Refuse a separate append to the legacy audit file."""
-            if path == warehouse.audit_path and args and args[0] == "a":
-                raise OSError("simulated audit append failure")
-            return original_open(path, *args, **kwargs)
-
-        monkeypatch.setattr(Path, "open", fail_audit)
-        try:
-            written = warehouse.load("new", "new", data, 2, new)
-        except ServiceError:
-            written = False
-
-        load = landed.LocalTables(tmp_path).newest_load("t")
-
-        assert load.sha256 == ("new" if written else "old")
-        assert load.rows.num_rows == 2
-
     def test_empty_load_replaces_previous_rows(self, tmp_path: Path) -> None:
         """An audited zero-row snapshot does not revive an older load."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
+        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
         warehouse.load(
             "old",
             "old",
-            TestLocalTableWarehouse.parquet(2),
+            ndjson({"S": ["a", "b"]}),
             2,
             SourceItem("f.xlsx", "f.xlsx", "v1", 1),
         )
         warehouse.load(
             "empty",
             "empty",
-            TestLocalTableWarehouse.parquet(0),
+            b"",
             0,
             SourceItem("f.xlsx", "f.xlsx", "v2", 1),
         )
 
         load = landed.LocalTables(tmp_path).newest_load("t")
 
-        assert load.rows.num_rows == 0
+        assert load.rows == []
         assert load.sha256 == "empty"
-
-    def test_failed_commit_preserves_previous_data_and_audit(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A failed final replacement is safe to retry exactly once."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
-        data = TestLocalTableWarehouse.parquet(2)
-        old = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
-        new = SourceItem("f.xlsx", "f.xlsx", "v2", 1)
-        warehouse.load("old", "old", data, 2, old)
-        before = warehouse.table_path.read_bytes()
-
-        def refuse_replace(source: Any, destination: Any) -> None:
-            """Simulate failure at the atomic publication boundary."""
-            raise OSError("simulated replacement failure")
-
-        with monkeypatch.context() as context:
-            context.setattr("hww_dashboard.landing.os.replace", refuse_replace)
-            with pytest.raises(ServiceError, match="replacement failure"):
-                warehouse.load("new", "new", data, 2, new)
-
-        assert warehouse.table_path.read_bytes() == before
-        assert landed.LocalTables(tmp_path).newest_load("t").sha256 == "old"
-        assert warehouse.load("new", "new", data, 2, new)
-        assert not warehouse.load("new", "new", data, 2, new)
-        assert pq.read_table(warehouse.table_path).num_rows == 4
-
-    def test_legacy_tables_migrate_without_losing_history(
-        self, tmp_path: Path
-    ) -> None:
-        """Existing separate Parquet and audit files remain readable."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
-        loaded = datetime(2026, 10, 1, tzinfo=UTC)
-        table = pa.table(
-            {
-                "name": ["Old employer"],
-                landing.LOADED_AT: pa.array(
-                    [loaded], type=pa.timestamp("us", tz="UTC")
-                ),
-            }
-        )
-        pq.write_table(table, warehouse.table_path)
-        record = {
-            "filename": "old",
-            "checksum": "old",
-            "destination": "t",
-            "source_version": "v1",
-            "source_file": "f.xlsx",
-            "row_count": 1,
-            "outcome": "LOADED",
-            "timestamp": loaded.isoformat(),
-        }
-        warehouse.audit_path.write_text(json.dumps(record) + "\n")
-        assert landed.LocalTables(tmp_path).newest_load("t").sha256 == "old"
-
-        warehouse.load(
-            "new",
-            "new",
-            TestLocalTableWarehouse.parquet(2),
-            2,
-            SourceItem("f.xlsx", "f.xlsx", "v2", 1),
-        )
-
-        assert len(warehouse.audit()) == 2
-        assert landed.LocalTables(tmp_path).newest_load("t").sha256 == "new"
 
     def test_existing_survey_history_uses_filename_dates(
         self, tmp_path: Path
     ) -> None:
-        """Older exports loaded last cannot win through legacy history."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
-        data = TestLocalTableWarehouse.parquet(1)
+        """Older exports loaded last cannot win on load time alone."""
+        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
+        data = ndjson({"S": ["a"]})
         newest = "a-survey-2026-10-01.xlsx"
         older = "z-survey-2026-09-01.xlsx"
         for name in (newest, older):
@@ -821,8 +939,8 @@ class TestLandingRegressions:
         self, tmp_path: Path
     ) -> None:
         """Changing a pinned file does not silently read another file."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
-        data = TestLocalTableWarehouse.parquet(1)
+        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
+        data = ndjson({"S": ["a"]})
         for name in ("wanted.xlsx", "other.xlsx"):
             warehouse.load(
                 name, name, data, 1, SourceItem(name, name, "v1", 1)
@@ -837,35 +955,15 @@ class TestLandingRegressions:
     def test_bigquery_reads_empty_load_from_audit(self) -> None:
         """The newest committed audit row selects even an empty load."""
         loaded = datetime(2026, 10, 2, 9, 0)
-        rows = pa.table(
-            {
-                "participant_id": pa.array([], type=pa.int64()),
-                landing.ROW_FIELD: pa.array([], type=pa.string()),
-                landing.LOADED_AT: pa.array([], type=pa.timestamp("us")),
-            }
+        client = fake_bigquery(
+            [("hww/was/f.xlsx_abcdef12", "abcdef1234", loaded, 0, "3")], []
         )
-        queries: list[str] = []
 
-        def query(sql: str, job_config: Any = None) -> SimpleNamespace:
-            """Return a committed empty load and its typed schema."""
-            queries.append(sql)
-            if "FROM `p.d.audit`" in sql:
-                return SimpleNamespace(
-                    result=lambda: [
-                        ("hww/was/f.xlsx_abcdef12", "abcdef1234", loaded, 0)
-                    ]
-                )
-            assert "MAX(_loaded_at)" not in sql
-            return SimpleNamespace(to_arrow=lambda: rows)
+        load = landed.BigQueryTables("p", "d", client).newest_load("hww_was")
 
-        tables = landed.BigQueryTables("p", "d", SimpleNamespace(query=query))
-
-        load = tables.newest_load("hww_was")
-
-        assert load.rows.num_rows == 0
+        assert load.rows == []
         assert load.loaded_at == loaded
         assert load.sha256 == "abcdef1234"
-        assert "FROM `p.d.audit`" in queries[0]
 
     def test_empty_peer_snapshot_reaches_dashboard_tables(
         self, tmp_path: Path, data_folder: Path, run_time: datetime
@@ -971,8 +1069,8 @@ class TestSourceSelection:
             lambda *args: SimpleNamespace(),
         )
         monkeypatch.setattr(
-            "py_common.adapters.bigquery.BigQueryWarehouse",
-            lambda *args: SimpleNamespace(key_columns=[]),
+            "py_common.adapters.bigquery_raw.RawJsonWarehouse",
+            lambda *args: SimpleNamespace(),
         )
         settings = landing.LandingSettings(
             "gcp",
@@ -1016,21 +1114,17 @@ class TestCommittedSnapshots:
     """Readers reject incomplete loads and preserve empty snapshots."""
 
     def test_first_local_load_can_be_empty(self, tmp_path: Path) -> None:
-        """Audit metadata identifies a load with no data timestamps."""
-        warehouse = landing.LocalTableWarehouse(tmp_path, "t")
+        """An audit record identifies a load with no rows."""
+        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
-        warehouse.load(
-            "empty", "empty", TestLocalTableWarehouse.parquet(0), 0, item
-        )
+        warehouse.load("empty", "empty", b"", 0, item)
 
         load = landed.LocalTables(tmp_path).newest_load("t")
 
-        assert load.rows.num_rows == 0
+        assert load.rows == []
         assert load.file == "f.xlsx"
         assert load.sha256 == "empty"
-        assert not warehouse.load(
-            "empty", "empty", TestLocalTableWarehouse.parquet(0), 0, item
-        )
+        assert not warehouse.load("empty", "empty", b"", 0, item)
 
     def test_missing_committed_cloud_load_does_not_query_data(self) -> None:
         """Rows without a successful audit cannot become current data."""
@@ -1051,42 +1145,49 @@ class TestCommittedSnapshots:
         """Historical uploads use the same filename policy as discovery."""
         newer = datetime(2026, 10, 2, tzinfo=UTC)
         older = datetime(2026, 10, 3, tzinfo=UTC)
-        rows = pa.table({landing.LOADED_AT: [newer], "value": [1]})
-        records = [
-            ("z-survey-2026-09-01.xlsx_bbbbbbbb", "bbbbbbbb", older, 1),
-            ("a-survey-2026-10-01.xlsx_aaaaaaaa", "aaaaaaaa", newer, 1),
-        ]
+        queries: list[tuple[str, Any]] = []
+        client = fake_bigquery(
+            [
+                (
+                    "z-survey-2026-09-01.xlsx_bbbbbbbb",
+                    "bbbbbbbb",
+                    older,
+                    1,
+                    "2",
+                ),
+                (
+                    "a-survey-2026-10-01.xlsx_aaaaaaaa",
+                    "aaaaaaaa",
+                    newer,
+                    1,
+                    "1",
+                ),
+            ],
+            [(2, {"value": 1})],
+            queries,
+        )
 
-        def query(sql: str, job_config: Any = None) -> SimpleNamespace:
-            """Return audit history and verify the chosen timestamp."""
-            if "FROM `p.d.audit`" in sql:
-                assert "LIMIT 1" not in sql
-                assert job_config.query_parameters[0].value == "p.d.t"
-                return SimpleNamespace(result=lambda: records)
-            assert job_config.query_parameters[0].value == newer
-            return SimpleNamespace(to_arrow=lambda: rows)
-
-        tables = landed.BigQueryTables("p", "d", SimpleNamespace(query=query))
-
-        load = tables.newest_load("t", {"file_pattern": "*survey-*.xlsx"})
+        load = landed.BigQueryTables("p", "d", client).newest_load(
+            "t", {"file_pattern": "*survey-*.xlsx"}
+        )
 
         assert load.file == "a-survey-2026-10-01.xlsx"
         assert load.sha256 == "aaaaaaaa"
+        audit_sql, audit_config = queries[0]
+        assert "LIMIT 1" not in audit_sql
+        assert audit_config.query_parameters[0].value == "p.d.t"
+        _, rows_config = queries[1]
+        assert [q.value for q in rows_config.query_parameters] == ["1", newer]
 
     def test_cloud_row_count_must_match_committed_audit(self) -> None:
         """A partial or inconsistent snapshot cannot enter wrangling."""
         loaded = datetime(2026, 10, 2, tzinfo=UTC)
-        rows = pa.table({landing.LOADED_AT: [loaded], "value": [1]})
+        client = fake_bigquery(
+            [("f.xlsx_aaaaaaaa", "aaaaaaaa", loaded, 2, "1")],
+            [(2, {"value": 1})],
+        )
 
-        def query(sql: str, job_config: Any = None) -> SimpleNamespace:
-            """Return a row count that disagrees with the actual data."""
-            if "FROM `p.d.audit`" in sql:
-                return SimpleNamespace(
-                    result=lambda: [("f.xlsx_aaaaaaaa", "aaaaaaaa", loaded, 2)]
-                )
-            return SimpleNamespace(to_arrow=lambda: rows)
-
-        tables = landed.BigQueryTables("p", "d", SimpleNamespace(query=query))
+        tables = landed.BigQueryTables("p", "d", client)
 
         with pytest.raises(wrangle.InputError, match="row count differs"):
             tables.newest_load("t")

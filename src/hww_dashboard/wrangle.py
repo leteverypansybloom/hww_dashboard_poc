@@ -1177,7 +1177,7 @@ class Inputs(Protocol):
 
     ``FolderInputs`` reads the workbooks in the input folder.
     ``hww_dashboard.landed.LandedInputs`` reads the newest load of each
-    source's typed table, as py-common's ingestion job loaded it.
+    source's raw table, as py-common's ingestion job loaded it.
     """
 
     def read(
@@ -1793,7 +1793,7 @@ def load_signups(
     Args:
         cfg: The [signups] section of config.toml.
         inputs: Where the sheets come from: the workbooks, or the
-            typed tables py-common loaded.
+            raw tables py-common loaded.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
@@ -2040,7 +2040,7 @@ def load_survey(
     Args:
         cfg: The [survey] section of config.toml.
         inputs: Where the sheets come from: the workbooks, or the
-            typed tables py-common loaded.
+            raw tables py-common loaded.
         maps: The mappings folder.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
@@ -2248,7 +2248,7 @@ def load_was(
     Args:
         cfg: The [was] section of config.toml.
         inputs: Where the sheets come from: the workbooks, or the
-            typed tables py-common loaded.
+            raw tables py-common loaded.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
@@ -2502,7 +2502,7 @@ def load_peer(
     Args:
         cfg: The [peer] section of config.toml.
         inputs: Where the sheets come from: the workbooks, or the
-            typed tables py-common loaded.
+            raw tables py-common loaded.
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.

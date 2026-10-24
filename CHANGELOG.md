@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Ingestion uses py-common's raw JSON tables (py-common 0.3.0, which has
+  no other load route). `python ingest.py` loads each sheet's allowed
+  columns into a raw table (`hww_signups`, `hww_survey`, `hww_was`,
+  `hww_peer`), one JSON payload per row with the file, version and Excel
+  row it came from; `landed.py` reads them back. Output tables are
+  unchanged.
+- One pipeline per workbook (`landing.workbooks`): the monitoring
+  workbook's Account signups and Survey info sheets load together, so a
+  problem on either sheet quarantines the whole upload and the two tables
+  always come from the same upload. `ingest()` results and the upload
+  service's pipelines are keyed by landing folder.
+- `LocalRawWarehouse` replaces `LocalTableWarehouse` on laptops: each
+  load of a table is an NDJSON rows file and an audit record in
+  `landed/<table>/`, committed by writing the audit record last. Delete
+  any `landed/` folder from earlier runs.
+- `RowNumberedContract` is `HeadingCheckedContract`: the Excel row number
+  comes from py-common's `row_number`, so no column is added.
+
+### Removed
+
+- `landing.ROW_COLUMN`, `ROW_FIELD`, `LOADED_AT` and the Parquet tables.
+
 ### Added
 
 - An upload-triggered Cloud Run service (`hww_dashboard.service`, the

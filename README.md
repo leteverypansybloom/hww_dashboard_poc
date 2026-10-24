@@ -114,28 +114,32 @@ names from the job's environment.
 ### Ingesting with py-common first
 
 The workbooks can also go through py-common, the shared ingestion
-library, on its typed route, before `wrangle.py` and the dashboard use
-them:
+library, before `wrangle.py` and the dashboard use them:
 
 ```
-workbooks dropped in landing/<source>/   (or a GCS bucket in GCP)
+workbooks dropped in landing/<folder>/   (or a GCS bucket in GCP)
   -> python ingest.py     py-common checks each workbook against its
-                          contract and loads it into a typed table
-                          (hww_signups, hww_survey, hww_was, hww_peer)
+                          contract and loads each sheet into a raw
+                          JSON table (hww_signups, hww_survey,
+                          hww_was, hww_peer)
   -> python wrangle.py    with [landed] read = true: reads the newest
                           load of each table instead of the workbooks
   -> streamlit run dashboard.py
 ```
 
-Try it on the dummy files in the folder above this one:
+Try it on the dummy files in the folder above this one. In
+PowerShell:
 
-```
+```powershell
 pip install -e ".[landing]" -c constraints.txt
-copy config.toml landed.local.toml       (then set read = true under [landed])
+Copy-Item config.toml landed.local.toml   # then set read = true under [landed]
 python ingest.py landed.local.toml --stage ..
 python wrangle.py landed.local.toml
 streamlit run dashboard.py
 ```
+
+In Cloud Shell (bash), use `cp config.toml landed.local.toml` for the
+copy; the other lines are the same.
 
 `--stage ..` copies the three workbooks into their landing folders, as
 if they had been dropped there: the monitoring workbook into
@@ -143,12 +147,15 @@ if they had been dropped there: the monitoring workbook into
 tables, and the others into `landing/was/` and `landing/peer/`. Without it, `ingest.py` loads whatever is
 in those folders; a file it has already loaded is skipped.
 
-The contracts are in `src/hww_dashboard/landing.py`. Each lists the
-columns `wrangle.py` uses, with their types, and the columns to leave
-out (personal and unused ones), which are never loaded. A workbook with
-a column the contract doesn't know, a listed column missing, or a value
-of the wrong type is quarantined (copied to `store/quarantine/`) and
-nothing from it loads; `ingest.py` then exits with code 1 and says why.
+The contracts are in `src/hww_dashboard/landing.py`, one per
+workbook. Each sheet lists the columns `wrangle.py` uses, with their
+types, and the columns to leave out (personal and unused ones), which
+are never loaded. A workbook with a column the contract doesn't know,
+a listed column missing, or a value of the wrong type is quarantined
+(copied to `store/quarantine/`) and nothing from it loads, on any of
+its sheets; `ingest.py` then exits with code 1 and says why. A bad
+Survey info sheet therefore stops Account signups loading from the
+same upload too, so the two always come from the same upload.
 "Number of sites" on Account signups and Survey info mixes numbers and
 text, so it is loaded as text without a type check. Its heading is
 still required, and extra columns on those sheets are rejected just as
@@ -160,22 +167,25 @@ to break ties. Excel lock files and nonmatching workbooks are ignored.
 Readers apply the configured filename selection to committed history,
 so an older export loaded later cannot replace a newer dated export.
 
-`allow_empty = true` in a source's section also applies to typed
+`allow_empty = true` in a source's section also applies to
 ingestion. The readers select from audit records, including successful
 zero-row loads, rather than inferring the latest upload from data rows.
 This prevents an empty snapshot from reviving an older nonempty one.
 
-Locally, each table's audit history is embedded in its Parquet metadata.
-One atomic file replacement commits the rows and their audit together.
-Existing tables with a separate `audit.jsonl` remain readable; their
-history is imported automatically on the next successful load. Do not
-edit the Parquet metadata or remove the legacy audit before migration.
+Each raw table row holds the loaded columns as a JSON payload, with
+the file, its version, the sheet and the Excel row number it came
+from (py-common's `docs/RAW_TABLE_LAYOUT.md`). Rows are only ever
+inserted; readers take the newest committed load. Locally, each load
+of a table is two files in `landed/<table>/`: its rows (`.ndjson`) and
+its audit record (`.audit.json`). The audit record is written last, in
+one atomic file replacement, and is what commits the load: rows
+without one are never read, and the next run loads them again.
 
-Column exclusions apply to the typed tables, not to archived originals.
+Column exclusions apply to the raw tables, not to archived originals.
 py-common stores complete source workbooks in `store/raw/` and copies
 rejected workbooks to `store/quarantine/`; those copies retain personal
 and unused columns and need the same access and retention controls as
-the landing files. The typed tables retain prior committed uploads too.
+the landing files. The raw tables retain prior committed uploads too.
 
 The tables built this way are identical to those built from the
 workbooks directly (`tests/test_landing.py` checks this against the

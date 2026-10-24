@@ -1,12 +1,13 @@
-# Ingesting on GCP with py-common (typed route)
+# Ingesting on GCP with py-common
 
 This guide takes the HWW workbooks from a GCS bucket into BigQuery and
-on to the reporting tables, using py-common's typed route:
+on to the reporting tables, using py-common's raw JSON tables:
 
 ```
 workbook uploaded to the landing bucket
   -> ingestion (py-common): checks each workbook against its contract
-     and loads it into a typed BigQuery table
+     and loads each sheet into a raw BigQuery table, one JSON payload
+     per row
   -> pipeline: reads the newest load of each table and builds the
      reporting tables
 ```
@@ -32,7 +33,7 @@ project and things that **hold data** are in the data project:
 |---|---|
 | Artifact Registry repository (the container images) | Landing bucket (workbooks are uploaded here) |
 | Cloud Run job (daily) and service (on upload) | Store bucket (py-common's copies, audit records, run lock) |
-| Cloud Scheduler (starts the job each morning) | `hww_landed` dataset (typed tables and `audit`) |
+| Cloud Scheduler (starts the job each morning) | `hww_landed` dataset (raw tables and `audit`) |
 | Pub/Sub topic and Eventarc trigger (upload events) | `hww_reporting` dataset (reporting tables) |
 | The service account the job, service and scheduler run as | |
 
@@ -324,7 +325,7 @@ python -m hww_dashboard.wrangle gcp.local.toml
 python -m streamlit run dashboard.py
 ```
 
-With `read = true` the pipeline reads the typed tables instead of
+With `read = true` the pipeline reads the raw tables instead of
 workbooks, and writes the tables to `output/`, which the Streamlit
 dashboard reads.
 
@@ -474,7 +475,8 @@ Then check:
 
 - the execution succeeded (console: Cloud Run → Jobs → the job →
   Executions, where the logs are too);
-- `hww_landed` has the four typed tables and today's rows in `audit`;
+- `hww_landed` has the four raw tables (`hww_signups`, `hww_survey`,
+  `hww_was`, `hww_peer`) and today's rows in `audit`;
 - `hww_reporting` has the reporting tables (`dim_employer`,
   `fact_engagement`, ...) and a `runs` row.
 

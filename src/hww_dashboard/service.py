@@ -5,10 +5,10 @@ Pub/Sub, and an Eventarc trigger delivers it here (docs/gcp_ingestion.md,
 step 9). ``on_upload``:
 
 1. runs py-common's ``handle_upload``, which ingests every file in the
-   folder the upload landed in (``hww/was/`` and so on), under the same
-   lock as the daily job, so the two never load at once. A folder
-   that feeds several tables (``hww/signups/``, the monitoring
-   workbook: signups and survey) runs each table's pipeline in turn;
+   folder the upload landed in (``hww/was/`` and so on) with that
+   folder's pipeline, under the same lock as the daily job, so the two
+   never load at once. The monitoring workbook's folder
+   (``hww/signups/``) loads both of its sheets, signups and survey;
 2. if nothing was quarantined or failed, rebuilds the reporting tables
    with the pipeline, reading the newest load of every source.
 
@@ -33,20 +33,16 @@ The functions-framework runs it in the image:
 
 import logging
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
 from py_common.model import Outcome, Result
 from py_common.pipeline import Pipeline
-from py_common.runner import handle_upload, parse_upload
+from py_common.runner import handle_upload
 
 from hww_dashboard import wrangle
-from hww_dashboard.landing import (
-    build_pipelines,
-    landing_folders,
-    landing_settings,
-)
+from hww_dashboard.landing import build_pipelines, landing_settings
 from hww_dashboard.logs import (
     close_logging,
     configure_logging,
@@ -68,60 +64,43 @@ class CloudEvent(Protocol):
         ...
 
 
-def folder_pipelines(config_path: Path) -> dict[str, list[Pipeline]]:
-    """The sources' pipelines, grouped by the landing folder they read.
+def folder_pipelines(config_path: Path) -> dict[str, Pipeline]:
+    """The workbooks' pipelines, by the landing folder each reads.
 
     Args:
         config_path: The config file.
 
     Returns:
-        Pipelines per folder, e.g. "hww/signups": [signups, survey].
+        Pipeline per folder, e.g. "hww/signups" for the monitoring
+        workbook.
     """
     cfg = wrangle.load_config(config_path)
     base = config_path.parent
     maps = (base / cfg["paths"]["mappings_folder"]).resolve()
     settings = landing_settings(cfg, base)
-    folders = landing_folders(cfg)
-    grouped: dict[str, list[Pipeline]] = {}
-    for source, pipeline in build_pipelines(cfg, maps, settings).items():
-        folder = "/".join(
-            p for p in (settings.landing_prefix, folders[source]) if p
-        )
-        grouped.setdefault(folder, []).append(pipeline)
-    return grouped
+    return {
+        "/".join(p for p in (settings.landing_prefix, folder) if p): pipeline
+        for folder, pipeline in build_pipelines(cfg, maps, settings).items()
+    }
 
 
 def ingest_upload(
-    data: Mapping[str, Any], pipelines: Mapping[str, Sequence[Pipeline]]
+    data: Mapping[str, Any], pipelines: Mapping[str, Pipeline]
 ) -> list[Result]:
-    """Run every pipeline that reads the folder an upload went to.
-
-    py-common's handle_upload runs one pipeline per folder, so it is
-    called first with each folder's first pipeline, which also decides
-    whether the event is ignored. If it isn't, handle_upload is called
-    again for each further pipeline of the upload's folder. Each
-    pipeline has its own lock and "already loaded" markers.
+    """Run the pipeline that reads the folder an upload went to.
 
     Args:
         data: The CloudEvent's data.
-        pipelines: Pipelines per landing folder, from folder_pipelines.
+        pipelines: Pipeline per landing folder, from folder_pipelines.
 
     Returns:
-        Every pipeline's results; empty if the event was ignored.
+        The pipeline's results; empty if the event was ignored.
 
     Raises:
         RunFailed: A file FAILED (from py-common); retried.
         RuntimeError: Another run holds the lock; retried.
     """
-    results = handle_upload(
-        data, {folder: group[0] for folder, group in pipelines.items()}
-    )
-    if not results:
-        return results
-    folder = parse_upload(data).folder.strip("/")
-    for pipeline in pipelines.get(folder, [])[1:]:
-        results.extend(handle_upload(data, {folder: pipeline}))
-    return results
+    return handle_upload(data, pipelines)
 
 
 def handle(

@@ -1,36 +1,36 @@
-"""Land the HWW workbooks in typed tables with py-common.
+"""Land the HWW workbooks in raw JSON tables with py-common.
 
 This is the ingestion job: ``python ingest.py`` (or
-``python -m hww_dashboard.landing``). For each of the four sources it
-runs one py-common ``Pipeline`` on py-common's typed route
-(``output_format="parquet"``):
+``python -m hww_dashboard.landing``). It runs one py-common
+``Pipeline`` per workbook, that is per landing folder:
 
-1. the source lists the workbooks dropped in that source's landing
-   folder (a local folder, or a prefix in a GCS bucket). Sources that
-   read the same workbook share a folder: the monitoring workbook,
-   dropped in ``signups/``, loads both ``hww_signups`` and
-   ``hww_survey``;
-2. the workbook is checked against the source's contract (below):
-   every column must be one the contract lists or excludes, and every
-   listed column must hold its declared type, or the file is
-   quarantined and nothing loads;
-3. the listed columns are loaded into the source's typed table
-   (``hww_signups``, ``hww_survey``, ``hww_was``, ``hww_peer``), with
-   the raw file, the Parquet and an audit record kept in the store.
+1. the source lists the workbooks dropped in that folder (a local
+   folder, or a prefix in a GCS bucket). The monitoring workbook,
+   dropped in ``signups/``, holds two sources' sheets ("Account
+   signups" and "Survey info");
+2. the workbook is checked against its contract (below): every column
+   must be one the contract lists or excludes, and every listed column
+   must hold its declared type, or the file is quarantined and nothing
+   from it loads;
+3. each sheet's loaded columns go into the source's raw table
+   (``hww_signups``, ``hww_survey``, ``hww_was``, ``hww_peer``), one
+   JSON payload per row with the file, version, sheet and Excel row
+   number it came from, with the raw file, the converted rows and an
+   audit record kept in the store.
 
-Personal and unused columns are excluded from the typed tables. The
+Personal and unused columns are excluded from the raw tables. The
 store still archives complete original workbooks, including excluded
 columns, for successful and quarantined uploads. ``wrangle.py`` reads
 committed loads when ``[landed] read = true`` (see
 :mod:`hww_dashboard.landed`).
 
-Each upload is appended (no merge keys): the WAS database has a row
-with no Participant ID, so no source has a reliable key. Every upload
-of these workbooks is the complete list, so readers take only the
-newest load.
+Rows are only ever inserted: the WAS database has a row with no
+Participant ID, so no source has a reliable key, and every upload of
+these workbooks is the complete list, so readers take only the newest
+load.
 
-Locally, ``LocalTableWarehouse`` stands in for py-common's
-``BigQueryWarehouse``: same protocol, Parquet files in a folder.
+Locally, ``LocalRawWarehouse`` stands in for py-common's
+``RawJsonWarehouse``: same protocol and rows, NDJSON files in a folder.
 """
 
 import argparse
@@ -45,19 +45,16 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from fnmatch import fnmatch
 from functools import partial
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 from py_common.adapters import LocalObjectStore, LocalSource
 from py_common.contract import Column, Contract, SheetRows, Worksheet
 from py_common.errors import ServiceError, ValidationError
-from py_common.model import Outcome, Result, SourceItem
-from py_common.parquet import column_name
+from py_common.model import Outcome, Result, SourceItem, digest
 from py_common.pipeline import Pipeline
 from py_common.ports import ObjectStore, Source, Warehouse
+from py_common.raw import ROW_FIELDS
 
 from hww_dashboard.logs import (
     close_logging,
@@ -79,22 +76,12 @@ from hww_dashboard.wrangle import (
 
 logger = logging.getLogger("hww_dashboard.landing")
 
-#: Typed table for each source.
+#: Raw table for each source.
 TABLES = {source: f"hww_{source}" for source in SOURCES}
 
-#: Column added to every sheet: the row's number as Excel shows it.
-#: Typed tables keep no row order, and the pipeline needs it (signups'
-#: month is a merged cell filled downwards; ids fall back to it).
-ROW_COLUMN = "Excel row"
-
-#: BigQuery-style name of ROW_COLUMN: the pipeline's own name for it.
-ROW_FIELD = column_name(ROW_COLUMN)
-
-#: Column the warehouse adds to each loaded row: when it was loaded.
-LOADED_AT = "_loaded_at"
-
-#: Audit history embedded in Parquet so data and metadata commit together.
-AUDIT_METADATA = b"hww.audit"
+#: Columns of a raw table row, as py-common's RawJsonWarehouse writes
+#: them: the NDJSON fields plus the commit time.
+RAW_COLUMNS = (*ROW_FIELDS, "ingested_at")
 
 #: py-common's name for a repeated heading: "Other_2" for the second
 #: "Other". pandas, which wrangle.read_sheet follows, says "Other.1".
@@ -135,7 +122,7 @@ SIGNUPS = Worksheet(
     name="Account signups",
     header_row=2,
     # "Number of sites" holds numbers and text (1, "2-5"), which no
-    # declared type accepts. RowNumberedContract separately requires
+    # declared type accepts. HeadingCheckedContract separately requires
     # this heading and refuses any other undeclared loaded column.
     column_selection="all_except",
     columns=[
@@ -241,18 +228,17 @@ SURVEY_HEADER_ROW = 2
 
 
 @dataclass
-class RowNumberedContract(Contract):
-    """A py-common Contract that also loads each row's Excel row number.
-
-    The number is added after the checks, as an undeclared column
-    (loaded as text), so the contract itself is unchanged.
+class HeadingCheckedContract(Contract):
+    """A py-common Contract that also requires its untyped headings.
 
     Attributes:
-        untyped_columns: Extra required headings loaded as text. Their
-            cell types may vary; other undeclared headings are refused.
+        untyped_columns: Worksheet name -> extra required headings
+            loaded without a type check (their cells hold numbers and
+            text). Any other heading that is neither listed nor
+            excluded is refused.
     """
 
-    untyped_columns: list[str] = field(default_factory=list)
+    untyped_columns: dict[str, list[str]] = field(default_factory=dict)
 
     def read(
         self,
@@ -260,7 +246,7 @@ class RowNumberedContract(Contract):
         source_name: str,
         warnings: list[str] | None = None,
     ) -> dict[str, SheetRows]:
-        """Check and read the workbook, adding the row numbers.
+        """Check and read the workbook, then check the loaded headings.
 
         Args:
             excel_bytes: Raw Excel file bytes.
@@ -268,16 +254,16 @@ class RowNumberedContract(Contract):
             warnings: As Contract.read().
 
         Returns:
-            As Contract.read(), with ROW_COLUMN last in every sheet.
+            As Contract.read().
 
         Raises:
             ValidationError: A required untyped heading is absent, or
-                an unrecognised column would enter a typed table.
+                an unrecognised column would enter a raw table.
         """
         sheets = super().read(excel_bytes, source_name, warnings)
         for worksheet in self.worksheets:
             expected = {c.name for c in worksheet.columns}
-            expected.update(self.untyped_columns)
+            expected.update(self.untyped_columns.get(worksheet.name, []))
             actual = set(sheets[worksheet.name].columns)
             missing = expected - actual
             unexpected = actual - expected
@@ -292,39 +278,7 @@ class RowNumberedContract(Contract):
                 raise ValidationError(
                     f"{source_name} [{worksheet.name}]: " + "; ".join(problems)
                 )
-        return _numbered(sheets)
-
-    def extract(
-        self, excel_bytes: bytes, source_name: str = "workbook"
-    ) -> dict[str, SheetRows]:
-        """Read the workbook without checking, adding the row numbers.
-
-        Args:
-            excel_bytes: Raw Excel file bytes.
-            source_name: The file's name.
-
-        Returns:
-            As Contract.extract(), with ROW_COLUMN last in every sheet.
-        """
-        return _numbered(super().extract(excel_bytes, source_name))
-
-
-def _numbered(sheets: dict[str, SheetRows]) -> dict[str, SheetRows]:
-    """Add each row's Excel row number as the last column.
-
-    Args:
-        sheets: Sheets as py-common reads them.
-
-    Returns:
-        The same sheets with ROW_COLUMN added.
-    """
-    return {
-        name: SheetRows(
-            columns=[*sheet.columns, ROW_COLUMN],
-            rows=[(row, (*values, row)) for row, values in sheet.rows],
-        )
-        for name, sheet in sheets.items()
-    }
+        return sheets
 
 
 @dataclass
@@ -332,23 +286,35 @@ class SourceContract:
     """What py-common checks and loads for one source.
 
     Attributes:
-        contract: The workbook contract.
-        table: Typed table the rows load into.
-        names: Column name in the table -> the heading wrangle.py knows
-            it by (trimmed, repeats numbered as pandas does).
-        undeclared: Headings loaded as text without a type check
-            ("Number of sites" on Account signups and Survey info).
+        worksheet: The source's sheet in its workbook's contract.
+        table: Raw table the sheet's rows load into.
+        names: Heading as py-common reads it -> the heading wrangle.py
+            knows it by (trimmed, repeats numbered as pandas does).
+        undeclared: Headings loaded without a type check ("Number of
+            sites" on Account signups and Survey info).
     """
 
-    contract: RowNumberedContract
+    worksheet: Worksheet
     table: str
     names: dict[str, str] = field(default_factory=dict)
     undeclared: list[str] = field(default_factory=list)
 
-    @property
-    def worksheet(self) -> Worksheet:
-        """The contract's one worksheet."""
-        return self.contract.worksheets[0]
+
+@dataclass
+class Workbook:
+    """One landing folder's workbook: its contract and raw tables.
+
+    Attributes:
+        folder: Landing folder, below the landing prefix.
+        sources: The sources whose sheets it holds, in SOURCES order.
+        contract: Checks every one of those sheets.
+        tables: Sheet name -> raw table.
+    """
+
+    folder: str
+    sources: list[str]
+    contract: HeadingCheckedContract
+    tables: dict[str, str]
 
 
 def pandas_name(name: str) -> str:
@@ -425,8 +391,8 @@ def survey_worksheet(
     worksheet = Worksheet(
         name=SURVEY_SHEET,
         header_row=SURVEY_HEADER_ROW,
-        # RowNumberedContract requires the untyped headings and refuses
-        # any other column that is neither listed nor excluded.
+        # HeadingCheckedContract requires the untyped headings and
+        # refuses any other column that is neither listed nor excluded.
         column_selection="all_except",
         columns=columns,
         excluded=excluded,
@@ -436,11 +402,7 @@ def survey_worksheet(
 
 
 def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
-    """Every source's contract.
-
-    A source named by ``file`` in config.toml must arrive under that
-    name. Sources with ``file_pattern`` select their newest matching
-    workbook before contract validation.
+    """Every source's sheet contract.
 
     Args:
         cfg: The checked config.
@@ -459,82 +421,180 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
         sheet = replace(
             sheets[source], allow_empty=cfg[source].get("allow_empty", False)
         )
-        file_name = (
-            None if "file_pattern" in cfg[source] else cfg[source].get("file")
-        )
         undeclared = untyped.get(source, [])
-        contract = RowNumberedContract(
-            worksheets=[sheet],
-            file_name=str(file_name) if file_name else None,
-            untyped_columns=undeclared,
-        )
         if source == "survey":
-            known = survey_names
+            names = survey_names
         else:
-            known = {c.name: pandas_name(c.name) for c in sheet.columns}
-            known.update({h: pandas_name(h) for h in undeclared})
-        names = {
-            column_name(h): wrangle_name for h, wrangle_name in known.items()
-        }
-        if len(names) != len(known):
-            raise InputError(
-                f"{source}: two loaded columns get the same table column "
-                "name; rename one in the workbook."
-            )
+            names = {c.name: pandas_name(c.name) for c in sheet.columns}
+            names.update({h: pandas_name(h) for h in undeclared})
         result[source] = SourceContract(
-            contract, TABLES[source], names, undeclared
+            sheet, TABLES[source], names, undeclared
         )
+    return result
+
+
+def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
+    """The workbook each landing folder receives, with its contract.
+
+    Sources whose ``file`` names the same workbook share a folder
+    (landing_folders()), so their sheets share one contract and one
+    pipeline: an upload loads all of them, or none if any sheet fails
+    its checks. A workbook named by ``file`` must arrive under that
+    name; one chosen by ``file_pattern`` takes the newest match.
+
+    Args:
+        cfg: The checked config.
+        maps: The mappings folder.
+
+    Returns:
+        Workbook per landing folder, in SOURCES order.
+
+    Raises:
+        InputError: Two sources sharing a workbook read the same sheet.
+    """
+    contracts = source_contracts(cfg, maps)
+    grouped: dict[str, list[str]] = {}
+    for source, folder in landing_folders(cfg).items():
+        grouped.setdefault(folder, []).append(source)
+    result: dict[str, Workbook] = {}
+    for folder, sources in grouped.items():
+        sheets = [contracts[source].worksheet for source in sources]
+        if len({sheet.name for sheet in sheets}) != len(sheets):
+            raise InputError(
+                f"{', '.join(sources)} read the same sheet of one workbook; "
+                "give each source its own sheet."
+            )
+        first = cfg[sources[0]]
+        file_name = None if "file_pattern" in first else first.get("file")
+        contract = HeadingCheckedContract(
+            worksheets=sheets,
+            file_name=str(file_name) if file_name else None,
+            untyped_columns={
+                contracts[s].worksheet.name: contracts[s].undeclared
+                for s in sources
+                if contracts[s].undeclared
+            },
+        )
+        tables = {
+            contracts[s].worksheet.name: contracts[s].table for s in sources
+        }
+        result[folder] = Workbook(folder, sources, contract, tables)
     return result
 
 
 # ------------------------------------------------ local warehouse
 
 
-class LocalTableWarehouse:
-    """py-common Warehouse that keeps typed tables as Parquet files.
+def load_name(key: str, version: str) -> str:
+    """The file name a local load is kept under, without its suffix.
 
-    Stands in for ``BigQueryWarehouse`` on a laptop, with the same
-    behaviour for append-only tables (no merge keys): each load's rows
-    are appended with ``_loaded_at``. Audit history is embedded in the
-    same Parquet file; one atomic replacement publishes both. Legacy
-    audit.jsonl records are imported on the first successful new load.
-    A previously committed upload is skipped on retry.
+    Args:
+        key: py-common's load key.
+        version: The upload's source version.
+
+    Returns:
+        16 hex digits, the same for every retry of the upload.
+    """
+    return digest(f"{key}\n{version}".encode())[:16]
+
+
+def local_audit(folder: Path, table: str) -> list[dict[str, Any]]:
+    """The committed loads of a local raw table, oldest first.
+
+    Args:
+        folder: The tables folder.
+        table: Table name, e.g. "hww_was".
+
+    Returns:
+        One audit record per committed load.
+    """
+    path = folder / table
+    if not path.is_dir():
+        return []
+    records = [
+        json.loads(record.read_text(encoding="utf-8"))
+        for record in path.glob("*.audit.json")
+    ]
+    return sorted(records, key=lambda record: str(record["timestamp"]))
+
+
+def local_rows(
+    folder: Path, table: str, record: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """The rows of one committed local load.
+
+    Args:
+        folder: The tables folder.
+        table: Table name.
+        record: The load's audit record, from local_audit().
+
+    Returns:
+        The rows, each with the columns in RAW_COLUMNS.
+    """
+    name = load_name(str(record["filename"]), str(record["source_version"]))
+    text = (folder / table / f"{name}.ndjson").read_text(encoding="utf-8")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _replace(path: Path, data: bytes) -> None:
+    """Write a file whole, or leave it as it was.
+
+    Args:
+        path: The file.
+        data: Its new contents.
+    """
+    temporary = path.with_name(f"{path.name}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+class LocalRawWarehouse:
+    """py-common Warehouse that keeps raw tables as NDJSON files.
+
+    Stands in for ``RawJsonWarehouse`` on a laptop, with the same
+    rules: one raw table per sheet, the same columns (RAW_COLUMNS),
+    rows only ever inserted, and each upload loaded once per table.
+    Each load of a table is a rows file and an audit record in
+    ``<folder>/<table>/``. The audit record is written last, in one
+    atomic replace, and is what makes the load committed: rows without
+    one are never read, and a retry writes them again.
 
     Attributes:
-        folder: Folder holding ``<table>.parquet`` and any legacy audit.
-        table_id: Table this warehouse loads.
-        key_columns: Always empty: append-only.
+        folder: Folder holding one subfolder per table.
+        tables: Sheet name -> raw table name.
     """
 
-    def __init__(self, folder: Path | str, table_id: str) -> None:
-        """Point at a table in a folder (created when first loaded).
+    def __init__(self, folder: Path | str, tables: Mapping[str, str]) -> None:
+        """Point at the tables in a folder (created when first loaded).
 
         Args:
-            folder: Folder for the tables and the audit file.
-            table_id: Table name, e.g. "hww_was".
+            folder: Folder for the tables.
+            tables: Raw table name for each sheet the pipeline loads.
+
+        Raises:
+            ValueError: No tables given, or two sheets share a table.
         """
+        if not tables:
+            raise ValueError("LocalRawWarehouse needs at least one table")
+        if len(set(tables.values())) != len(tables):
+            raise ValueError(
+                f"Each sheet needs its own raw table, got {dict(tables)!r}"
+            )
         self.folder = Path(folder)
-        self.table_id = table_id
-        self.key_columns: list[str] = []
+        self.tables = dict(tables)
 
     @property
     def identity(self) -> str:
-        """Identifier like BigQuery's project.dataset.table.
+        """Identifier like RawJsonWarehouse's project.dataset.tables.
 
         py-common puts it in storage keys and the lock name, so it must
         be a plain name: no drive letter, colon or slash.
         """
-        return f"local.{self.folder.resolve().name}.{self.table_id}"
-
-    @property
-    def table_path(self) -> Path:
-        """The table's Parquet file."""
-        return self.folder / f"{self.table_id}.parquet"
-
-    @property
-    def audit_path(self) -> Path:
-        """The audit file shared by every table in the folder."""
-        return self.folder / "audit.jsonl"
+        names = "+".join(sorted(self.tables.values()))
+        return f"local.{self.folder.resolve().name}.{names}"
 
     def load(
         self,
@@ -544,145 +604,132 @@ class LocalTableWarehouse:
         rows: int,
         item: SourceItem,
     ) -> bool:
-        """Append one file's rows and record the load.
+        """Insert one file's rows into each sheet's table, once.
 
         Args:
             key: Load key (source identity and checksum).
             checksum: SHA-256 of the source file.
-            data: Parquet bytes of the sheet's rows.
-            rows: Expected row count.
+            data: NDJSON from py_common.raw.to_ndjson().
+            rows: Expected row count across all sheets.
             item: Source file the rows came from.
 
         Returns:
-            True if written, False if this upload was already loaded.
+            True if any table was written, False if every table
+            already has this upload.
 
         Raises:
-            ValidationError: The rows can't join the table (a reserved
-                column, or a column whose type changed).
-            ServiceError: The Parquet is unreadable, has the wrong row
-                count, or the folder can't be written.
+            ValueError: A row is not raw JSON, names a sheet with no
+                table, or the row count differs (as RawJsonWarehouse).
+            ServiceError: The folder can't be written.
         """
-        if self._already_loaded(key, item.version):
-            return False
-        try:
-            new = pq.read_table(BytesIO(data))
-        except (pa.ArrowException, OSError) as error:
-            raise ServiceError(
-                f"{self.table_id}: bad Parquet: {error}"
-            ) from error
-        if new.num_rows != rows:
-            raise ServiceError(
-                f"{self.table_id}: row count mismatch: expected {rows}, "
-                f"got {new.num_rows}"
+        by_sheet: dict[str, list[dict[str, Any]]] = {}
+        for number, line in enumerate(data.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+                sheet = row["sheet_name"]
+            except (ValueError, KeyError, TypeError) as error:
+                raise ValueError(
+                    f"Line {number} is not a raw JSON row: {error}"
+                ) from error
+            by_sheet.setdefault(sheet, []).append(row)
+        unknown = sorted(set(by_sheet) - set(self.tables))
+        if unknown:
+            raise ValueError(
+                f"No raw table configured for sheet(s) "
+                f"{', '.join(unknown)} in {key}"
             )
-        if LOADED_AT in new.column_names:
-            raise ValidationError(
-                f"{item.name}: has a column named {LOADED_AT}, which the "
-                "warehouse sets"
+        total = sum(len(sheet_rows) for sheet_rows in by_sheet.values())
+        if total != rows:
+            raise ValueError(
+                f"Row count mismatch: expected {rows}, got {total}"
             )
         timestamp = datetime.now(UTC)
-        stamp = pa.array(
-            [timestamp] * new.num_rows, type=pa.timestamp("us", tz="UTC")
-        )
-        new = new.append_column(LOADED_AT, stamp)
-        previous = (
-            pq.read_table(self.table_path)
-            if self.table_path.exists()
-            else None
-        )
-        records = [
-            row
-            for row in self.audit(previous)
-            if row.get("destination") == self.table_id
-        ]
-        try:
-            table = (
-                pa.concat_tables([previous, new], promote_options="default")
-                if previous is not None
-                else new
+        written = False
+        for sheet, table in self.tables.items():
+            if self._committed(table, key, item.version):
+                continue
+            self._commit(
+                table, key, checksum, item, by_sheet.get(sheet, []), timestamp
             )
-        except (pa.ArrowInvalid, pa.ArrowTypeError) as error:
-            raise ValidationError(
-                f"{item.name}: its columns don't fit {self.table_id} "
-                f"({error})"
-            ) from error
-        temporary = self.table_path.with_suffix(".parquet.tmp")
-        try:
-            self.folder.mkdir(parents=True, exist_ok=True)
-            records.append(
-                {
-                    "filename": key,
-                    "checksum": checksum,
-                    "destination": self.table_id,
-                    "source_version": item.version,
-                    "source_file": item.name,
-                    "row_count": rows,
-                    "outcome": Outcome.LOADED.value.upper(),
-                    "timestamp": timestamp.isoformat(),
-                }
-            )
-            metadata = dict(table.schema.metadata or {})
-            metadata[AUDIT_METADATA] = json.dumps(
-                records, sort_keys=True
-            ).encode("utf-8")
-            table = table.replace_schema_metadata(metadata)
-            pq.write_table(table, temporary)
-            os.replace(temporary, self.table_path)
-        except OSError as error:
-            raise ServiceError(
-                f"{self.table_id}: cannot write {self.folder} ({error})"
-            ) from error
-        finally:
-            temporary.unlink(missing_ok=True)
-        return True
+            written = True
+        return written
 
-    def audit(self, table: pa.Table | None = None) -> list[dict[str, Any]]:
-        """Read committed audit history, oldest first.
+    def _committed(self, table: str, key: str, version: str) -> bool:
+        """Whether this upload is already in a table.
 
         Args:
-            table: An already-read snapshot, so readers use its own
-                metadata even if another load commits concurrently.
-
-        Returns:
-            Embedded records, or legacy audit.jsonl records when the
-            table has not yet migrated to embedded metadata.
-        """
-        metadata = (
-            table.schema.metadata
-            if table is not None
-            else (
-                pq.read_schema(self.table_path).metadata
-                if self.table_path.exists()
-                else None
-            )
-        )
-        if metadata and AUDIT_METADATA in metadata:
-            records: list[dict[str, Any]] = json.loads(
-                metadata[AUDIT_METADATA]
-            )
-            return records
-        if not self.audit_path.exists():
-            return []
-        lines = self.audit_path.read_text(encoding="utf-8").splitlines()
-        return [json.loads(line) for line in lines if line.strip()]
-
-    def _already_loaded(self, key: str, version: str) -> bool:
-        """Whether this upload is already in this table.
-
-        Args:
+            table: Table name.
             key: Load key.
             version: Source version of the upload.
 
         Returns:
-            True if the audit has a LOADED row for it.
+            True if the table has a LOADED audit record for it.
         """
-        return any(
-            row.get("destination") == self.table_id
-            and row.get("filename") == key
-            and row.get("source_version") == version
-            and row.get("outcome") == "LOADED"
-            for row in self.audit()
-        )
+        path = self.folder / table / f"{load_name(key, version)}.audit.json"
+        if not path.exists():
+            return False
+        record = json.loads(path.read_text(encoding="utf-8"))
+        return bool(record.get("outcome") == Outcome.LOADED.value.upper())
+
+    def _commit(
+        self,
+        table: str,
+        key: str,
+        checksum: str,
+        item: SourceItem,
+        rows: list[dict[str, Any]],
+        timestamp: datetime,
+    ) -> None:
+        """Write one table's rows, then the audit record that commits them.
+
+        Args:
+            table: Table name.
+            key: Load key.
+            checksum: SHA-256 of the source file.
+            item: Source file the rows came from.
+            rows: The sheet's rows, from the NDJSON.
+            timestamp: The load's commit time, shared by every table.
+
+        Raises:
+            ServiceError: The folder can't be written.
+        """
+        folder = self.folder / table
+        name = load_name(key, item.version)
+        stamp = timestamp.isoformat()
+        lines = [
+            json.dumps(
+                {**row, "ingested_at": stamp},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            for row in rows
+        ]
+        record = {
+            "filename": key,
+            "checksum": checksum,
+            "destination": table,
+            "source_version": item.version,
+            "source_file": item.name,
+            "row_count": len(rows),
+            "outcome": Outcome.LOADED.value.upper(),
+            "timestamp": stamp,
+        }
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            _replace(
+                folder / f"{name}.ndjson",
+                "".join(f"{line}\n" for line in lines).encode("utf-8"),
+            )
+            _replace(
+                folder / f"{name}.audit.json",
+                json.dumps(record, sort_keys=True).encode("utf-8"),
+            )
+        except OSError as error:
+            raise ServiceError(
+                f"{table}: cannot write {folder} ({error})"
+            ) from error
 
 
 # ------------------------------------------------ the job
@@ -789,12 +836,12 @@ class LandingSettings:
         target: "local" (folders) or "gcp" (buckets and BigQuery).
         landing: Local: folder with one subfolder per source.
         store: Local: folder for kept copies and audit records.
-        tables: Local: folder for the typed tables.
+        tables: Local: folder for the raw tables.
         project: GCP project.
         landing_bucket: GCS bucket the workbooks are dropped in.
         landing_prefix: Folder in that bucket; sources are below it.
         store_bucket: GCS bucket for kept copies and audit records.
-        dataset: BigQuery dataset for the typed tables.
+        dataset: BigQuery dataset for the raw tables.
     """
 
     target: str
@@ -883,7 +930,7 @@ def landing_folders(cfg: Config) -> dict[str, str]:
 def build_pipelines(
     cfg: Config, maps: Path, settings: LandingSettings
 ) -> dict[str, Pipeline]:
-    """One py-common typed Pipeline per source.
+    """One py-common Pipeline per workbook.
 
     Args:
         cfg: The checked config.
@@ -891,23 +938,20 @@ def build_pipelines(
         settings: From landing_settings().
 
     Returns:
-        Pipeline per source, in SOURCES order.
+        Pipeline per landing folder, in SOURCES order.
     """
-    contracts = source_contracts(cfg, maps)
-    folders = landing_folders(cfg)
     store: ObjectStore
     if settings.target == "gcp":
-        from py_common.adapters.bigquery import BigQueryWarehouse
+        from py_common.adapters.bigquery_raw import RawJsonWarehouse
         from py_common.adapters.gcs import GCSObjectStore, GCSSource
 
         store = GCSObjectStore(settings.project, settings.store_bucket)
     else:
         store = LocalObjectStore(long_path(settings.store))
     pipelines: dict[str, Pipeline] = {}
-    for source, contract in contracts.items():
+    for folder, book in workbooks(cfg, maps).items():
         files: Source
         warehouse: Warehouse
-        folder = folders[source]
         if settings.target == "gcp":
             prefix = "/".join(
                 p for p in (settings.landing_prefix, folder) if p
@@ -915,25 +959,25 @@ def build_pipelines(
             files = GCSSource(
                 settings.project, settings.landing_bucket, prefix
             )
-            warehouse = BigQueryWarehouse(
-                settings.project, settings.dataset, contract.table
+            warehouse = RawJsonWarehouse(
+                settings.project, settings.dataset, book.tables
             )
         else:
             files = LocalSource(settings.landing / folder)
-            warehouse = LocalTableWarehouse(settings.tables, contract.table)
-        if "file_pattern" in cfg[source]:
+            warehouse = LocalRawWarehouse(settings.tables, book.tables)
+        pattern = cfg[book.sources[0]].get("file_pattern")
+        if pattern is not None:
             modified: Callable[[SourceItem], float]
             if settings.target == "gcp":
                 modified = partial(gcs_modified, files)
             else:
                 modified = partial(local_modified, settings.landing / folder)
-            files = NewestSource(files, cfg[source]["file_pattern"], modified)
-        pipelines[source] = Pipeline(
+            files = NewestSource(files, pattern, modified)
+        pipelines[folder] = Pipeline(
             source=files,
             store=store,
             warehouse=warehouse,
-            contract=contract.contract,
-            output_format="parquet",
+            contract=book.contract,
         )
     return pipelines
 
@@ -976,7 +1020,7 @@ def stage(cfg: Config, inputs: Path, landing: Path) -> list[Path]:
 def ingest(
     config_path: str | Path, stage_from: Path | None = None
 ) -> dict[str, list[Result]]:
-    """Run every source's py-common pipeline.
+    """Run every workbook's py-common pipeline.
 
     Args:
         config_path: config.toml.
@@ -984,7 +1028,7 @@ def ingest(
             landing folder first (local target only).
 
     Returns:
-        Each source's py-common Results, one per file seen.
+        Each landing folder's py-common Results, one per file seen.
 
     Raises:
         InputError: The config is invalid, or staging was asked for
@@ -1003,8 +1047,8 @@ def ingest(
         for copy in stage(cfg, stage_from, settings.landing):
             logger.info("Staged %s", copy)
     results: dict[str, list[Result]] = {}
-    for source, pipeline in build_pipelines(cfg, maps, settings).items():
-        results[source] = pipeline.run()
+    for folder, pipeline in build_pipelines(cfg, maps, settings).items():
+        results[folder] = pipeline.run()
     return results
 
 
@@ -1020,13 +1064,13 @@ def summary(results: Mapping[str, Sequence[Result]]) -> tuple[str, bool]:
     """
     lines = []
     ok = True
-    for source, source_results in results.items():
-        if not source_results:
-            lines.append(f"{source}: no files in its landing folder")
+    for folder, folder_results in results.items():
+        if not folder_results:
+            lines.append(f"{folder}: no files in its landing folder")
             ok = False
-        for result in source_results:
+        for result in folder_results:
             line = (
-                f"{source}: {result.item.name}: {result.outcome.value}, "
+                f"{folder}: {result.item.name}: {result.outcome.value}, "
                 f"{result.rows_processed} row(s)"
             )
             if result.errors:
@@ -1088,15 +1132,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
-    "LOADED_AT",
-    "ROW_FIELD",
+    "RAW_COLUMNS",
     "TABLES",
-    "LocalTableWarehouse",
+    "HeadingCheckedContract",
+    "LocalRawWarehouse",
     "SourceContract",
+    "Workbook",
     "build_pipelines",
     "ingest",
     "landing_folders",
+    "local_audit",
+    "local_rows",
     "source_contracts",
+    "workbooks",
 ]
 
 if __name__ == "__main__":

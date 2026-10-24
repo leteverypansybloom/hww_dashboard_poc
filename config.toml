@@ -24,9 +24,9 @@ log_folder = "logs"
 target = "folder"
 
 [landed]
-# Ingestion with py-common's typed route (python ingest.py): each
-# workbook is checked against its contract (src/hww_dashboard/landing.py)
-# and loaded into a typed table: hww_signups, hww_survey, hww_was,
+# Ingestion with py-common (python ingest.py): each workbook is
+# checked against its contract (src/hww_dashboard/landing.py) and each
+# sheet loaded into a raw JSON table: hww_signups, hww_survey, hww_was,
 # hww_peer. Personal and unused columns are never loaded.
 #
 # read = true makes wrangle.py read the newest load of those tables

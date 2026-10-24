@@ -22,8 +22,8 @@ dataset = "${HWW_BQ_DATASET}"
 location = "europe-west2"
 
 [landed]
-# py-common lands the workbooks from the landing bucket into typed
-# tables, and the pipeline reads the newest load of each.
+# py-common lands the workbooks from the landing bucket into raw
+# JSON tables, and the pipeline reads the newest load of each.
 read = true
 target = "gcp"
 project = "${HWW_GCP_PROJECT}"

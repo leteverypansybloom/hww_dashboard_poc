@@ -13,9 +13,45 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
-## 2026-10-23 - Survey source
+## 2026-10-24 - Raw JSON ingestion
+
+### Workbooks land in raw JSON tables
+
+py-common now has one load route, raw JSON (its `DECISIONS_en.md`,
+2026-10-24), and the team chose it for HWW, so `ingest.py` loads each
+sheet's allowed columns into a raw table as one JSON payload per row,
+and `landed.py` reads the newest committed load back for `wrangle.py`.
+The payload keeps Excel's values; `landed.py` turns the contract's date
+columns back into datetimes, renames the keys to the headings
+`wrangle.py` knows, and takes `excel_row` from py-common's
+`row_number`. The golden tests show the tables are unchanged.
+
+Locally, `LocalRawWarehouse` writes the same rows and audit records as
+py-common's `RawJsonWarehouse`, as files: a load's rows, then its audit
+record, written last in one atomic replace. A load without its audit
+record was never committed and is loaded again by the next run. Not
+chosen: one file per table holding rows and audit together (every load
+rewrites the whole table), or a local database (another dependency).
+
+### One pipeline per workbook
+
+Supersedes the landing part of "Survey info is the survey source"
+(2026-10-23). Each landing folder has one pipeline, whose contract
+lists every sheet of its workbook and whose warehouse maps each sheet
+to its raw table. py-common checks and loads a workbook as a whole, so
+a bad Survey info sheet now stops Account signups loading from that
+upload too. That keeps the two tables on the same upload, which the
+dashboard's survey and sign-up figures assume. Not chosen: one
+pipeline per sheet as before, which loads the good sheet and leaves
+the two tables on different uploads until the file is fixed.
+
+
 
 ### Survey info is the survey source
+
+*The landing part of this entry (one pipeline per source in the
+signups folder) is superseded by "One pipeline per workbook"
+(2026-10-24).*
 
 Survey responses come from the Survey info tab of the monitoring
 workbook, not the survey tool's export. The team keeps Survey info as
