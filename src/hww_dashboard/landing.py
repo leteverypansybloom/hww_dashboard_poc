@@ -69,6 +69,7 @@ from hww_dashboard.wrangle import (
     InputError,
     clean_text,
     date_in_name,
+    error_location,
     input_file,
     load_config,
     read_csv_text,
@@ -1087,7 +1088,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         argv: Arguments (defaults to sys.argv[1:]).
 
     Returns:
-        0 if every file loaded or was already loaded, 1 otherwise.
+        0 if every file loaded or was already loaded; 1 if a file was
+        quarantined or failed, a source folder was empty, or the config
+        needs fixing; 2 for anything unexpected (another run holding
+        the lock, a cloud service failing to list the files, a bug),
+        logged with its traceback.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("config", nargs="?", default="config.toml")
@@ -1117,6 +1122,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         except InputError as error:
             logger.error("Stopped: %s", error)
             return 1
+        except Exception as error:
+            logger.exception(
+                "Unexpected error (%s at %s). This is a bug, or a service "
+                "or another run got in the way: see the traceback.",
+                type(error).__name__,
+                error_location(error),
+            )
+            return 2
         text, ok = summary(results)
         for line in text.splitlines():
             logger.info("%s", line)

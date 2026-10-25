@@ -6,6 +6,8 @@ are, that hww-run stops when ingestion fails, and that the commands
 the package installs point at real functions.
 """
 
+import importlib
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -129,12 +131,14 @@ class TestJob:
         assert job.main(["my.toml"]) == 0
         assert calls == [("ingest", ["my.toml"]), ("wrangle", ["my.toml"])]
 
+    @pytest.mark.parametrize("code", [1, 2])
     def test_failed_ingestion_stops_the_pipeline(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, code: int, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A failed ingestion's code is returned and the tables are kept.
 
         Args:
+            code: Ingestion's exit code: 1 to fix, 2 for a bug.
             monkeypatch: Replaces the two steps.
         """
         ran: list[str] = []
@@ -151,10 +155,12 @@ class TestJob:
             ran.append("wrangle")
             return 0
 
-        monkeypatch.setattr("hww_dashboard.job.landing.main", lambda argv: 1)
+        monkeypatch.setattr(
+            "hww_dashboard.job.landing.main", lambda argv: code
+        )
         monkeypatch.setattr("hww_dashboard.job.wrangle.main", pipeline)
 
-        assert job.main([]) == 1
+        assert job.main([]) == code
         assert ran == []
 
 
@@ -215,6 +221,36 @@ class TestPackaging:
             assert callable(
                 getattr(__import__(module, fromlist=["x"]), function)
             )
+
+    def test_image_build_check_imports_existing_modules(
+        self, project_folder: Path
+    ) -> None:
+        """The image's import check names modules that exist.
+
+        Only hww_dashboard and py_common modules are imported:
+        third-party ones (functions_framework) come from extras a dev
+        install may lack.
+
+        Args:
+            project_folder: The project folder.
+        """
+        dockerfile = (project_folder / "Dockerfile").read_text("utf-8")
+        names = [
+            name.strip()
+            for command in re.findall(r'python -c "([^"]*)"', dockerfile)
+            for statement in command.split(";")
+            if statement.strip().startswith("import ")
+            for name in statement.strip().removeprefix("import ").split(",")
+        ]
+        own = [
+            n
+            for n in names
+            if n.split(".")[0] in ("hww_dashboard", "py_common")
+        ]
+
+        assert "py_common.adapters.bigquery_raw" in own
+        for name in own:
+            importlib.import_module(name)
 
     def test_image_runs_the_job_on_the_gcp_config(
         self, project_folder: Path

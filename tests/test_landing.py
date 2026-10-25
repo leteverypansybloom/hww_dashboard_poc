@@ -23,7 +23,7 @@ pytest.importorskip("py_common")
 
 from py_common.contract import SheetRows  # noqa: E402
 from py_common.errors import ServiceError  # noqa: E402
-from py_common.model import Outcome, SourceItem  # noqa: E402
+from py_common.model import Outcome, Result, SourceItem  # noqa: E402
 from py_common.raw import to_ndjson  # noqa: E402
 
 from hww_dashboard import landed, landing, wrangle  # noqa: E402
@@ -519,6 +519,118 @@ class TestLocalRawWarehouse:
         assert warehouse.load("k", "abc", data, 2, item)
         assert not warehouse.load("k", "abc", data, 2, item)
         assert len(newest_rows(tmp_path, "s_raw")) == 2
+
+
+class TestMain:
+    """main(): 0 done, 1 a problem a person can fix, 2 a bug."""
+
+    @staticmethod
+    def results(outcome: Outcome) -> dict[str, list[Result]]:
+        """One folder's results, with one file in the given outcome.
+
+        Args:
+            outcome: What happened to the file.
+
+        Returns:
+            Results by landing folder, as ingest() returns them.
+        """
+        item = SourceItem("was.xlsx", "was/was.xlsx", "1", 10)
+        return {"was": [Result(item, outcome, "abc", 1, [], 0.1)]}
+
+    @pytest.mark.parametrize(
+        "outcome, code",
+        [
+            (Outcome.LOADED, 0),
+            (Outcome.SKIPPED, 0),
+            (Outcome.QUARANTINED, 1),
+            (Outcome.FAILED, 1),
+        ],
+    )
+    def test_outcomes(
+        self,
+        outcome: Outcome,
+        code: int,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Every file loaded or skipped is 0; anything else is 1.
+
+        Args:
+            outcome: The file's outcome.
+            code: The exit code expected for it.
+            monkeypatch: Replaces ingest().
+        """
+        monkeypatch.setattr(
+            "hww_dashboard.landing.ingest",
+            lambda config, stage: self.results(outcome),
+        )
+
+        assert landing.main(["config.toml"]) == code
+
+    def test_input_error_is_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A config a person must fix exits 1.
+
+        Args:
+            monkeypatch: Replaces ingest().
+        """
+
+        def stop(config: Any, stage: Any) -> None:
+            """Fail as a bad config does.
+
+            Args:
+                config: Ignored.
+                stage: Ignored.
+
+            Raises:
+                InputError: Always.
+            """
+            raise wrangle.InputError("bad setting")
+
+        monkeypatch.setattr("hww_dashboard.landing.ingest", stop)
+
+        assert landing.main(["config.toml"]) == 1
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            RuntimeError("Lock locks/abc is held by another run"),
+            ServiceError("Cannot list gs://landing/hww/was/"),
+            KeyError("a bug"),
+        ],
+    )
+    def test_unexpected_error_is_2(
+        self,
+        error: Exception,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Anything else is logged with its traceback as a bug, and exits 2.
+
+        Args:
+            error: What ingest() raises.
+            monkeypatch: Replaces ingest().
+            caplog: Captures the log.
+        """
+
+        def fail(config: Any, stage: Any) -> None:
+            """Raise the error under test.
+
+            Args:
+                config: Ignored.
+                stage: Ignored.
+
+            Raises:
+                Exception: The parametrised error.
+            """
+            raise error
+
+        monkeypatch.setattr("hww_dashboard.landing.ingest", fail)
+
+        with caplog.at_level("ERROR", logger="hww_dashboard.landing"):
+            assert landing.main(["config.toml"]) == 2
+
+        (record,) = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert "Unexpected error" in record.getMessage()
+        assert record.exc_info is not None
 
 
 class TestLongPath:

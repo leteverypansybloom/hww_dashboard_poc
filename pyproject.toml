@@ -61,7 +61,7 @@ bigquery = [
 # organisation that hosts py-common before installing this extra (or
 # dev, which includes it).
 landing = [
-    "py-common[gcp] @ git+https://github.com/<GITHUB_ORG>/py-common.git@21965ea5225a18620944adc0df9e210117e7f1f5",
+    "py-common[gcp] @ git+https://github.com/<GITHUB_ORG>/py-common.git@1d5aea4c55811451419197c1f9e262bf79f8c881",
 ]
 # The upload-triggered Cloud Run service (hww_dashboard.service).
 service = [

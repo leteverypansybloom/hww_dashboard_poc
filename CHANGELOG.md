@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `hww-ingest` (and so `hww-run`) exits 2 for an unexpected error,
+  logged with its traceback, as `hww-wrangle` does. It used to exit 1,
+  the code for a problem a person can fix.
+- `constraints.txt` pins certifi 2026.10.19, which fixes
+  PYSEC-2026-4320, and py-common at the commit whose image builds.
+
 ### Changed
 
 - Ingestion uses py-common's raw JSON tables (py-common 0.3.0, which has

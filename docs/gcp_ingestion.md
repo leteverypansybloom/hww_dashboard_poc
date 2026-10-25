@@ -301,18 +301,21 @@ $env:HWW_LANDED_DATASET = "hww_landed"
 python -m hww_dashboard.landing gcp.local.toml
 ```
 
-It prints one line per file:
+It prints one line per file, named by its landing folder (the
+monitoring workbook's 303 rows are its Account signups and Survey info
+sheets together):
 
 ```
-signups: dummy_HWW monitoring and reporting.xlsx: loaded, 200 row(s)
-survey: dummy_HWW monitoring and reporting.xlsx: loaded, 103 row(s)
+signups: dummy_HWW monitoring and reporting.xlsx: loaded, 303 row(s)
 was: dummy_was_database.xlsx: loaded, 35 row(s)
 peer: dummy_peer_montoring.xlsx: loaded, 11 row(s)
 ```
 
 Run it again: every file now says `skipped`. Exit code 0 means every
 file loaded or was already loaded; 1 means one was quarantined or failed,
-or a folder was empty, and its line says why.
+a folder was empty, or the config needs fixing, and its line says why;
+2 means something unexpected (another run holding the lock, a cloud
+service failing, or a bug), logged with its traceback.
 
 `project` here is the **data** project, where the buckets and datasets
 are. (If work policy blocks commands like `hww-ingest`, `python -m` runs
