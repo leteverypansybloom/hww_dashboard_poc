@@ -1,0 +1,27 @@
+config {
+  type: "table",
+  disabled: !hww.keepOtherText,
+  description: "R34: free text typed into the 'Other (more info)' boxes; built only when keep_other_free_text is \"true\"",
+  columns: {
+    response_id: "The response",
+    question_id: "The question the box belongs to",
+    other_text: "The tidied text"
+  }
+}
+
+WITH loaded AS ${hww.latestRows("survey", ref("hww_survey"), ref("raw_latest_loads"))}
+
+SELECT
+  responses.response_id,
+  cell.question_id,
+  cell.text AS other_text
+FROM loaded
+JOIN ${ref("stg_survey_responses")} AS responses USING (row_number),
+UNNEST([
+  STRUCT(0 AS position, CAST(NULL AS STRING) AS question_id, CAST(NULL AS STRING) AS text)
+  ${hww.surveyQuestionColumns
+    .filter((c) => c.role === "other_text")
+    .map((c) => `, (${c.position}, ${hww.str(c.question_id)}, ${hww.clean(c.payload_key)})`)
+    .join("\n  ")}
+]) AS cell
+WHERE cell.text IS NOT NULL

@@ -1,0 +1,35 @@
+config {
+  type: "assertion",
+  description: "R04, R07: every raw table has a committed load of its agreed file, holding as many rows as the audit table says"
+}
+
+WITH expected AS (
+  SELECT raw_table
+  FROM UNNEST(${"[" + hww.SOURCES.map((s) => hww.str(hww.RAW[s].table)).join(", ") + "]"}) AS raw_table
+),
+
+counts AS (
+  SELECT 'hww_signups' AS raw_table, COUNT(*) AS n
+  FROM ${hww.latestRows("signups", ref("hww_signups"), ref("raw_latest_loads"))}
+  UNION ALL
+  SELECT 'hww_survey', COUNT(*)
+  FROM ${hww.latestRows("survey", ref("hww_survey"), ref("raw_latest_loads"))}
+  UNION ALL
+  SELECT 'hww_was', COUNT(*)
+  FROM ${hww.latestRows("was", ref("hww_was"), ref("raw_latest_loads"))}
+  UNION ALL
+  SELECT 'hww_peer', COUNT(*)
+  FROM ${hww.latestRows("peer", ref("hww_peer"), ref("raw_latest_loads"))}
+)
+
+SELECT
+  expected.raw_table,
+  IF(
+    loads.raw_table IS NULL,
+    'no committed load of the agreed file name: run the ingestion, or check the *_file settings',
+    FORMAT('the load has %d row(s), the audit table says %d', counts.n, loads.row_count)
+  ) AS problem
+FROM expected
+LEFT JOIN ${ref("raw_latest_loads")} AS loads USING (raw_table)
+LEFT JOIN counts USING (raw_table)
+WHERE loads.raw_table IS NULL OR counts.n != loads.row_count

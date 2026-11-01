@@ -1,0 +1,40 @@
+config {
+  type: "view",
+  description: "The load each source reads: the newest committed load of its agreed file in each raw table, from py-common's audit table",
+  columns: {
+    raw_table: "Raw table, e.g. hww_was",
+    source_file: "The workbook's file name",
+    source_version: "The upload's GCS generation (source_generation in the raw table)",
+    loaded_at: "Commit time of the load (ingested_at in the raw table)",
+    row_count: "Rows the load inserted, as the audit table records it"
+  }
+}
+
+WITH agreed AS (
+  SELECT *
+  FROM UNNEST([
+    STRUCT('hww_signups' AS raw_table, ${hww.str(hww.RAW.signups.file)} AS source_file),
+    ('hww_survey', ${hww.str(hww.RAW.survey.file)}),
+    ('hww_was', ${hww.str(hww.RAW.was.file)}),
+    ('hww_peer', ${hww.str(hww.RAW.peer.file)})
+  ])
+),
+
+loads AS (
+  -- py-common's load key is the file's path in the landing bucket,
+  -- "_" and the first 8 hex digits of its checksum.
+  SELECT
+    REGEXP_EXTRACT(destination, r'[^.]+$') AS raw_table,
+    REGEXP_EXTRACT(filename, r'([^/]+)_[0-9a-f]{8}$') AS source_file,
+    source_version,
+    timestamp AS loaded_at,
+    row_count
+  FROM ${ref("audit")}
+  WHERE outcome = 'LOADED'
+)
+
+SELECT loads.*
+FROM loads
+JOIN agreed USING (raw_table, source_file)
+WHERE TRUE
+QUALIFY ROW_NUMBER() OVER (PARTITION BY raw_table ORDER BY loaded_at DESC) = 1

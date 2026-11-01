@@ -10,7 +10,9 @@ The code is the installable package `hww_dashboard` in `src/`. This
 folder holds what it runs on: `config.toml`, `mappings/` and `output/`.
 How the prototype relates to the production route (py-common →
 BigQuery → Dataform → Power BI) is in
-[docs/architecture.md](docs/architecture.md).
+[docs/architecture.md](docs/architecture.md). The Dataform models that
+take over from `wrangle.py` in GCP are in [`dataform/`](dataform/), set
+up as [docs/dataform.md](docs/dataform.md) describes.
 
 ## Set up
 
@@ -199,6 +201,7 @@ not kept in git.
 Operator instructions: [docs/runbook.md](docs/runbook.md).
 GCP deployment and acceptance checks: [docs/gcp.md](docs/gcp.md).
 Ingesting on GCP with py-common, start to finish: [docs/gcp_ingestion.md](docs/gcp_ingestion.md).
+The Dataform models that build the reporting (gold) tables from the raw tables: [docs/dataform.md](docs/dataform.md).
 
 How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md).
 
@@ -212,9 +215,10 @@ How it all works, step by step: [docs/pipeline_guide.md](docs/pipeline_guide.md)
 | `src/hww_dashboard/dashboard.py` | The Streamlit pages, charts and branding. It only draws. |
 | `config.toml`, `mappings/` | Settings and lookup tables (below). |
 | `output/` | The tables `wrangle.py` writes. Not kept in git: with real data it holds organisation names and survey answers. |
+| `dataform/` | The Dataform models: the same rules and tables in BigQuery SQL, for GCP ([README](dataform/README.md), [docs/dataform.md](docs/dataform.md)). |
 | `tests/` | Tests grouped by the function under test, the golden-output check and page smoke tests. |
 | `tests/data/` | Synthetic input workbooks and the frozen config the tests use ([README](tests/data/README.md)). |
-| `docs/` | The pipeline guide, the GCP guides ([gcp.md](docs/gcp.md), [gcp_ingestion.md](docs/gcp_ingestion.md)), the architecture notes, the rule register ([rules.md](docs/rules.md)), the identifiers, the output contract and the data protection notes ([data_protection.md](docs/data_protection.md), for the DPIA). |
+| `docs/` | The pipeline guide, the GCP guides ([gcp.md](docs/gcp.md), [gcp_ingestion.md](docs/gcp_ingestion.md)), the Dataform guide ([dataform.md](docs/dataform.md)), the architecture notes, the rule register ([rules.md](docs/rules.md)), the identifiers, the output contract and the data protection notes ([data_protection.md](docs/data_protection.md), for the DPIA). |
 | `CONTRIBUTING.md` | How to set up, check and change the project. |
 | `DECISIONS_en.md` | The decision log: what was decided, when and why. |
 

@@ -1,0 +1,19 @@
+config {
+  type: "assertion",
+  description: "R07: a source with no usable rows stops the run, unless allow_empty lists it"
+}
+
+WITH counts AS (
+  SELECT 'signups' AS source, COUNT(*) AS n FROM ${ref("stg_signups")}
+  UNION ALL
+  SELECT 'survey', COUNT(*) FROM ${ref("stg_survey_responses")}
+  UNION ALL
+  SELECT 'was', COUNT(*) FROM ${ref("stg_was_requests")}
+  UNION ALL
+  SELECT 'peer', COUNT(*) FROM ${ref("stg_peer")}
+)
+
+SELECT source, 'no usable rows in the latest upload' AS problem
+FROM counts
+WHERE n = 0
+  AND source NOT IN UNNEST(${"[" + ["''", ...hww.allowEmpty.map(hww.str)].join(", ") + "]"})

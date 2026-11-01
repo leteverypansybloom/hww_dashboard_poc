@@ -1,0 +1,100 @@
+config {
+  type: "table",
+  description: "Account signups: one row per user with an organisation (R20 to R24). Job roles and the flags' text are not kept",
+  assertions: {
+    uniqueKey: ["signup_id"],
+    nonNull: ["org", "employer_id"]
+  },
+  columns: {
+    signup_id: "R22: SU and the Excel row number, at least 4 digits",
+    row_number: "Excel row number",
+    org: "R21, R60: tidied organisation name, after overrides",
+    name_key: "R60: the name's key",
+    employer_id: "R64: the organisation's employer id",
+    signup_month: "R20: first day of the sign-up month; the merged month cell fills down",
+    month_invalid: "R20: the month cell holds something that isn't a date (assert_signup_months_valid)",
+    role_was_org: "R23: the role repeats the organisation's name",
+    survey_flag: "R24: 'Completed survey?' read as yes or no; NULL if unreadable",
+    survey_dates: "R24: months listed in its brackets, e.g. 2025-12-01;2026-01-01",
+    survey_flag_unread_parts: "Bracketed parts of 'Completed survey?' that aren't a month",
+    was_flag: "R24: 'Requested WAS?' read as yes or no; NULL if unreadable",
+    was_dates: "R24: months listed in its brackets",
+    was_flag_unread_parts: "Bracketed parts of 'Requested WAS?' that aren't a month"
+  }
+}
+
+js {
+  const s = hww.SIGNUPS;
+}
+
+WITH loaded AS ${hww.latestRows("signups", ref("hww_signups"), ref("raw_latest_loads"))},
+
+cells AS (
+  SELECT
+    row_number,
+    ${hww.clean(s.month)} AS month_text,
+    ${hww.date(s.month)} AS month_date,
+    ${hww.clean(s.org)} AS org_text,
+    ${hww.clean(s.role)} AS role_text,
+    ${hww.clean(s.size)} AS size_text,
+    ${hww.clean(s.sector)} AS sector_text,
+    ${hww.clean(s.industry)} AS industry_text,
+    ${hww.clean(s.sites)} AS sites_text,
+    ${hww.clean(s.completedSurvey)} AS survey_text,
+    ${hww.clean(s.requestedWas)} AS was_text
+  FROM loaded
+),
+
+filled AS (
+  -- The month is a merged cell: only the first row of each month has
+  -- it. It fills down before rows without an organisation are dropped.
+  SELECT
+    *,
+    LAST_VALUE(month_date IGNORE NULLS) OVER (
+      ORDER BY row_number ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS signup_month
+  FROM cells
+),
+
+named AS (
+  SELECT
+    filled.*,
+    COALESCE(overrides.canonical_name, filled.org_text) AS org
+  FROM filled
+  LEFT JOIN ${ref("ref_org_overrides_resolved")} AS overrides
+    ON overrides.name_key = ${hww.nameKey("filled.org_text")}
+)
+
+SELECT
+  FORMAT('SU%04d', row_number) AS signup_id,
+  row_number,
+  org,
+  ${hww.nameKey("org")} AS name_key,
+  ${hww.employerId(hww.nameKey("org"))} AS employer_id,
+  signup_month,
+  month_text IS NOT NULL AND month_date IS NULL AS month_invalid,
+  IFNULL(LOWER(role_text) = LOWER(org), FALSE) AS role_was_org,
+  sector_text,
+  ${hww.band("sector_map")} AS sector,
+  industry_text,
+  ${hww.band("industry_map")} AS industry,
+  size_text,
+  ${hww.band("size_map")} AS size_band,
+  sites_text,
+  ${hww.band("sites_map")} AS sites_band,
+  ${hww.flag("survey_text")} AS survey_flag,
+  ${hww.flagDates("survey_text", "signup_month")} AS survey_dates,
+  ${hww.flagUnreadParts("survey_text", "signup_month")} AS survey_flag_unread_parts,
+  ${hww.flag("was_text")} AS was_flag,
+  ${hww.flagDates("was_text", "signup_month")} AS was_dates,
+  ${hww.flagUnreadParts("was_text", "signup_month")} AS was_flag_unread_parts
+FROM named
+LEFT JOIN ${ref("ref_lookups")} AS sector_map
+  ON sector_map.dimension = 'sector' AND sector_map.raw_key = LOWER(sector_text)
+LEFT JOIN ${ref("ref_lookups")} AS industry_map
+  ON industry_map.dimension = 'industry' AND industry_map.raw_key = LOWER(industry_text)
+LEFT JOIN ${ref("ref_lookups")} AS size_map
+  ON size_map.dimension = 'size_band' AND size_map.raw_key = LOWER(size_text)
+LEFT JOIN ${ref("ref_lookups")} AS sites_map
+  ON sites_map.dimension = 'sites_band' AND sites_map.raw_key = LOWER(sites_text)
+WHERE org IS NOT NULL

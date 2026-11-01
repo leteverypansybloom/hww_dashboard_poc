@@ -1,0 +1,19 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per row on Account signups (a user) (R21, R22, R24)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("fact_signup")
+}
+
+SELECT
+  signup_id,
+  employer_id,
+  signup_month,
+  survey_flag,
+  survey_dates,
+  was_flag,
+  was_dates
+FROM ${ref("stg_signups")}

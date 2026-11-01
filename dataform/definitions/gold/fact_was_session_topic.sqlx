@@ -1,0 +1,12 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per WAS session and topic (R42)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("fact_was_session_topic")
+}
+
+SELECT session_id, topic
+FROM ${ref("stg_was_session_topics")}

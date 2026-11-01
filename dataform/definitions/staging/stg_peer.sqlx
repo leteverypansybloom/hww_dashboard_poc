@@ -1,0 +1,69 @@
+config {
+  type: "table",
+  description: "Peer mentoring: one row per expression of interest with an organisation (R50)",
+  assertions: {
+    uniqueKey: ["peer_id"],
+    nonNull: ["org", "employer_id"]
+  },
+  columns: {
+    peer_id: "R50: PM- and the Participant ID as typed, or PM-row and the Excel row when it is blank",
+    row_number: "Excel row number",
+    org: "R60: tidied organisation name, after overrides",
+    name_key: "R60: the name's key",
+    employer_id: "R64: the organisation's employer id",
+    interest_date: "Date of expression of interest",
+    sites_band: "R50: always Unknown; the file has no sites column"
+  }
+}
+
+js {
+  const p = hww.PEER;
+}
+
+WITH loaded AS ${hww.latestRows("peer", ref("hww_peer"), ref("raw_latest_loads"))},
+
+cells AS (
+  SELECT
+    row_number,
+    ${hww.clean(p.id)} AS id_text,
+    ${hww.clean(p.org)} AS org_text,
+    ${hww.date(p.interestDate)} AS interest_date,
+    ${hww.clean(p.size)} AS size_text,
+    ${hww.clean(p.sector)} AS sector_text,
+    ${hww.clean(p.industry)} AS industry_text
+  FROM loaded
+  -- R06: a row whose every loaded cell is blank.
+  WHERE ${hww.anyValue(p.loaded)}
+),
+
+named AS (
+  SELECT
+    cells.*,
+    COALESCE(overrides.canonical_name, cells.org_text) AS org
+  FROM cells
+  LEFT JOIN ${ref("ref_org_overrides_resolved")} AS overrides
+    ON overrides.name_key = ${hww.nameKey("cells.org_text")}
+)
+
+SELECT
+  CONCAT('PM-', COALESCE(id_text, CONCAT('row', CAST(row_number AS STRING)))) AS peer_id,
+  row_number,
+  org,
+  ${hww.nameKey("org")} AS name_key,
+  ${hww.employerId(hww.nameKey("org"))} AS employer_id,
+  interest_date,
+  sector_text,
+  ${hww.band("sector_map")} AS sector,
+  industry_text,
+  ${hww.band("industry_map")} AS industry,
+  size_text,
+  ${hww.band("size_map")} AS size_band,
+  'Unknown' AS sites_band
+FROM named
+LEFT JOIN ${ref("ref_lookups")} AS sector_map
+  ON sector_map.dimension = 'sector' AND sector_map.raw_key = LOWER(sector_text)
+LEFT JOIN ${ref("ref_lookups")} AS industry_map
+  ON industry_map.dimension = 'industry' AND industry_map.raw_key = LOWER(industry_text)
+LEFT JOIN ${ref("ref_lookups")} AS size_map
+  ON size_map.dimension = 'size_band' AND size_map.raw_key = LOWER(size_text)
+WHERE org IS NOT NULL

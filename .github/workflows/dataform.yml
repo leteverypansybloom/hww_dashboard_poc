@@ -1,0 +1,49 @@
+name: Dataform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dataform/**"
+      - "mappings/**"
+      - "src/hww_dashboard/schema/**"
+      - "tests/data/identifier_cases.json"
+      - ".github/workflows/dataform.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dataform/**"
+      - "mappings/**"
+      - "src/hww_dashboard/schema/**"
+      - "tests/data/identifier_cases.json"
+      - ".github/workflows/dataform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    # Checks the models compile and read the current mappings. Running
+    # them needs BigQuery; see docs/dataform.md.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dataform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check the reference data matches the mapping files
+        run: node scripts/build_reference_data.js --check
+
+      - name: Compile the models
+        run: npx --yes @dataform/cli@3.0.71 compile
+
+      - name: Compile with every option switched on
+        run: >
+          npx --yes @dataform/cli@3.0.71 compile
+          --vars=keep_other_free_text=true,expected_dataset=hww_expected,completed_rule=last_session_held

@@ -1,0 +1,67 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "R72: every day of the whole financial years (1 April to 31 March) covering every date in the gold tables",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("dim_date")
+}
+
+WITH dates AS (
+  SELECT date FROM ${ref("fact_engagement")}
+  UNION ALL
+  SELECT date FROM ${ref("fact_survey_answer")}
+  UNION ALL
+  SELECT session_date FROM ${ref("fact_was_session")}
+  UNION ALL
+  SELECT summary_sent_date FROM ${ref("fact_was_session")}
+  UNION ALL
+  -- The months read from the sign-up flags.
+  SELECT SAFE.PARSE_DATE('%F', flag_date)
+  FROM ${ref("fact_signup")},
+  UNNEST(ARRAY_CONCAT(
+    IFNULL(SPLIT(survey_dates, ';'), []),
+    IFNULL(SPLIT(was_dates, ';'), [])
+  )) AS flag_date
+),
+
+span AS (
+  SELECT
+    DATE(
+      IF(EXTRACT(MONTH FROM MIN(date)) >= 4, EXTRACT(YEAR FROM MIN(date)), EXTRACT(YEAR FROM MIN(date)) - 1),
+      4,
+      1
+    ) AS first_day,
+    DATE(
+      IF(EXTRACT(MONTH FROM MAX(date)) >= 4, EXTRACT(YEAR FROM MAX(date)) + 1, EXTRACT(YEAR FROM MAX(date))),
+      3,
+      31
+    ) AS last_day
+  FROM dates
+  WHERE date IS NOT NULL
+),
+
+days AS (
+  SELECT day
+  FROM span, UNNEST(GENERATE_DATE_ARRAY(first_day, last_day)) AS day
+)
+
+SELECT
+  day AS date,
+  EXTRACT(YEAR FROM day) AS year,
+  EXTRACT(MONTH FROM day) AS month,
+  FORMAT_DATE('%B', day) AS month_name,
+  DATE_TRUNC(day, MONTH) AS month_start,
+  FORMAT(
+    '%d-%s',
+    fin_start,
+    SUBSTR(CAST(fin_start + 1 AS STRING), 3)
+  ) AS fin_year,
+  CONCAT('Q', CAST(DIV(MOD(EXTRACT(MONTH FROM day) + 8, 12), 3) + 1 AS STRING)) AS fin_quarter
+FROM (
+  SELECT
+    day,
+    IF(EXTRACT(MONTH FROM day) >= 4, EXTRACT(YEAR FROM day), EXTRACT(YEAR FROM day) - 1) AS fin_start
+  FROM days
+)

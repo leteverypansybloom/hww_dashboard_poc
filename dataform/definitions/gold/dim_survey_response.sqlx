@@ -1,0 +1,22 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per survey response (R31, R35)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("dim_survey_response")
+}
+
+-- R35: a response's bands are its own; one that is Unknown takes the
+-- employer's value.
+SELECT
+  responses.response_id,
+  responses.employer_id,
+  responses.date,
+  IF(responses.sector = 'Unknown' AND employers.employer_id IS NOT NULL, employers.sector, responses.sector) AS sector,
+  IF(responses.industry = 'Unknown' AND employers.employer_id IS NOT NULL, employers.industry, responses.industry) AS industry,
+  IF(responses.size_band = 'Unknown' AND employers.employer_id IS NOT NULL, employers.size_band, responses.size_band) AS size_band,
+  IF(responses.sites_band = 'Unknown' AND employers.employer_id IS NOT NULL, employers.sites_band, responses.sites_band) AS sites_band
+FROM ${ref("stg_survey_responses")} AS responses
+LEFT JOIN ${ref("dim_employer")} AS employers USING (employer_id)

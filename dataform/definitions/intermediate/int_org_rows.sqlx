@@ -1,0 +1,37 @@
+config {
+  type: "view",
+  description: "The organisation and band columns of every source's rows, stacked in the order signups, survey, WAS, peer (combine_org_rows in wrangle.py)",
+  columns: {
+    source: "signups, survey, was or peer",
+    source_rank: "Its place in source_priority, 0 for the most trusted",
+    position: "R62: the row's place in the stacked rows; higher is later",
+    org: "Organisation name after overrides; NULL for a survey response without one",
+    name_key: "R60: the name's key"
+  }
+}
+
+WITH stacked AS (
+  SELECT 0 AS source_order, 'signups' AS source, row_number, org, name_key, sector, industry, size_band, sites_band
+  FROM ${ref("stg_signups")}
+  UNION ALL
+  SELECT 1, 'survey', row_number, org, name_key, sector, industry, size_band, sites_band
+  FROM ${ref("stg_survey_responses")}
+  UNION ALL
+  SELECT 2, 'was', row_number, org, name_key, sector, industry, size_band, sites_band
+  FROM ${ref("stg_was_requests")}
+  UNION ALL
+  SELECT 3, 'peer', row_number, org, name_key, sector, industry, size_band, sites_band
+  FROM ${ref("stg_peer")}
+)
+
+SELECT
+  source,
+  ${hww.priorityRank("source")} AS source_rank,
+  ROW_NUMBER() OVER (ORDER BY source_order, row_number) - 1 AS position,
+  org,
+  name_key,
+  sector,
+  industry,
+  size_band,
+  sites_band
+FROM stacked

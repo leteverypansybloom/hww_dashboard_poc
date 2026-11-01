@@ -13,6 +13,55 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-01 - Dataform gold layer
+
+### The modelling moves to Dataform, in bronze, silver and gold layers
+
+The team was asked to do the transformation after ingestion in GCP
+Dataform and to prepare the reporting tables there as a "gold" layer.
+The models in `dataform/` implement the rules of `docs/rules.md` in
+BigQuery SQL: py-common's raw tables are bronze, the reference tables
+and one cleaned row per source row are silver (`hww_silver`), and the
+tables of `docs/output_contract.md` are gold (`hww_gold`), with the
+same schemas and identifiers. `wrangle.py` stays the specification and
+the test oracle until the gold tables match it (`docs/dataform.md`,
+step 9); until then it keeps loading the interim `hww_reporting`
+dataset.
+
+### The Dataform project lives here and is published as a branch
+
+GCP Dataform reads its project from the root of a Git repository, and
+the models depend on this repository's mappings, schemas and
+identifier cases, so they live in `dataform/` and a `dataform` branch
+holds a copy of that folder at its root (`git subtree split`). Not
+chosen: a separate repository edited on its own, which would let the
+mappings and the models drift apart.
+
+### Mappings reach Dataform as generated reference data
+
+Dataform can't read CSV files. `dataform/scripts/build_reference_data.js`
+copies `mappings/*.csv`, the schema files and the identifier cases
+into `includes/reference_data.js`, from which the `ref_*` tables are
+built, and CI fails when it is out of date. The CSV files stay the
+one place to edit. Not chosen: loading the CSVs into BigQuery as a
+separate step (a second deployment that can be forgotten), or copying
+the mappings into SQL by hand.
+
+### Each source reads its newest load from py-common's audit table
+
+As `landed.py` does, so an upload with no rows counts as the latest
+upload instead of leaving the previous one in place. Only the agreed
+file name is read.
+
+### Stops are assertions that hold back every gold table
+
+The problems that stop `wrangle.py` are Dataform assertions, and every
+gold table depends on them: when one fails, no gold table is rebuilt
+and readers keep the last good tables. Warnings go to the
+`data_quality_issues` view instead of a Markdown report. The gold
+tables are not replaced in one transaction as `bigquery_output.publish`
+does; `docs/dataform.md` lists this and the other differences.
+
 ## 2026-10-24 - Raw JSON ingestion
 
 ### Workbooks land in raw JSON tables

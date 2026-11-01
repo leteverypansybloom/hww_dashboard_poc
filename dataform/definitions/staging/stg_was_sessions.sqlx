@@ -1,0 +1,65 @@
+config {
+  type: "table",
+  description: "WAS sessions: one row per configured session with any detail (R42, R43, R45). The session columns are [[was.sessions]] in config.toml, held in includes/hww.js",
+  assertions: {
+    uniqueKey: ["session_id"]
+  },
+  columns: {
+    session_id: "was_request_id, -S and the session number",
+    was_request_id: "The request",
+    employer_id: "The request's employer",
+    session_number: "From [[was.sessions]]",
+    session_date: "R43: the session counts as held only with a date",
+    duration: "R13: mapped through was_duration.csv; an unmapped value is kept as typed",
+    duration_mapped: "Whether was_duration.csv lists the duration",
+    summary_sent_date: "Date the session's summary was sent",
+    topics_text: "The topics cell, tidied, before splitting (stg_was_session_topics)",
+    enquiry_date: "The request's enquiry date, for R45"
+  }
+}
+
+js {
+  const nothing = { DATE: "CAST(NULL AS DATE)", STRING: "CAST(NULL AS STRING)" };
+  const sessions = hww.WAS.sessions.map((s) => `STRUCT(
+      ${s.number} AS session_number,
+      ${s.date ? hww.date(s.date) : nothing.DATE} AS session_date,
+      ${s.duration ? hww.clean(s.duration) : nothing.STRING} AS duration_text,
+      ${s.summarySent ? hww.date(s.summarySent) : nothing.DATE} AS summary_sent_date,
+      ${s.topics ? hww.clean(s.topics) : nothing.STRING} AS topics_text
+    )`);
+}
+
+WITH loaded AS ${hww.latestRows("was", ref("hww_was"), ref("raw_latest_loads"))},
+
+sessions AS (
+  SELECT
+    requests.was_request_id,
+    requests.employer_id,
+    requests.enquiry_date,
+    session.*
+  FROM loaded
+  JOIN ${ref("stg_was_requests")} AS requests USING (row_number),
+  UNNEST([
+    ${sessions.join(",\n    ")}
+  ]) AS session
+)
+
+SELECT
+  CONCAT(sessions.was_request_id, '-S', CAST(sessions.session_number AS STRING)) AS session_id,
+  sessions.was_request_id,
+  sessions.employer_id,
+  sessions.session_number,
+  sessions.session_date,
+  COALESCE(duration_map.agreed_value, sessions.duration_text) AS duration,
+  sessions.duration_text IS NULL OR duration_map.agreed_value IS NOT NULL AS duration_mapped,
+  sessions.summary_sent_date,
+  sessions.topics_text,
+  sessions.enquiry_date
+FROM sessions
+LEFT JOIN ${ref("ref_lookups")} AS duration_map
+  ON duration_map.dimension = 'was_duration'
+  AND duration_map.raw_key = LOWER(sessions.duration_text)
+WHERE sessions.session_date IS NOT NULL
+  OR sessions.duration_text IS NOT NULL
+  OR sessions.summary_sent_date IS NOT NULL
+  OR sessions.topics_text IS NOT NULL

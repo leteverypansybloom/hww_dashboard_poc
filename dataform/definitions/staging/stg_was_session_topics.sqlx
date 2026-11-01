@@ -1,0 +1,34 @@
+config {
+  type: "table",
+  description: "R42: one row per WAS session and topic. Topics split on the separator, are mapped through was_topic.csv, and keep their first occurrence",
+  assertions: {
+    uniqueKey: ["session_id", "topic"]
+  },
+  columns: {
+    session_id: "The session",
+    topic: "R13: the agreed topic, or the topic as typed when was_topic.csv doesn't list it",
+    topic_mapped: "Whether was_topic.csv lists it",
+    first_position: "Where it first appears in the cell, for the order of fact_was_session.topics"
+  }
+}
+
+WITH parts AS (
+  SELECT
+    sessions.session_id,
+    part_position,
+    ${hww.tidy("part")} AS topic_text
+  FROM ${ref("stg_was_sessions")} AS sessions,
+  UNNEST(SPLIT(sessions.topics_text, ${hww.str(hww.WAS.topicSeparator)})) AS part WITH OFFSET AS part_position
+)
+
+SELECT
+  parts.session_id,
+  COALESCE(topic_map.agreed_value, parts.topic_text) AS topic,
+  LOGICAL_OR(topic_map.agreed_value IS NOT NULL) AS topic_mapped,
+  MIN(parts.part_position) AS first_position
+FROM parts
+LEFT JOIN ${ref("ref_lookups")} AS topic_map
+  ON topic_map.dimension = 'was_topic'
+  AND topic_map.raw_key = LOWER(parts.topic_text)
+WHERE parts.topic_text IS NOT NULL
+GROUP BY 1, 2

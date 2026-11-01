@@ -152,7 +152,10 @@ A suggested order, each step useful on its own:
    (contracts, one pipeline per landing folder, the raw JSON route), as
    in py-common's `docs/GCP_SETUP.md`.
 2. **Build the Dataform models** for the star schema, with the
-   mappings as reference tables.
+   mappings as reference tables. Built in [`dataform/`](../dataform/):
+   bronze (py-common's raw tables), silver (reference, staging) and
+   gold (the output contract's tables); set-up and the differences
+   that remain are in [dataform.md](dataform.md).
 3. **Check them against this prototype.** The rules are numbered in
    [rules.md](rules.md), each with the code and tests behind it. Land
    the synthetic inputs in `tests/data/inputs/` and the scenario
@@ -185,7 +188,9 @@ Concrete opportunities:
   address and report links from a survey submission; the synthetic
   copies could replace it.
 - **Golden outputs as acceptance tests.** `tests/golden/` is a
-  ready-made expected result for the Dataform layer (step 3 above).
+  ready-made expected result for the Dataform layer (step 3 above);
+  the models' `acceptance_*` assertions compare with it
+  ([dataform.md](dataform.md), step 9).
 - **A public naming function.** If py-common exposed the heading names
   its `read_sheet` produces, the translation in point 2 of the previous
   section could call it instead of copying the rules.

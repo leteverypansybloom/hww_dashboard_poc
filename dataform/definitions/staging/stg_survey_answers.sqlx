@@ -1,0 +1,82 @@
+config {
+  type: "table",
+  description: "Survey answers: one row per response and option chosen (R32, R33). Columns come from mappings/survey_columns.csv at compile time",
+  assertions: {
+    uniqueKey: ["response_id", "question_id", "answer"]
+  },
+  columns: {
+    response_id: "The response",
+    question_id: "Question id from survey_questions.csv",
+    answer: "R32, R33: the option as the catalogue spells it, or as typed when it isn't there",
+    in_catalogue: "Whether survey_answers.csv lists the answer for the question",
+    first_row: "Excel row of the first response giving it, for the catalogue's order of new answers",
+    first_position: "Its column's position in survey_columns.csv"
+  }
+}
+
+WITH loaded AS ${hww.latestRows("survey", ref("hww_survey"), ref("raw_latest_loads"))},
+
+cells AS (
+  -- One row per non-blank question cell. Free text is left to
+  -- stg_survey_other_text.
+  SELECT
+    responses.response_id,
+    responses.row_number,
+    cell.*
+  FROM loaded
+  JOIN ${ref("stg_survey_responses")} AS responses USING (row_number),
+  UNNEST([
+    ${hww.surveyQuestionColumns
+      .filter((c) => c.role !== "other_text")
+      .map((c) => `STRUCT(${c.position} AS position, ${hww.str(c.question_id)} AS question_id, ${hww.str(c.role)} AS role, ${hww.tidy(hww.str(c.option_or_note))} AS option, ${hww.clean(c.payload_key)} AS text)`)
+      .join(",\n    ")}
+  ]) AS cell
+  WHERE cell.text IS NOT NULL
+),
+
+catalogue AS (
+  SELECT question_id, answer_key, answer
+  FROM ${ref("ref_survey_answers")}
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY question_id, answer_key ORDER BY line DESC) = 1
+),
+
+answers AS (
+  SELECT
+    cells.response_id,
+    cells.row_number,
+    cells.position,
+    cells.question_id,
+    CASE cells.role
+      -- R32: any value in a tick-box column means the option was chosen.
+      WHEN 'tick' THEN COALESCE(ticked.answer, cells.option)
+      -- R33: translated from Welsh, then spelt as in the catalogue.
+      ELSE COALESCE(chosen.answer, COALESCE(translated.answer, cells.text))
+    END AS answer
+  FROM cells
+  LEFT JOIN catalogue AS ticked
+    ON cells.role = 'tick'
+    AND ticked.question_id = cells.question_id
+    AND ticked.answer_key = LOWER(cells.option)
+  LEFT JOIN ${ref("ref_survey_answer_translations")} AS translated
+    ON cells.role = 'single'
+    AND translated.question_id = cells.question_id
+    AND translated.raw_key = LOWER(cells.text)
+  LEFT JOIN catalogue AS chosen
+    ON cells.role = 'single'
+    AND chosen.question_id = cells.question_id
+    AND chosen.answer_key = LOWER(COALESCE(translated.answer, cells.text))
+)
+
+SELECT
+  answers.response_id,
+  answers.question_id,
+  answers.answer,
+  LOGICAL_OR(catalogue.answer IS NOT NULL) AS in_catalogue,
+  MIN(answers.row_number) AS first_row,
+  MIN(answers.position) AS first_position
+FROM answers
+LEFT JOIN catalogue
+  ON catalogue.question_id = answers.question_id
+  AND catalogue.answer_key = LOWER(answers.answer)
+GROUP BY answers.response_id, answers.question_id, answers.answer

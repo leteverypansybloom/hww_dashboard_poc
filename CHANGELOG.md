@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- `dataform/`: Dataform models that build the output tables from
+  py-common's raw tables in BigQuery, in three layers: bronze (the raw
+  tables), silver (the mappings as reference tables and one cleaned row
+  per source row) and gold (the tables of `docs/output_contract.md`,
+  with the same columns and identifiers). Assertions stop a run on the
+  same problems that stop `wrangle.py`, check each gold table against
+  its schema file, and can compare every table with the golden or
+  scenario files. `hww_silver.data_quality_issues` lists what the data
+  quality report lists. `docs/dataform.md` covers the GCP set-up; the
+  models compile but haven't run on BigQuery yet.
+- A Dataform CI workflow: the reference data built from `mappings/`
+  must be current and the models must compile.
+- `docs/rules.md` names the Dataform model behind each rule.
+
 ### Fixed
 
 - `hww-ingest` (and so `hww-run`) exits 2 for an unexpected error,

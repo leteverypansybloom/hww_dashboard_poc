@@ -1,0 +1,9 @@
+config {
+  type: "assertion",
+  description: "R20: a non-blank sign-up month that isn't a date stops the run"
+}
+
+SELECT row_number, 'the month cell is not a date; use a date, or leave merged cells blank' AS problem
+FROM ${hww.latestRows("signups", ref("hww_signups"), ref("raw_latest_loads"))}
+WHERE ${hww.clean(hww.SIGNUPS.month)} IS NOT NULL
+  AND ${hww.date(hww.SIGNUPS.month)} IS NULL
