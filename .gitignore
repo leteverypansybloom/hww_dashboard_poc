@@ -1,0 +1,3 @@
+node_modules/
+# Local credentials written by `dataform init-creds`.
+.df-credentials.json

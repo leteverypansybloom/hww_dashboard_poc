@@ -1,0 +1,43 @@
+# Dataform settings for the HWW models. GCP Dataform reads this file
+# from the root of the Git repository it is connected to; see
+# docs/dataform.md for how this folder becomes that repository.
+#
+# defaultProject is the data project that holds the raw tables. A
+# release configuration in GCP can override it, and the datasets'
+# names, per environment.
+defaultProject: your-data-project
+defaultLocation: europe-west2
+# Silver: reference tables, staging and intermediate models, and the
+# data quality issues view.
+defaultDataset: hww_silver
+defaultAssertionDataset: hww_assertions
+dataformCoreVersion: 3.0.71
+
+vars:
+  # Bronze: the dataset py-common loads the raw JSON tables and its
+  # audit table into ([landed] dataset in config.gcp.toml).
+  raw_dataset: hww_landed
+  # Gold: the reporting tables of docs/output_contract.md.
+  gold_dataset: hww_gold
+  # The agreed file name of each workbook, as in config.toml. Only
+  # loads of these files are read.
+  signups_file: dummy_HWW monitoring and reporting.xlsx
+  was_file: dummy_was_database.xlsx
+  peer_file: dummy_peer_montoring.xlsx
+  # The rest mirrors config.toml: [was] completed_rule,
+  # [survey] keep_other_free_text, [employers] source_priority and
+  # [checks] max_row_drop.
+  completed_rule: summary_1_sent
+  keep_other_free_text: "false"
+  source_priority: signups,survey,was,peer
+  max_row_drop: "0.1"
+  # Sources where an upload with no rows is a real answer (allow_empty
+  # in config.toml), comma separated, e.g. "peer".
+  allow_empty: ""
+  # A dataset holding the expected tables (docs/output_contract.md,
+  # "Comparing another implementation"). When set, the acceptance
+  # assertions compare every gold table with it.
+  expected_dataset: ""
+  # The tables to compare, comma separated; empty compares them all.
+  # The hand-worked scenarios have expected files for only some tables.
+  expected_tables: ""

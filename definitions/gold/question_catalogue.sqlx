@@ -1,0 +1,71 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per survey question and answer option, in form order (R37)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("question_catalogue")
+}
+
+WITH listed AS (
+  SELECT question_id, answer, answer_short, answer_order, line AS sequence
+  FROM ${ref("ref_survey_answers")}
+),
+
+seen AS (
+  -- Options that turned up without being listed: tick-box options in
+  -- survey_columns.csv order, then answers in the order the data gives
+  -- them (by response row, then column).
+  SELECT question_id, option_or_note AS answer, position AS sequence
+  FROM ${ref("ref_survey_columns")}
+  WHERE role = 'tick'
+  UNION ALL
+  SELECT
+    question_id,
+    answer,
+    1000000 + ROW_NUMBER() OVER (ORDER BY first_row, first_position, question_id, answer)
+  FROM ${ref("stg_survey_answers")}
+),
+
+extra AS (
+  SELECT
+    seen.question_id,
+    seen.answer,
+    seen.answer AS answer_short,
+    999 AS answer_order,
+    1000000000 + seen.sequence AS sequence
+  FROM seen
+  LEFT JOIN listed
+    ON listed.question_id = seen.question_id
+    AND LOWER(listed.answer) = LOWER(seen.answer)
+  WHERE listed.question_id IS NULL
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY seen.question_id, LOWER(seen.answer) ORDER BY seen.sequence
+  ) = 1
+),
+
+options AS (
+  SELECT * FROM listed
+  UNION ALL
+  SELECT * FROM extra
+)
+
+SELECT
+  questions.question_id,
+  questions.question,
+  NULLIF(questions.question_short, '') AS question_short,
+  questions.question_type,
+  CONCAT(
+    questions.question_id,
+    '-',
+    FORMAT('%02d', ROW_NUMBER() OVER (
+      PARTITION BY questions.question_id
+      ORDER BY options.answer_order, options.sequence
+    ))
+  ) AS answer_id,
+  NULLIF(options.answer, '') AS answer,
+  NULLIF(options.answer_short, '') AS answer_short,
+  options.answer_order
+FROM ${ref("ref_survey_questions")} AS questions
+LEFT JOIN options USING (question_id)

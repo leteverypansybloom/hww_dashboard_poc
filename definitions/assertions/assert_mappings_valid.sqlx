@@ -1,0 +1,100 @@
+config {
+  type: "assertion",
+  description: "R09, R30, R37: the mapping files have no blank or conflicting rows, override cycles, unknown targets or question ids. One row per problem"
+}
+
+-- Band and WAS mappings: blank or conflicting rows.
+SELECT CONCAT('mappings/', dimension, '.csv') AS file, FORMAT('line %d is blank in a column', line) AS problem
+FROM ${ref("ref_lookup_rows")}
+WHERE raw_key IS NULL OR agreed_value IS NULL
+
+UNION ALL
+SELECT CONCAT('mappings/', dimension, '.csv'), FORMAT('%t has more than one agreed value', raw_value)
+FROM (
+  SELECT dimension, ANY_VALUE(raw_value) AS raw_value
+  FROM ${ref("ref_lookup_rows")}
+  WHERE raw_key IS NOT NULL
+  GROUP BY dimension, raw_key
+  HAVING COUNT(DISTINCT agreed_value) > 1
+)
+
+-- Every target must be on the agreed list for its dimension.
+UNION ALL
+SELECT CONCAT('mappings/', lookups.dimension, '.csv'), FORMAT('%t is not an agreed value in mappings/agreed_values.csv', lookups.agreed_value)
+FROM (SELECT DISTINCT dimension, agreed_value FROM ${ref("ref_lookups")}) AS lookups
+LEFT JOIN ${ref("ref_agreed_values")} AS agreed USING (dimension, agreed_value)
+WHERE agreed.dimension IS NULL
+
+UNION ALL
+SELECT 'mappings/agreed_values.csv', FORMAT('line %d needs a known dimension and a value', line)
+FROM ${ref("ref_agreed_values")}
+WHERE agreed_value IS NULL
+  OR dimension NOT IN ('sector', 'industry', 'size_band', 'sites_band', 'was_duration', 'was_topic')
+
+-- Organisation overrides.
+UNION ALL
+SELECT 'mappings/org_overrides.csv', FORMAT('line %d is blank in a column', line)
+FROM ${ref("ref_org_overrides")}
+WHERE raw_key IS NULL OR canonical_name IS NULL
+
+UNION ALL
+SELECT 'mappings/org_overrides.csv', FORMAT('raw names with the key %t point at different canonical names', raw_key)
+FROM ${ref("ref_org_overrides")}
+WHERE raw_key IS NOT NULL
+GROUP BY raw_key
+HAVING COUNT(DISTINCT canonical_name) > 1
+
+UNION ALL
+SELECT 'mappings/org_overrides.csv', FORMAT('the overrides from the key %t form a cycle', name_key)
+FROM ${ref("ref_org_overrides_resolved")}
+WHERE steps >= 100
+
+-- Survey questions, answers and translations.
+UNION ALL
+SELECT 'mappings/survey_questions.csv', FORMAT('line %d needs a unique question_id, a question and a single or multi type', line)
+FROM (
+  SELECT *, COUNT(*) OVER (PARTITION BY question_id) AS copies
+  FROM ${ref("ref_survey_questions")}
+)
+WHERE question_id = ''
+  OR question = ''
+  OR question_type NOT IN ('single', 'multi')
+  OR copies > 1
+
+UNION ALL
+SELECT 'mappings/survey_answers.csv', FORMAT('line %d needs a known question_id, an answer unique within its question and a whole-number answer_order', line)
+FROM (
+  SELECT *, COUNT(*) OVER (PARTITION BY question_id, answer_key) AS copies
+  FROM ${ref("ref_survey_answers")}
+)
+WHERE answer = ''
+  OR answer_order IS NULL
+  OR question_id NOT IN (SELECT question_id FROM ${ref("ref_survey_questions")})
+  OR copies > 1
+
+UNION ALL
+SELECT 'mappings/survey_answer_translations.csv', FORMAT('line %d needs a known question_id and both answers', line)
+FROM ${ref("ref_survey_answer_translation_rows")}
+WHERE raw_key IS NULL
+  OR answer IS NULL
+  OR question_id NOT IN (SELECT question_id FROM ${ref("ref_survey_questions")})
+
+UNION ALL
+SELECT 'mappings/survey_answer_translations.csv', FORMAT('%t has more than one translation for %s', ANY_VALUE(raw_answer), question_id)
+FROM ${ref("ref_survey_answer_translation_rows")}
+WHERE raw_key IS NOT NULL
+GROUP BY question_id, raw_key
+HAVING COUNT(DISTINCT answer) > 1
+
+-- What each Survey info column is.
+UNION ALL
+SELECT 'mappings/survey_columns.csv', FORMAT('line %d needs a unique column, a known role, a known question_id for an answer column and an option for a tick', position + 1)
+FROM (
+  SELECT *, COUNT(*) OVER (PARTITION BY column_name) AS copies
+  FROM ${ref("ref_survey_columns")}
+)
+WHERE TRIM(column_name) = ''
+  OR role NOT IN ('response_id', 'date', 'org', 'sector', 'industry', 'size', 'sites', 'single', 'tick', 'other_text', 'drop')
+  OR (role IN ('single', 'tick', 'other_text') AND question_id NOT IN (SELECT question_id FROM ${ref("ref_survey_questions")}))
+  OR (role = 'tick' AND TRIM(option_or_note) = '')
+  OR copies > 1

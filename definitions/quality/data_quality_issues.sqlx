@@ -1,0 +1,229 @@
+config {
+  type: "view",
+  description: "Value-level notes on the latest uploads, as wrangle.py's data quality report gives them: one row per kind of issue. needs_attention marks the ones its 'Needs attention' block lists. No cell values except band, topic and survey answer labels",
+  columns: {
+    section: "The report section the note belongs to",
+    source: "signups, survey, was, peer or all",
+    issue: "What was found",
+    detail: "A label, row or id that locates it, where there is one",
+    row_count: "How many rows it affects",
+    needs_attention: "Someone should act on it: fix a mapping, a column or an upload"
+  }
+}
+
+WITH unmapped AS (
+  -- R12, R13: values missing from a mapping file.
+  SELECT 'signups' AS source, dimension, text
+  FROM ${ref("stg_signups")},
+  UNNEST([
+    STRUCT('sector' AS dimension, sector_text AS text, sector AS agreed),
+    ('industry', industry_text, industry),
+    ('size_band', size_text, size_band),
+    ('sites_band', sites_text, sites_band)
+  ])
+  WHERE text IS NOT NULL AND agreed = 'Unknown'
+  UNION ALL
+  SELECT 'survey', dimension, text
+  FROM ${ref("stg_survey_responses")},
+  UNNEST([
+    STRUCT('sector' AS dimension, sector_text AS text, sector AS agreed),
+    ('industry', industry_text, industry),
+    ('size_band', size_text, size_band),
+    ('sites_band', sites_text, sites_band)
+  ])
+  WHERE text IS NOT NULL AND agreed = 'Unknown'
+  UNION ALL
+  SELECT 'was', dimension, text
+  FROM ${ref("stg_was_requests")},
+  UNNEST([
+    STRUCT('sector' AS dimension, sector_text AS text, sector AS agreed),
+    ('industry', industry_text, industry),
+    ('size_band', size_text, size_band),
+    ('sites_band', sites_text, sites_band)
+  ])
+  WHERE text IS NOT NULL AND agreed = 'Unknown'
+  UNION ALL
+  SELECT 'peer', dimension, text
+  FROM ${ref("stg_peer")},
+  UNNEST([
+    STRUCT('sector' AS dimension, sector_text AS text, sector AS agreed),
+    ('industry', industry_text, industry),
+    ('size_band', size_text, size_band)
+  ])
+  WHERE text IS NOT NULL AND agreed = 'Unknown'
+  UNION ALL
+  SELECT 'was', 'was_duration', duration
+  FROM ${ref("stg_was_sessions")}
+  WHERE NOT duration_mapped
+  UNION ALL
+  SELECT 'was', 'was_topic', topic
+  FROM ${ref("stg_was_session_topics")}
+  WHERE NOT topic_mapped
+),
+
+kept AS (
+  SELECT 'hww_signups' AS raw_table, 'signups' AS source, COUNT(*) AS n FROM ${ref("stg_signups")}
+  UNION ALL
+  SELECT 'hww_survey', 'survey', COUNT(*) FROM ${ref("stg_survey_responses")}
+  UNION ALL
+  SELECT 'hww_was', 'was', COUNT(*) FROM ${ref("stg_was_requests")}
+  UNION ALL
+  SELECT 'hww_peer', 'peer', COUNT(*) FROM ${ref("stg_peer")}
+),
+
+previous_loads AS (
+  -- R84: the load before the selected one, of the same file.
+  SELECT
+    selected.raw_table,
+    selected.row_count,
+    ARRAY_AGG(audit.row_count ORDER BY audit.timestamp DESC LIMIT 1)[SAFE_OFFSET(0)] AS previous_row_count
+  FROM ${ref("raw_latest_loads")} AS selected
+  JOIN ${ref("audit")} AS audit
+    ON audit.outcome = 'LOADED'
+    AND REGEXP_EXTRACT(audit.destination, r'[^.]+$') = selected.raw_table
+    AND REGEXP_EXTRACT(audit.filename, r'([^/]+)_[0-9a-f]{8}$') = selected.source_file
+    AND audit.timestamp < selected.loaded_at
+  GROUP BY selected.raw_table, selected.row_count
+),
+
+survey_keys AS (
+  SELECT DISTINCT key
+  FROM ${hww.latestRows("survey", ref("hww_survey"), ref("raw_latest_loads"))},
+  UNNEST(JSON_KEYS(payload, 1)) AS key
+),
+
+listed_survey_keys AS (
+  SELECT key
+  FROM UNNEST(${"[" + hww.surveyLoaded.map((c) => hww.str(c.payload_key)).join(", ") + "]"}) AS key
+)
+
+SELECT 'Unmapped values' AS section, source, CONCAT(dimension, ' not in its mapping file') AS issue, text AS detail, COUNT(*) AS row_count, TRUE AS needs_attention
+FROM unmapped
+GROUP BY source, dimension, text
+
+UNION ALL
+SELECT 'Rows dropped', kept.source, 'rows not kept: blank, no organisation, or (survey) no Count or a repeated Count', NULL, loads.row_count - kept.n, FALSE
+FROM kept
+JOIN ${ref("raw_latest_loads")} AS loads USING (raw_table)
+WHERE loads.row_count > kept.n
+
+UNION ALL
+SELECT 'Row counts', REGEXP_EXTRACT(raw_table, r'hww_(.*)'), FORMAT('%d row(s), %d in the upload before: more than %g%% fewer', row_count, previous_row_count, ${hww.maxRowDrop} * 100), NULL, previous_row_count - row_count, TRUE
+FROM previous_loads
+WHERE previous_row_count > 0
+  AND (previous_row_count - row_count) / previous_row_count > ${hww.maxRowDrop}
+
+UNION ALL
+SELECT 'Warnings', 'signups', 'rows with no month', NULL, COUNTIF(signup_month IS NULL), FALSE
+FROM ${ref("stg_signups")}
+HAVING COUNTIF(signup_month IS NULL) > 0
+
+UNION ALL
+SELECT 'Warnings', 'signups', 'role was the organisation name, cleared', signup_id, 1, FALSE
+FROM ${ref("stg_signups")}
+WHERE role_was_org
+
+UNION ALL
+SELECT 'Free-text flags', 'signups', flag_issue, signup_id, 1, TRUE
+FROM ${ref("stg_signups")},
+UNNEST([
+  STRUCT(IF(survey_flag IS NULL, "'Completed survey?' could not be read", IF(survey_flag_unread_parts > 0, "'Completed survey?' has a date that could not be read", NULL)) AS flag_issue),
+  STRUCT(IF(was_flag IS NULL, "'Requested WAS?' could not be read", IF(was_flag_unread_parts > 0, "'Requested WAS?' has a date that could not be read", NULL)))
+])
+WHERE flag_issue IS NOT NULL
+
+UNION ALL
+SELECT 'Free-text flags', 'signups', 'a date read from a flag is in the future', signup_id, 1, FALSE
+FROM ${ref("stg_signups")},
+UNNEST(ARRAY_CONCAT(IFNULL(SPLIT(survey_dates, ';'), []), IFNULL(SPLIT(was_dates, ';'), []))) AS flag_date
+WHERE SAFE.PARSE_DATE('%F', flag_date) > CURRENT_DATE('Europe/London')
+
+UNION ALL
+SELECT 'Warnings', 'survey', 'responses with a blank Organisation (kept, no employer_id)', NULL, COUNT(*), FALSE
+FROM ${ref("stg_survey_responses")}
+WHERE org IS NULL
+HAVING COUNT(*) > 0
+
+UNION ALL
+SELECT 'Survey checks', 'survey', CONCAT('answer not in survey_answers.csv for ', question_id, ' (kept: add it or a translation)'), answer, COUNT(*), TRUE
+FROM ${ref("stg_survey_answers")}
+WHERE NOT in_catalogue
+GROUP BY question_id, answer
+
+UNION ALL
+SELECT 'Survey checks', 'survey', 'column not in survey_columns.csv (ignored)', key, 1, TRUE
+FROM survey_keys
+WHERE key NOT IN (SELECT key FROM listed_survey_keys)
+
+UNION ALL
+SELECT 'Survey checks', 'survey', 'column in survey_columns.csv but not on Survey info', key, 1, TRUE
+FROM listed_survey_keys
+WHERE key NOT IN (SELECT key FROM survey_keys)
+  AND EXISTS (SELECT 1 FROM survey_keys)
+
+UNION ALL
+SELECT 'Warnings', 'was', 'no Participant ID: id made from the Excel row', was_request_id, 1, FALSE
+FROM ${ref("stg_was_requests")}
+WHERE participant_id_blank
+
+UNION ALL
+SELECT 'Warnings', 'was', 'no Date of Enquiry: used the allocation date', was_request_id, 1, FALSE
+FROM ${ref("stg_was_requests")}
+WHERE used_fallback_date
+
+UNION ALL
+SELECT 'Warnings', 'was', 'session with details but no date (kept, not counted as held)', session_id, 1, FALSE
+FROM ${ref("stg_was_sessions")}
+WHERE session_date IS NULL
+
+UNION ALL
+SELECT 'Warnings', 'was', 'session dated before its enquiry date (kept as it is)', session_id, 1, FALSE
+FROM ${ref("stg_was_sessions")}
+WHERE session_date < enquiry_date
+
+UNION ALL
+SELECT 'Warnings', source, CONCAT(event_type, ' events with no date (counted, not charted)'), NULL, COUNT(*), FALSE
+FROM ${ref("fact_engagement")}
+WHERE date IS NULL
+GROUP BY source, event_type
+
+UNION ALL
+SELECT 'Warnings', source, CONCAT(event_type, ' events dated after today'), NULL, COUNT(*), FALSE
+FROM ${ref("fact_engagement")}
+WHERE date > CURRENT_DATE('Europe/London')
+GROUP BY source, event_type
+
+UNION ALL
+SELECT 'Attribute conflicts', 'all', 'employers whose rows disagree (the chosen value is in dim_employer)', NULL, COUNT(*), FALSE
+FROM ${ref("dim_employer")}
+WHERE attribute_conflicts IS NOT NULL
+HAVING COUNT(*) > 0
+
+UNION ALL
+SELECT 'Duplicates', 'all', 'employers with more than one spelling, merged', NULL, COUNT(*), FALSE
+FROM (
+  SELECT name_key
+  FROM ${ref("int_org_rows")}
+  WHERE org IS NOT NULL
+  GROUP BY name_key
+  HAVING COUNT(DISTINCT org) > 1
+)
+HAVING COUNT(*) > 0
+
+UNION ALL
+-- R25: the sign-up flags against the survey and WAS records.
+SELECT 'Reconciliation', 'signups', FORMAT('%s: employers flagged Y on Account signups with no record', label), NULL, COUNT(*), FALSE
+FROM (
+  (
+    SELECT 'survey' AS label, employer_id FROM ${ref("stg_signups")} WHERE survey_flag
+    EXCEPT DISTINCT
+    SELECT 'survey', employer_id FROM ${ref("stg_survey_responses")}
+  )
+  UNION ALL
+  (
+    SELECT 'WAS', employer_id FROM ${ref("stg_signups")} WHERE was_flag
+    EXCEPT DISTINCT
+    SELECT 'WAS', employer_id FROM ${ref("stg_was_requests")}
+  )
+)
+GROUP BY label

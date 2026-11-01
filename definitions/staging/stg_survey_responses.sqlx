@@ -1,0 +1,77 @@
+config {
+  type: "table",
+  description: "Survey info: one row per response with a Count, the first of repeated Counts (R30, R31, R35)",
+  assertions: {
+    uniqueKey: ["response_id"]
+  },
+  columns: {
+    response_id: "R31: the tidied Count",
+    row_number: "Excel row number",
+    date: "Entry Date",
+    org: "R60: tidied organisation name, after overrides; NULL when blank",
+    name_key: "R60: the name's key",
+    employer_id: "R65: the organisation's employer id; NULL with no organisation"
+  }
+}
+
+js {
+  const s = hww.SURVEY;
+}
+
+WITH loaded AS ${hww.latestRows("survey", ref("hww_survey"), ref("raw_latest_loads"))},
+
+cells AS (
+  SELECT
+    row_number,
+    ${hww.clean(s.responseId)} AS response_id,
+    ${hww.date(s.date)} AS date,
+    ${hww.clean(s.org)} AS org_text,
+    ${hww.clean(s.size)} AS size_text,
+    ${hww.clean(s.sector)} AS sector_text,
+    ${hww.clean(s.industry)} AS industry_text,
+    ${hww.clean(s.sites)} AS sites_text
+  FROM loaded
+  -- R06: a row whose every loaded cell is blank.
+  WHERE ${hww.anyValue(hww.surveyLoaded.map((c) => c.payload_key))}
+),
+
+kept AS (
+  SELECT *
+  FROM cells
+  WHERE response_id IS NOT NULL
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY response_id ORDER BY row_number) = 1
+),
+
+named AS (
+  SELECT
+    kept.*,
+    COALESCE(overrides.canonical_name, kept.org_text) AS org
+  FROM kept
+  LEFT JOIN ${ref("ref_org_overrides_resolved")} AS overrides
+    ON overrides.name_key = ${hww.nameKey("kept.org_text")}
+)
+
+SELECT
+  response_id,
+  row_number,
+  date,
+  org,
+  ${hww.nameKey("org")} AS name_key,
+  IF(org IS NULL, NULL, ${hww.employerId(hww.nameKey("org"))}) AS employer_id,
+  sector_text,
+  ${hww.band("sector_map")} AS sector,
+  industry_text,
+  ${hww.band("industry_map")} AS industry,
+  size_text,
+  ${hww.band("size_map")} AS size_band,
+  sites_text,
+  ${hww.band("sites_map")} AS sites_band
+FROM named
+LEFT JOIN ${ref("ref_lookups")} AS sector_map
+  ON sector_map.dimension = 'sector' AND sector_map.raw_key = LOWER(sector_text)
+LEFT JOIN ${ref("ref_lookups")} AS industry_map
+  ON industry_map.dimension = 'industry' AND industry_map.raw_key = LOWER(industry_text)
+LEFT JOIN ${ref("ref_lookups")} AS size_map
+  ON size_map.dimension = 'size_band' AND size_map.raw_key = LOWER(size_text)
+LEFT JOIN ${ref("ref_lookups")} AS sites_map
+  ON sites_map.dimension = 'sites_band' AND sites_map.raw_key = LOWER(sites_text)

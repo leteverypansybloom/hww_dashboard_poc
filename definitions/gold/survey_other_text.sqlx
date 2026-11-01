@@ -1,0 +1,13 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  disabled: !hww.keepOtherText,
+  description: "R34: free text typed into an 'Other (more info)' box; built only when keep_other_free_text is \"true\"",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("survey_other_text")
+}
+
+SELECT response_id, question_id, other_text
+FROM ${ref("stg_survey_other_text")}

@@ -1,0 +1,23 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per survey response and option chosen (R32, R33, R37)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("fact_survey_answer")
+}
+
+SELECT
+  answers.response_id,
+  responses.employer_id,
+  responses.date,
+  answers.question_id,
+  catalogue.question,
+  catalogue.answer_id,
+  answers.answer
+FROM ${ref("stg_survey_answers")} AS answers
+JOIN ${ref("dim_survey_response")} AS responses USING (response_id)
+LEFT JOIN ${ref("question_catalogue")} AS catalogue
+  ON catalogue.question_id = answers.question_id
+  AND catalogue.answer = answers.answer

@@ -1,0 +1,27 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per WAS session with any detail recorded (R42, R43)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("fact_was_session")
+}
+
+WITH topics AS (
+  SELECT session_id, STRING_AGG(topic, '; ' ORDER BY first_position) AS topics
+  FROM ${ref("stg_was_session_topics")}
+  GROUP BY session_id
+)
+
+SELECT
+  sessions.session_id,
+  sessions.was_request_id,
+  sessions.employer_id,
+  sessions.session_number,
+  sessions.session_date,
+  sessions.duration,
+  sessions.summary_sent_date,
+  topics.topics
+FROM ${ref("stg_was_sessions")} AS sessions
+LEFT JOIN topics USING (session_id)

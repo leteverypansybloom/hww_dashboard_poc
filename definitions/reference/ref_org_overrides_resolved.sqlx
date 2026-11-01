@@ -1,0 +1,36 @@
+config {
+  type: "table",
+  description: "R60: each override's raw name key and the canonical name it ends at, following chains (A to B, B to C gives A to C)",
+  columns: {
+    name_key: "Key of a raw organisation name (docs/identifiers.md)",
+    canonical_name: "The name to use instead",
+    steps: "Overrides followed after the first; 100 means a cycle (assert_mappings_valid)"
+  }
+}
+
+WITH RECURSIVE
+  pairs AS (
+    SELECT raw_key AS name_key, canonical_name
+    FROM ${ref("ref_org_overrides")}
+    WHERE raw_key IS NOT NULL AND canonical_name IS NOT NULL
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY raw_key ORDER BY line) = 1
+  ),
+
+  chain AS (
+    SELECT name_key AS start_key, name_key AS current_key, canonical_name, 0 AS step
+    FROM pairs
+    UNION ALL
+    -- Follow the canonical name while it is itself overridden, until
+    -- it points at its own key.
+    SELECT chain.start_key, pairs.name_key, pairs.canonical_name, chain.step + 1
+    FROM chain
+    JOIN pairs ON pairs.name_key = ${hww.nameKey("chain.canonical_name")}
+    WHERE pairs.name_key != chain.current_key AND chain.step < 100
+  )
+
+SELECT
+  start_key AS name_key,
+  ARRAY_AGG(canonical_name ORDER BY step DESC LIMIT 1)[OFFSET(0)] AS canonical_name,
+  MAX(step) AS steps
+FROM chain
+GROUP BY start_key

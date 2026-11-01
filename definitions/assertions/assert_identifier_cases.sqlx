@@ -1,0 +1,34 @@
+config {
+  type: "assertion",
+  description: "R60, R64: every name in tests/data/identifier_cases.json gets the key and employer_id wrangle.py gives it"
+}
+
+js {
+  const cases = reference_data.identifierCases
+    .map((c) => `(${hww.str(c.raw)}, ${hww.str(c.key)}, ${hww.str(c.employer_id)})`)
+    .join(",\n    ");
+}
+
+WITH cases AS (
+  SELECT *
+  FROM UNNEST(ARRAY<STRUCT<raw STRING, expected_key STRING, expected_id STRING>>[
+    ${cases}
+  ])
+),
+
+computed AS (
+  SELECT
+    *,
+    ${hww.nameKey(hww.tidy("raw"))} AS name_key
+  FROM cases
+)
+
+SELECT
+  TO_CODE_POINTS(raw) AS raw_code_points,
+  expected_key,
+  name_key,
+  expected_id,
+  ${hww.employerId("name_key")} AS employer_id
+FROM computed
+WHERE name_key IS DISTINCT FROM expected_key
+  OR ${hww.employerId("name_key")} IS DISTINCT FROM expected_id

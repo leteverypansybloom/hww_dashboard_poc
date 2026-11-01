@@ -1,0 +1,111 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per organisation, with duplicate spellings merged (R61 to R64)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("dim_employer")
+}
+
+WITH named_rows AS (
+  SELECT *
+  FROM ${ref("int_org_rows")}
+  WHERE org IS NOT NULL
+),
+
+names AS (
+  -- R61: the most common spelling; on a tie, the one seen first.
+  SELECT name_key, org AS employer_name
+  FROM (
+    SELECT name_key, org, COUNT(*) AS n, MIN(position) AS first_position
+    FROM named_rows
+    GROUP BY name_key, org
+  )
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY name_key ORDER BY n DESC, first_position) = 1
+),
+
+candidates AS (
+  -- Each attribute's known values, Unknown ignored.
+  SELECT
+    name_key,
+    attribute,
+    attribute_order,
+    value,
+    COUNT(*) AS n,
+    MIN(source_rank) AS best_source_rank,
+    MAX(position) AS latest_position
+  FROM named_rows,
+  UNNEST([
+    STRUCT('sector' AS attribute, 1 AS attribute_order, sector AS value),
+    ('industry', 2, industry),
+    ('size_band', 3, size_band),
+    ('sites_band', 4, sites_band)
+  ])
+  WHERE value != 'Unknown'
+  GROUP BY name_key, attribute, attribute_order, value
+),
+
+picked AS (
+  -- R62: most common; then a specific value over Other; then the
+  -- highest-priority source; then the latest row.
+  SELECT name_key, attribute, value
+  FROM candidates
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY name_key, attribute
+    ORDER BY n DESC, value = 'Other', best_source_rank, latest_position DESC
+  ) = 1
+),
+
+conflicts AS (
+  -- R63: each attribute's known values, sorted, where the rows disagree.
+  SELECT
+    name_key,
+    STRING_AGG(listed, '; ' ORDER BY attribute_order) AS attribute_conflicts
+  FROM (
+    SELECT
+      name_key,
+      attribute_order,
+      CONCAT(attribute, ': ', STRING_AGG(value, ' | ' ORDER BY value)) AS listed
+    FROM candidates
+    GROUP BY name_key, attribute, attribute_order
+    HAVING COUNT(*) > 1
+  )
+  GROUP BY name_key
+),
+
+presence AS (
+  SELECT
+    name_key,
+    LOGICAL_OR(source = 'signups') AS in_signups,
+    LOGICAL_OR(source = 'survey') AS in_survey,
+    LOGICAL_OR(source = 'was') AS in_was,
+    LOGICAL_OR(source = 'peer') AS in_peer
+  FROM named_rows
+  GROUP BY name_key
+),
+
+attributes AS (
+  SELECT *
+  FROM picked
+  PIVOT (ANY_VALUE(value) FOR attribute IN ('sector', 'industry', 'size_band', 'sites_band'))
+)
+
+SELECT
+  ${hww.employerId("names.name_key")} AS employer_id,
+  names.employer_name,
+  COALESCE(attributes.sector, 'Unknown') AS sector,
+  COALESCE(attributes.industry, 'Unknown') AS industry,
+  COALESCE(attributes.size_band, 'Unknown') AS size_band,
+  COALESCE(attributes.sites_band, 'Unknown') AS sites_band,
+  presence.in_signups,
+  presence.in_survey,
+  presence.in_was,
+  presence.in_peer,
+  conflicts.attribute_conflicts
+FROM names
+JOIN presence USING (name_key)
+LEFT JOIN attributes USING (name_key)
+LEFT JOIN conflicts USING (name_key)

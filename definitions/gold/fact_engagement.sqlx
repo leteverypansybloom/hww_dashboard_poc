@@ -1,0 +1,57 @@
+config {
+  type: "table",
+  schema: hww.gold,
+  description: "One row per engagement event from every source (R43, R44, R70, R71)",
+  dependencies: hww.stopChecks,
+  dependOnDependencyAssertions: true,
+  tags: ["gold"],
+  columns: hww.columns("fact_engagement")
+}
+
+js {
+  // R44: when a WAS request counts as completed (completed_rule).
+  const completedDate = {
+    summary_1_sent: "MAX(IF(session_number = 1, summary_sent_date, NULL))",
+    session_1_held: "MAX(IF(session_number = 1, session_date, NULL))",
+    last_session_held: "MAX(session_date)",
+  }[hww.completedRule];
+}
+
+WITH events AS (
+  SELECT employer_id, signup_month AS date, 'month' AS precision, 'account_signup' AS event_type, 'signups' AS source, signup_id AS source_ref
+  FROM ${ref("stg_signups")}
+  UNION ALL
+  SELECT employer_id, date, 'day', 'survey_completed', 'survey', response_id
+  FROM ${ref("stg_survey_responses")}
+  UNION ALL
+  SELECT employer_id, enquiry_date, 'day', 'was_request', 'was', was_request_id
+  FROM ${ref("stg_was_requests")}
+  UNION ALL
+  -- R43: a session counts as held only if it has a date.
+  SELECT employer_id, session_date, 'day', 'was_session_held', 'was', session_id
+  FROM ${ref("stg_was_sessions")}
+  WHERE session_date IS NOT NULL
+  UNION ALL
+  SELECT employer_id, completed_date, 'day', 'was_completed', 'was', was_request_id
+  FROM (
+    SELECT was_request_id, ANY_VALUE(employer_id) AS employer_id, ${completedDate} AS completed_date
+    FROM ${ref("stg_was_sessions")}
+    GROUP BY was_request_id
+  )
+  WHERE completed_date IS NOT NULL
+  UNION ALL
+  SELECT employer_id, interest_date, 'day', 'peer_mentoring_interest', 'peer', peer_id
+  FROM ${ref("stg_peer")}
+)
+
+-- R70: the event type and the source row's id. R71: an event with no
+-- date is kept, with no precision.
+SELECT
+  CONCAT(event_type, '-', source_ref) AS engagement_id,
+  employer_id,
+  date,
+  IF(date IS NULL, NULL, precision) AS date_precision,
+  event_type,
+  source,
+  source_ref
+FROM events
