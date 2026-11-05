@@ -23,7 +23,7 @@ import pytest
 from py_common import Outcome
 
 from hww_dashboard import landing, wrangle
-from hww_dashboard.wrangle import WAS_ITEM_ID
+from hww_dashboard.wrangle import ITEM_ID
 
 PROJECT = Path(__file__).resolve().parent.parent
 SCRIPT = PROJECT / "scripts" / "make_was_jsonl.py"
@@ -254,7 +254,7 @@ class TestLanding:
         from_book = was_payloads(workbook_run)
         assert len(from_export) == ROWS
         for payload in from_export.values():
-            del payload[WAS_ITEM_ID]
+            del payload[ITEM_ID]
         assert from_export == {
             row - 1: payload for row, payload in from_book.items()
         }
@@ -272,7 +272,7 @@ class TestLanding:
             (data_folder / "was_graph.toml").read_text(encoding="utf-8")
         )
         for payload in was_payloads(export_run).values():
-            assert set(payload) == {*graph["field_map"], WAS_ITEM_ID}
+            assert set(payload) == {*graph["field_map"], ITEM_ID}
         rows = "".join(
             path.read_text(encoding="utf-8")
             for path in (export_run / "landed" / "hww_was").rglob("*")
@@ -289,7 +289,7 @@ class TestLanding:
             export_run: Folder of the export's run.
         """
         for line, payload in was_payloads(export_run).items():
-            assert payload[WAS_ITEM_ID] == str(line)
+            assert payload[ITEM_ID] == str(line)
 
     def test_the_original_file_is_kept(
         self, export_run: Path, data_folder: Path
@@ -514,7 +514,7 @@ def test_an_item_id_alone_is_a_blank_row() -> None:
     frame = pd.DataFrame(
         {
             "Title": [float("nan"), "Org 2"],
-            WAS_ITEM_ID: ["1", "2"],
+            ITEM_ID: ["1", "2"],
             "excel_row": [1, 2],
         }
     )

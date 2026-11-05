@@ -86,7 +86,7 @@ says the same rules in a few lines, for readers of the report.
 
 | Id | Rule | Code | Tests | Dataform |
 |---|---|---|---|---|
-| R50 | `peer_id` is PM- and the Participant ID as typed (leading zeros kept), or PM-row and the Excel row. The file has no sites column, so sites are Unknown. | `load_peer` | TestLoadPeer; scenario | `stg_peer` |
+| R50 | `peer_id` is PM- and the Participant ID as typed (leading zeros kept), or, when it is blank, PM-item and the SharePoint item ID from a JSON Lines export or PM-row and the Excel row from a workbook. The file has no sites column, so sites are Unknown. | `load_peer` | TestLoadPeer; scenario | `stg_peer` |
 
 ## Employers
 

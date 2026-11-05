@@ -186,9 +186,9 @@ COLUMNS = {
     ],
 }
 
-# The heading a WAS list item's id loads under. Only a JSON Lines export
-# has one: it stands in for a blank Participant ID.
-WAS_ITEM_ID = "SharePoint item ID"
+# The heading a WAS or peer list item's id loads under. Only a JSON Lines
+# export has one: it stands in for a blank Participant ID.
+ITEM_ID = "SharePoint item ID"
 
 # Settings every run needs, by config.toml section. Checked before any
 # file is read.
@@ -1415,9 +1415,36 @@ def drop_blank_rows(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         A copy without the blank rows.
     """
-    ids = ["excel_row", WAS_ITEM_ID]
+    ids = ["excel_row", ITEM_ID]
     cells = df.drop(columns=ids, errors="ignore").map(clean_text)
     return df[(cells != "").any(axis=1)].copy()
+
+
+def item_ids(df: pd.DataFrame) -> pd.Series:
+    """Each row's SharePoint item ID.
+
+    Args:
+        df: A WAS or peer table.
+
+    Returns:
+        The IDs from a JSON Lines export, or blanks from a workbook.
+    """
+    blanks = pd.Series(None, index=df.index, dtype=object)
+    return df.get(ITEM_ID, blanks)
+
+
+def blank_id_text(item_id: Any, excel_row: int) -> str:
+    """The id of a row with no Participant ID.
+
+    Args:
+        item_id: The row's SharePoint item ID, if it has one.
+        excel_row: The row number: a line number in an export.
+
+    Returns:
+        item and the item ID, or row and the row number without one.
+    """
+    item = clean_text(item_id)
+    return f"item{item}" if item else f"row{excel_row}"
 
 
 def read_csv_text(path: Path, required: Sequence[str] = ()) -> pd.DataFrame:
@@ -2323,18 +2350,16 @@ def load_was(
     df = df[~blank].copy()
     require_rows(df, cfg, "WAS database", "was", path)
 
-    no_item_ids = pd.Series(None, index=df.index, dtype=object)
     ids = []
     for value, item_id, excel_row in zip(
         df[cfg["id"]],
-        df.get(WAS_ITEM_ID, no_item_ids),
+        item_ids(df),
         df["excel_row"],
         strict=True,
     ):
         text = clean_text(value)
         if not text:
-            item = clean_text(item_id)
-            text = f"item{item}" if item else f"row{excel_row}"
+            text = blank_id_text(item_id, excel_row)
             report.add(
                 "Warnings",
                 f"- WAS row {excel_row}: no {cfg['id']}, using id '{text}'.",
@@ -2562,8 +2587,10 @@ def load_peer(
     require_rows(df, cfg, "Peer mentoring", "peer", path)
 
     df["peer_id"] = [
-        f"PM-{clean_text(v) or 'row' + str(r)}"
-        for v, r in zip(df[cfg["id"]], df["excel_row"], strict=True)
+        f"PM-{clean_text(v) or blank_id_text(i, r)}"
+        for v, i, r in zip(
+            df[cfg["id"]], item_ids(df), df["excel_row"], strict=True
+        )
     ]
     require_unique_ids(df, "peer_id", path)
     df["interest_date"] = df[cfg["interest_date"]].map(to_date)

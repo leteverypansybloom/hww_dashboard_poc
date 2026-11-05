@@ -67,9 +67,9 @@ from hww_dashboard.logs import (
     new_run_id,
 )
 from hww_dashboard.wrangle import (
+    ITEM_ID,
     MAPPING_COLUMNS,
     SOURCES,
-    WAS_ITEM_ID,
     Config,
     InputError,
     clean_text,
@@ -396,8 +396,8 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
             .endswith((".jsonl", ".ndjson"))
         )
         columns = sheets[source].columns
-        if source == "was" and json_lines:
-            columns = [*columns, Column(WAS_ITEM_ID, "string")]
+        if source in ("was", "peer") and json_lines:
+            columns = [*columns, Column(ITEM_ID, "string")]
         sheet = replace(
             sheets[source],
             columns=columns,
@@ -491,8 +491,9 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
                 excluded=[],
             )
             metadata_map = first.get("metadata_map", {})
-            if "was" in sources and isinstance(metadata_map, dict):
-                metadata_map = {**metadata_map, WAS_ITEM_ID: "id"}
+            loaded = {column.name for column in canonical.columns}
+            if ITEM_ID in loaded and isinstance(metadata_map, dict):
+                metadata_map = {**metadata_map, ITEM_ID: "id"}
             try:
                 contract = GraphJsonLinesContract(
                     worksheets=[canonical],

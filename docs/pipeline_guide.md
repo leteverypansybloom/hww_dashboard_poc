@@ -580,7 +580,7 @@ Each `load_*` function follows the same pattern:
 
 #### `load_peer(cfg, folder, lookups, overrides, report)`
 - Duplicate final identifiers (including fallback IDs) stop the run; correct the participant IDs in the named workbook.
-- **What:** the same pattern again. `peer_id = "PM-" + Participant ID`. `sites_band` is always
+- **What:** the same pattern again. `peer_id = "PM-" + Participant ID`, or the row or SharePoint item ID when it is missing, as for WAS. `sites_band` is always
   `Unknown` because this file doesn't collect it.
 - **Gotcha:** ids like `0011` keep their leading zeros because cells are read as they are, not as numbers.
 

@@ -25,9 +25,10 @@
   a Graph list export, written by `scripts/make_was_jsonl.py` and mapped
   by `tests/data/was_graph.toml`. `tests/test_was_jsonl.py` lands it and
   checks that it builds the same tables as the workbook.
-- A WAS request with no Participant ID in a JSON Lines export gets its id
-  from the SharePoint item ID (`WAS-item21`), which stays the same when
-  earlier items are deleted. A workbook still uses the row (`WAS-row22`).
+- A WAS or peer row with no Participant ID in a JSON Lines export gets its
+  id from the SharePoint item ID (`WAS-item21`, `PM-item3`), which stays
+  the same when earlier items are deleted. A workbook still uses the row
+  (`WAS-row22`).
 - `config.gcp.dummy.toml`: `config.gcp.toml` with the dummy workbooks,
   for proving a GCP set-up before the real exports exist.
 - `privacy.org_overrides_file` and the Dataform variable

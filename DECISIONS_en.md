@@ -13,6 +13,15 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-05 - Peer item IDs
+
+### Peer mentoring follows the WAS item ID rule
+
+A peer row with no Participant ID in a JSON Lines export becomes
+`PM-item<id>`, for the reasons under "A blank Participant ID uses the
+SharePoint item ID in an export". The peer list reaches GCS the same way
+as the WAS list, so its line numbers move in the same way.
+
 ## 2026-11-05 - WAS item IDs
 
 ### A blank Participant ID uses the SharePoint item ID in an export
