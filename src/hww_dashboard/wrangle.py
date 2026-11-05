@@ -1193,7 +1193,9 @@ def read_sheet(
                 )
             else:
                 sheet_name = sheet
-            raw = workbook.parse(sheet_name=sheet, header=None, dtype=object)
+            raw = pd.read_excel(
+                workbook, sheet_name=sheet, header=None, dtype=object
+            )
     except FileNotFoundError:
         raise InputError(f"{source}: file not found: {path}") from None
     except PermissionError:

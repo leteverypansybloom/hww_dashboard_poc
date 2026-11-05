@@ -122,7 +122,9 @@ def header_only_config(
         with pd.ExcelFile(path) as book:
             sheet = cfg["sheet"]
             name = book.sheet_names[sheet] if isinstance(sheet, int) else sheet
-            raw = book.parse(sheet_name=sheet, header=None, dtype=object)
+            raw = pd.read_excel(
+                book, sheet_name=sheet, header=None, dtype=object
+            )
         if source in empty:
             raw = raw.head(cfg["header_row"])
             emptied.add(path)

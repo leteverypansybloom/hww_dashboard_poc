@@ -724,10 +724,10 @@ class TestMain:
 class TestLongPath:
     """Kept copies get a path Windows' 260-character limit can't stop."""
 
-    def test_windows_gets_the_extended_form(
+    def test_other_systems_keep_the_path(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """On Windows the path gets the extended prefix; elsewhere not.
+        """Only Windows needs the extended prefix.
 
         Args:
             monkeypatch: Replaces configuration or service boundaries.
@@ -735,7 +735,14 @@ class TestLongPath:
         """
         monkeypatch.setattr("hww_dashboard.landing.os.name", "posix")
         assert landing.long_path(tmp_path) == tmp_path
-        monkeypatch.setattr("hww_dashboard.landing.os.name", "nt")
+
+    @pytest.mark.skipif(os.name != "nt", reason="Windows paths")
+    def test_windows_gets_the_extended_form(self, tmp_path: Path) -> None:
+        """On Windows the path gets the extended prefix.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         assert str(landing.long_path(tmp_path)).startswith("\\\\?\\")
 
 
