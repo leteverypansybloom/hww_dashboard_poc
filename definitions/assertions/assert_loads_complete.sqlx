@@ -1,5 +1,6 @@
 config {
   type: "assertion",
+  tags: ["gold", "publication_checks"],
   description: "R04, R07: every raw table has a committed load of its agreed file, holding as many rows as the audit table says"
 }
 

@@ -1,0 +1,22 @@
+config {
+  type: "operations",
+  hasOutput: true,
+  schema: hww.gold,
+  description: "The load of each source behind each published gold run, which the row-count check compares with",
+  tags: ["gold"],
+  columns: {
+    raw_table: "Raw table, e.g. hww_was",
+    source_file: "The source's file name",
+    source_version: "The upload's GCS generation",
+    row_count: "Rows the load inserted",
+    published_at: "When the run finished publishing"
+  }
+}
+
+CREATE TABLE IF NOT EXISTS ${self()} (
+  raw_table STRING NOT NULL,
+  source_file STRING NOT NULL,
+  source_version STRING,
+  row_count INT64 NOT NULL,
+  published_at TIMESTAMP NOT NULL
+)

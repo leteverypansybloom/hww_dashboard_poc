@@ -1,5 +1,6 @@
 config {
   type: "assertion",
+  tags: ["gold", "publication_checks"],
   description: "R07: a source with no usable rows stops the run, unless allow_empty lists it"
 }
 

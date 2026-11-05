@@ -1,8 +1,7 @@
 config {
   type: "table",
   schema: hww.gold,
-  disabled: !hww.keepOtherText,
-  description: "R34: free text typed into an 'Other (more info)' box; built only when keep_other_free_text is \"true\"",
+  description: "R34: free text typed into an 'Other (more info)' box; empty when keep_other_free_text is \"false\"",
   dependencies: hww.stopChecks,
   dependOnDependencyAssertions: true,
   tags: ["gold"],

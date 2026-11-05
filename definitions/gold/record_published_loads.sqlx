@@ -1,0 +1,11 @@
+config {
+  type: "operations",
+  description: "Records the loads behind this run once every gold table and its checks have passed",
+  tags: ["gold"],
+  dependencies: hww.goldTables,
+  dependOnDependencyAssertions: true
+}
+
+INSERT INTO ${ref("published_loads")} (raw_table, source_file, source_version, row_count, published_at)
+SELECT raw_table, source_file, source_version, row_count, CURRENT_TIMESTAMP()
+FROM ${ref("raw_latest_loads")}

@@ -1,0 +1,19 @@
+config {
+  type: "assertion",
+  description: "R84: a cumulative upload cannot replace gold after an excessive row-count reduction since the last published run",
+  tags: ["gold", "publication_checks"]
+}
+
+WITH published AS (
+  SELECT raw_table, row_count
+  FROM ${ref("published_loads")}
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY raw_table ORDER BY published_at DESC) = 1
+)
+
+SELECT selected.raw_table, selected.row_count, published.row_count AS published_row_count
+FROM ${ref("raw_latest_loads")} AS selected
+JOIN published USING (raw_table)
+WHERE ${hww.allowRowDrop ? "FALSE" : "TRUE"}
+  AND published.row_count > 0
+  AND (published.row_count - selected.row_count) / published.row_count > ${hww.maxRowDrop}

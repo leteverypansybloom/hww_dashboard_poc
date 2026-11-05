@@ -13,6 +13,8 @@ for (const table of ["fact_event", "badges"]) {
     schema: hww.gold,
     description: `Placeholder for ${table}: no source yet, so it has no rows`,
     tags: ["gold"],
+    dependencies: hww.stopChecks,
+    dependOnDependencyAssertions: true,
     columns: hww.columns(table),
   }).query(`SELECT\n  ${selected}\nLIMIT 0`);
 }

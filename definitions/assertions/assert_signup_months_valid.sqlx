@@ -1,5 +1,6 @@
 config {
   type: "assertion",
+  tags: ["gold", "publication_checks"],
   description: "R20: a non-blank sign-up month that isn't a date stops the run"
 }
 

@@ -1,5 +1,5 @@
 config {
-  type: "view",
+  type: "table",
   description: "The load each source reads: the newest committed load of its agreed file in each raw table, from py-common's audit table",
   columns: {
     raw_table: "Raw table, e.g. hww_was",
@@ -37,4 +37,4 @@ SELECT loads.*
 FROM loads
 JOIN agreed USING (raw_table, source_file)
 WHERE TRUE
-QUALIFY ROW_NUMBER() OVER (PARTITION BY raw_table ORDER BY loaded_at DESC) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY raw_table ORDER BY SAFE_CAST(source_version AS BIGNUMERIC) DESC, loaded_at DESC) = 1

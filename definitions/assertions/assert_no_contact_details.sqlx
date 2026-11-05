@@ -1,0 +1,27 @@
+config {
+  type: "assertion",
+  description: "Retained source text contains no contact identifiers before gold is published",
+  tags: ["gold", "publication_checks"]
+}
+
+WITH retained AS (
+  ${hww.SOURCES.map((source) => `SELECT ${hww.str(source)} AS source, TO_JSON_STRING(payload) AS text
+  FROM ${hww.latestRows(source, ref(hww.RAW[source].table), ref("raw_latest_loads"))}`).join("\nUNION ALL\n")}
+  UNION ALL
+  SELECT 'organisations', TO_JSON_STRING(STRUCT(org, sector, industry, size_band, sites_band))
+  FROM ${ref("int_org_rows")}
+  UNION ALL
+  SELECT 'question mappings', TO_JSON_STRING(row)
+  FROM ${ref("ref_survey_questions")} AS row
+  UNION ALL
+  SELECT 'answer mappings', TO_JSON_STRING(row)
+  FROM ${ref("ref_survey_answers")} AS row
+  UNION ALL
+  SELECT 'translation mappings', TO_JSON_STRING(row)
+  FROM ${ref("ref_survey_answer_translations")} AS row
+)
+
+SELECT source, COUNT(*) AS row_count
+FROM retained
+WHERE REGEXP_CONTAINS(text, r'${hww.contactDetails}')
+GROUP BY source

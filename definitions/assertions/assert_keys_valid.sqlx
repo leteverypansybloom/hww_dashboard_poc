@@ -1,0 +1,27 @@
+config {
+  type: "assertion",
+  description: "All source keys are present and unique before any gold table is published",
+  tags: ["gold", "publication_checks"]
+}
+
+${[
+  ["stg_signups", ["signup_id"], ["org", "employer_id"]],
+  ["stg_was_requests", ["was_request_id"], ["org", "employer_id"]],
+  ["stg_peer", ["peer_id"], ["org", "employer_id"]],
+  ["stg_survey_responses", ["response_id"], []],
+  ["stg_was_sessions", ["session_id"], ["was_request_id"]]
+].map(([table, keys, required]) => `SELECT ${hww.str(table)} AS source, 'missing key or required value' AS problem, COUNT(*) AS row_count
+FROM ${ref(table)}
+WHERE ${[...keys, ...required].map((key) => `${key} IS NULL`).join(" OR ")}
+HAVING COUNT(*) > 0
+UNION ALL
+SELECT ${hww.str(table)}, 'repeated key', COUNT(*)
+FROM (SELECT ${keys.join(", ")} FROM ${ref(table)} GROUP BY ${keys.join(", ")} HAVING COUNT(*) > 1)
+HAVING COUNT(*) > 0`).join("\nUNION ALL\n")}
+UNION ALL
+SELECT 'employers', 'employer id collision', COUNT(*)
+FROM (
+  SELECT ${hww.employerId("name_key")} AS employer_id FROM ${ref("int_org_rows")}
+  GROUP BY employer_id HAVING COUNT(DISTINCT name_key) > 1
+)
+HAVING COUNT(*) > 0
