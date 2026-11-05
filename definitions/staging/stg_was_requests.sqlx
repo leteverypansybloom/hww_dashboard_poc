@@ -6,8 +6,8 @@ config {
     nonNull: ["org", "employer_id"]
   },
   columns: {
-    was_request_id: "R40: WAS- and the Participant ID, or WAS-row and the Excel row when it is blank",
-    row_number: "Excel row number",
+    was_request_id: "R40: WAS- and the Participant ID. When it is blank: WAS-item and the SharePoint item ID, or WAS-row and the row number if the file has no item IDs",
+    row_number: "Excel row number, or line number in a JSON Lines export",
     participant_id_blank: "The Participant ID is blank",
     org: "R60: tidied organisation name, after overrides",
     name_key: "R60: the name's key",
@@ -27,6 +27,7 @@ cells AS (
   SELECT
     row_number,
     ${hww.clean(w.id)} AS id_text,
+    ${hww.clean(w.itemId)} AS item_id_text,
     ${hww.clean(w.org)} AS org_text,
     ${hww.date(w.enquiryDate)} AS enquiry,
     ${hww.date(w.fallbackEnquiryDate)} AS fallback,
@@ -49,7 +50,7 @@ named AS (
 )
 
 SELECT
-  CONCAT('WAS-', COALESCE(id_text, CONCAT('row', CAST(row_number AS STRING)))) AS was_request_id,
+  CONCAT('WAS-', COALESCE(id_text, CONCAT('item', item_id_text), CONCAT('row', CAST(row_number AS STRING)))) AS was_request_id,
   row_number,
   id_text IS NULL AS participant_id_blank,
   org,
