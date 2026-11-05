@@ -3,8 +3,8 @@
 tests/data/inputs/dummy_was_database.jsonl holds the same rows as the
 dummy workbook in the form the SharePoint transfer delivers, and
 tests/data/was_graph.toml says how its fields map to the WAS contract.
-Apart from the row number of a request with no Participant ID, it must
-build the same tables as the workbook.
+Apart from the id of a request with no Participant ID, it must build
+the same tables as the workbook.
 """
 
 import importlib.util
@@ -18,10 +18,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pandas as pd
 import pytest
 from py_common import Outcome
 
 from hww_dashboard import landing, wrangle
+from hww_dashboard.wrangle import WAS_ITEM_ID
 
 PROJECT = Path(__file__).resolve().parent.parent
 SCRIPT = PROJECT / "scripts" / "make_was_jsonl.py"
@@ -31,6 +33,7 @@ EXPORT = "dummy_was_database.jsonl"
 ROWS = 35
 ENQUIRY = "Date_x0020_of_x0020_Enquiry"
 BLANK_ID_LINE = 21
+BLANK_ID = f"WAS-item{BLANK_ID_LINE}"
 
 
 def land_config(folder: Path, data_folder: Path, export: bool) -> Path:
@@ -250,6 +253,8 @@ class TestLanding:
         from_export = was_payloads(export_run)
         from_book = was_payloads(workbook_run)
         assert len(from_export) == ROWS
+        for payload in from_export.values():
+            del payload[WAS_ITEM_ID]
         assert from_export == {
             row - 1: payload for row, payload in from_book.items()
         }
@@ -267,7 +272,7 @@ class TestLanding:
             (data_folder / "was_graph.toml").read_text(encoding="utf-8")
         )
         for payload in was_payloads(export_run).values():
-            assert set(payload) == set(graph["field_map"])
+            assert set(payload) == {*graph["field_map"], WAS_ITEM_ID}
         rows = "".join(
             path.read_text(encoding="utf-8")
             for path in (export_run / "landed" / "hww_was").rglob("*")
@@ -276,6 +281,15 @@ class TestLanding:
         assert "example.org/" not in rows
         for value in ("@example.org", "Jan Job", "John Job", "webUrl"):
             assert value not in rows
+
+    def test_each_row_has_its_item_id(self, export_run: Path) -> None:
+        """The envelope's id loads as text beside the mapped columns.
+
+        Args:
+            export_run: Folder of the export's run.
+        """
+        for line, payload in was_payloads(export_run).items():
+            assert payload[WAS_ITEM_ID] == str(line)
 
     def test_the_original_file_is_kept(
         self, export_run: Path, data_folder: Path
@@ -314,6 +328,7 @@ class TestChangedExports:
         folder: Path,
         data_folder: Path,
         change: Callable[[dict[str, Any]], None],
+        first_line: int = 1,
     ) -> tuple[Path, Any]:
         """Land the export with a change made to every item.
 
@@ -321,6 +336,8 @@ class TestChangedExports:
             folder: Folder for the run.
             data_folder: tests/data.
             change: Changes one parsed item in place.
+            first_line: The first line to keep, as if the items before
+                it had been deleted from the list.
 
         Returns:
             The config file, and the WAS file's result.
@@ -332,7 +349,7 @@ class TestChangedExports:
             folder / "landing",
         )
         lines = []
-        for item in items(data_folder):
+        for item in items(data_folder)[first_line - 1 :]:
             change(item)
             lines.append(json.dumps(item, ensure_ascii=False))
         path = folder / "landing" / "was" / EXPORT
@@ -379,6 +396,41 @@ class TestChangedExports:
         assert result.outcome == Outcome.QUARANTINED
         assert "needs a fields object" in "; ".join(result.errors)
 
+    def test_missing_item_id_quarantines(
+        self, tmp_path: Path, data_folder: Path
+    ) -> None:
+        """An item with no id can't be identified, so the file stops.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: tests/data.
+        """
+        _, result = self.land(
+            tmp_path, data_folder, lambda item: item.pop("id")
+        )
+        assert result.outcome == Outcome.QUARANTINED
+        assert "needs a Graph item id" in "; ".join(result.errors)
+
+    def test_deleting_earlier_items_keeps_the_id(
+        self, tmp_path: Path, data_folder: Path, run_time: datetime
+    ) -> None:
+        """The request keeps its id when its line number changes.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: tests/data.
+            run_time: Fixed analysis timestamp.
+        """
+        config, result = self.land(
+            tmp_path, data_folder, lambda item: None, first_line=6
+        )
+        assert result.outcome == Outcome.LOADED
+        wrangle.run(config, output_folder=tmp_path / "out", now=run_time)
+        written = (tmp_path / "out" / "fact_was_session.csv").read_text(
+            encoding="utf-8"
+        )
+        assert f"{BLANK_ID}-S1," in written
+
     @pytest.mark.parametrize("kind", [float, str])
     def test_participant_id_as_decimal_or_text_gives_the_same_ids(
         self,
@@ -413,14 +465,14 @@ class TestChangedExports:
         wrangle.run(config, output_folder=tmp_path / "out", now=run_time)
         written = tmp_path / "out" / "fact_was_session.csv"
         golden = (GOLDEN / "fact_was_session.csv").read_text(encoding="utf-8")
-        assert written.read_text(encoding="utf-8") == _with_line_number(golden)
+        assert written.read_text(encoding="utf-8") == _with_item_id(golden)
 
 
-def _with_line_number(text: str) -> str:
+def _with_item_id(text: str) -> str:
     """Golden text with the blank-ID request's id from the export.
 
-    A request with no Participant ID takes its id from its row, and the
-    export's row number is its line number.
+    A request with no Participant ID takes its id from its row in a
+    workbook, and from its SharePoint item in an export.
 
     Args:
         text: A golden file's text.
@@ -428,7 +480,7 @@ def _with_line_number(text: str) -> str:
     Returns:
         The text the export should give.
     """
-    return text.replace("row22", f"row{BLANK_ID_LINE}")
+    return text.replace("WAS-row22", BLANK_ID)
 
 
 @pytest.fixture(scope="module")
@@ -457,6 +509,18 @@ def tables(
     return folder / "out"
 
 
+def test_an_item_id_alone_is_a_blank_row() -> None:
+    """A row holding only its item id is dropped like any blank row."""
+    frame = pd.DataFrame(
+        {
+            "Title": [float("nan"), "Org 2"],
+            WAS_ITEM_ID: ["1", "2"],
+            "excel_row": [1, 2],
+        }
+    )
+    assert list(wrangle.drop_blank_rows(frame)["excel_row"]) == [2]
+
+
 class TestTables:
     """The tables built from the export match the workbook's."""
 
@@ -466,7 +530,7 @@ class TestTables:
     def test_table_matches_the_golden_file(
         self, tables: Path, name: str
     ) -> None:
-        """Every table is the workbook's, apart from one row number.
+        """Every table is the workbook's, apart from one request's id.
 
         Args:
             tables: The output folder.
@@ -474,7 +538,7 @@ class TestTables:
         """
         golden = (GOLDEN / name).read_text(encoding="utf-8")
         written = (tables / name).read_text(encoding="utf-8")
-        assert written == _with_line_number(golden)
+        assert written == _with_item_id(golden)
 
     def test_report_names_the_export_and_the_line(self, tables: Path) -> None:
         """The data quality report points at where to look.
@@ -486,4 +550,19 @@ class TestTables:
             encoding="utf-8"
         )
         assert f"35 rows read from {EXPORT}" in report
-        assert f"WAS row {BLANK_ID_LINE}: no Participant ID" in report
+        assert (
+            f"WAS row {BLANK_ID_LINE}: no Participant ID, using id "
+            f"'item{BLANK_ID_LINE}'"
+        ) in report
+
+    def test_item_id_cannot_clash_with_a_participant_id(
+        self, tables: Path
+    ) -> None:
+        """Participant ID 21 and SharePoint item 21 stay different requests.
+
+        Args:
+            tables: The output folder.
+        """
+        written = (tables / "fact_was_session.csv").read_text(encoding="utf-8")
+        assert f"WAS-{BLANK_ID_LINE}-S1," in written
+        assert f"{BLANK_ID}-S1," in written

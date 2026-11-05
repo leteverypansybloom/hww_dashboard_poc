@@ -186,6 +186,10 @@ COLUMNS = {
     ],
 }
 
+# The heading a WAS list item's id loads under. Only a JSON Lines export
+# has one: it stands in for a blank Participant ID.
+WAS_ITEM_ID = "SharePoint item ID"
+
 # Settings every run needs, by config.toml section. Checked before any
 # file is read.
 REQUIRED_SETTINGS = {
@@ -1403,7 +1407,7 @@ def require(
 
 
 def drop_blank_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Remove rows where every cell (apart from excel_row) is blank.
+    """Remove rows where every cell (apart from row ids) is blank.
 
     Args:
         df: A table from ``read_sheet``.
@@ -1411,7 +1415,8 @@ def drop_blank_rows(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         A copy without the blank rows.
     """
-    cells = df.drop(columns="excel_row").map(clean_text)
+    ids = ["excel_row", WAS_ITEM_ID]
+    cells = df.drop(columns=ids, errors="ignore").map(clean_text)
     return df[(cells != "").any(axis=1)].copy()
 
 
@@ -2318,11 +2323,18 @@ def load_was(
     df = df[~blank].copy()
     require_rows(df, cfg, "WAS database", "was", path)
 
+    no_item_ids = pd.Series(None, index=df.index, dtype=object)
     ids = []
-    for value, excel_row in zip(df[cfg["id"]], df["excel_row"], strict=True):
+    for value, item_id, excel_row in zip(
+        df[cfg["id"]],
+        df.get(WAS_ITEM_ID, no_item_ids),
+        df["excel_row"],
+        strict=True,
+    ):
         text = clean_text(value)
         if not text:
-            text = f"row{excel_row}"
+            item = clean_text(item_id)
+            text = f"item{item}" if item else f"row{excel_row}"
             report.add(
                 "Warnings",
                 f"- WAS row {excel_row}: no {cfg['id']}, using id '{text}'.",

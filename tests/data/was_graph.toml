@@ -2,7 +2,8 @@
 # settings a real WAS list needs under [was] in the config. The internal
 # names follow SharePoint's naming rule. They are not read from a real
 # list, so replace them with the list's column definitions once those
-# are available (docs/production.md).
+# are available (docs/production.md). The item's own id needs no entry:
+# landing.py loads it for every JSON Lines WAS export.
 
 site_time_zone = "Europe/London"
 

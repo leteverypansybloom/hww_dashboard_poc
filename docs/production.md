@@ -31,6 +31,9 @@ A list item's `fields` also hold SharePoint's system fields and a
 listing in `excluded_fields`. `tests/data/was_graph.toml` is a complete
 example for a synthetic copy of the WAS list.
 
+A WAS export's item `id` also loads, as `SharePoint item ID`, without any
+setting. It gives a request with no Participant ID a stable id.
+
 Configure each list section with `field_map`, `metadata_map`,
 `excluded_fields` and `site_time_zone`. Map canonical contract headings to internal names under
 `field_map`, and canonical headings to envelope properties under

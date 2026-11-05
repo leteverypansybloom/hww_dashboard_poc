@@ -75,7 +75,7 @@ says the same rules in a few lines, for readers of the report.
 
 | Id | Rule | Code | Tests | Dataform |
 |---|---|---|---|---|
-| R40 | `was_request_id` is WAS- and the Participant ID, or WAS-row and the Excel row when the ID is blank. | `load_was` | TestLoadWas; scenario (WAS-row4) | `stg_was_requests` |
+| R40 | `was_request_id` is WAS- and the Participant ID. When the ID is blank it is WAS-item and the SharePoint item ID from a JSON Lines export, or WAS-row and the Excel row from a workbook. | `load_was` | TestLoadWas; scenario (WAS-row4) | `stg_was_requests` |
 | R41 | A request with no enquiry date uses its allocation date. | `load_was` | scenario (WAS-2) | `stg_was_requests` |
 | R42 | Each configured session with any detail becomes a row. Topics split on `;#`, are mapped, and keep their first occurrence. | `unpivot_was_sessions` | TestUnpivotWasSessions; scenario | `stg_was_sessions`, `stg_was_session_topics`, `fact_was_session` |
 | R43 | A session counts as held only if it has a date. | `build_engagement` | scenario (WAS-2-S1) | `fact_engagement` |

@@ -554,8 +554,8 @@ Each `load_*` function follows the same pattern:
 - **What:**
   1. Read the sheet, requiring the request columns and every session column named in the config.
   2. Drop blank rows and rows with no organisation.
-  3. Build `was_request_id = "WAS-" + Participant ID`. A missing id becomes `WAS-row22`, with a
-     warning.
+  3. Build `was_request_id = "WAS-" + Participant ID`. A missing id becomes `WAS-row22`, or
+     `WAS-item21` (the SharePoint item ID) from a JSON Lines export, with a warning.
   4. Use "Date of Enquiry", falling back to "Date allocated to adviser", with a warning.
   5. Map the bands.
   6. Call `unpivot_was_sessions` and `check_was_sessions`.

@@ -68,9 +68,9 @@ check against:
 
 Change `COLUMNS` in the script and `was_graph.toml` together.
 `tests/test_was_jsonl.py` fails if the committed file isn't what the
-script writes. The file's row numbers are line numbers, so the request
-with no Participant ID is `WAS-row21` here and `WAS-row22` from the
-workbook. That is the only difference in the tables.
+script writes. The request with no Participant ID is `WAS-item21` here
+(its SharePoint item ID) and `WAS-row22` from the workbook. That is the
+only difference in the tables.
 
 ## Changing them
 
