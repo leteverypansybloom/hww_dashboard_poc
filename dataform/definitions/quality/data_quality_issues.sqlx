@@ -162,7 +162,7 @@ WHERE key NOT IN (SELECT key FROM survey_keys)
   AND EXISTS (SELECT 1 FROM survey_keys)
 
 UNION ALL
-SELECT 'Warnings', 'was', 'no Participant ID: id made from the Excel row', was_request_id, 1, FALSE
+SELECT 'Warnings', 'was', 'no Participant ID: id made from the SharePoint item ID or the row number', was_request_id, 1, FALSE
 FROM ${ref("stg_was_requests")}
 WHERE participant_id_blank
 

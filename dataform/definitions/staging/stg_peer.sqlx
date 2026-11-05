@@ -6,8 +6,8 @@ config {
     nonNull: ["org", "employer_id"]
   },
   columns: {
-    peer_id: "R50: PM- and the Participant ID as typed, or PM-row and the Excel row when it is blank",
-    row_number: "Excel row number",
+    peer_id: "R50: PM- and the Participant ID as typed. When it is blank: PM-item and the SharePoint item ID, or PM-row and the row number if the file has no item IDs",
+    row_number: "Excel row number, or line number in a JSON Lines export",
     org: "R60: tidied organisation name, after overrides",
     name_key: "R60: the name's key",
     employer_id: "R64: the organisation's employer id",
@@ -26,6 +26,7 @@ cells AS (
   SELECT
     row_number,
     ${hww.clean(p.id)} AS id_text,
+    ${hww.clean(p.itemId)} AS item_id_text,
     ${hww.clean(p.org)} AS org_text,
     ${hww.date(p.interestDate)} AS interest_date,
     ${hww.clean(p.size)} AS size_text,
@@ -46,7 +47,7 @@ named AS (
 )
 
 SELECT
-  CONCAT('PM-', COALESCE(id_text, CONCAT('row', CAST(row_number AS STRING)))) AS peer_id,
+  CONCAT('PM-', COALESCE(id_text, CONCAT('item', item_id_text), CONCAT('row', CAST(row_number AS STRING)))) AS peer_id,
   row_number,
   org,
   ${hww.nameKey("org")} AS name_key,

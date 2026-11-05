@@ -90,9 +90,9 @@ changes every id, so it is an output change.
 |---|---|---|
 | `signup_id` | `SU` and the Excel row number, zero-padded to at least four digits: `FORMAT('SU%04d', row_number)` | **No.** Inserting, deleting or sorting rows on Account signups renumbers every row below. Ask the data owners for an id column. |
 | `response_id` | The `Count` on Survey info, cleaned: a running number, 1 for the oldest response. | **No.** It holds only while the team adds each new response with the next number and never renumbers, deletes or retypes rows. The same response then keeps its id; otherwise ids move between responses. Ask the data owners to add the survey tool's Entry Id to Survey info. |
-| `was_request_id` | `WAS-` and the cleaned Participant ID; `WAS-row` and the Excel row when the ID is blank. | Yes, while each request has a Participant ID. |
+| `was_request_id` | `WAS-` and the cleaned Participant ID. When the ID is blank: `WAS-item` and the SharePoint item ID from a JSON Lines export, or `WAS-row` and the Excel row from a workbook. | Yes from an export: SharePoint doesn't reuse an item's ID. From a workbook, yes while each request has a Participant ID. A request that gains a Participant ID changes id. |
 | `session_id` | `was_request_id`, `-S` and the session number from `[[was.sessions]]`. | As `was_request_id`. |
-| `peer_id` | `PM-` and the cleaned Participant ID; `PM-row` and the Excel row when the ID is blank. | Yes, while each row has a Participant ID. |
+| `peer_id` | `PM-` and the cleaned Participant ID. When the ID is blank: `PM-item` and the SharePoint item ID from a JSON Lines export, or `PM-row` and the Excel row from a workbook. | Yes from an export: SharePoint doesn't reuse an item's ID. From a workbook, yes while each row has a Participant ID. A row that gains a Participant ID changes id. |
 | `engagement_id` | `event_type`, `-` and the source row's id (`signup_id`, `response_id`, `was_request_id`, `session_id` or `peer_id`). | As that id. |
 | `answer_id` | `question_id`, `-` and the option's 2-digit position within its question, after sorting by `answer_order` (options seen only in the data come last, with order 999). | **No.** Adding an option to `survey_answers.csv` renumbers the options after it. Don't store `answer_id`s outside one run's tables. |
 

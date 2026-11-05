@@ -554,8 +554,8 @@ Each `load_*` function follows the same pattern:
 - **What:**
   1. Read the sheet, requiring the request columns and every session column named in the config.
   2. Drop blank rows and rows with no organisation.
-  3. Build `was_request_id = "WAS-" + Participant ID`. A missing id becomes `WAS-row22`, with a
-     warning.
+  3. Build `was_request_id = "WAS-" + Participant ID`. A missing id becomes `WAS-row22`, or
+     `WAS-item21` (the SharePoint item ID) from a JSON Lines export, with a warning.
   4. Use "Date of Enquiry", falling back to "Date allocated to adviser", with a warning.
   5. Map the bands.
   6. Call `unpivot_was_sessions` and `check_was_sessions`.
@@ -580,7 +580,7 @@ Each `load_*` function follows the same pattern:
 
 #### `load_peer(cfg, folder, lookups, overrides, report)`
 - Duplicate final identifiers (including fallback IDs) stop the run; correct the participant IDs in the named workbook.
-- **What:** the same pattern again. `peer_id = "PM-" + Participant ID`. `sites_band` is always
+- **What:** the same pattern again. `peer_id = "PM-" + Participant ID`, or the row or SharePoint item ID when it is missing, as for WAS. `sites_band` is always
   `Unknown` because this file doesn't collect it.
 - **Gotcha:** ids like `0011` keep their leading zeros because cells are read as they are, not as numbers.
 

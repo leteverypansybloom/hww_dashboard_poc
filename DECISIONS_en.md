@@ -13,6 +13,31 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-05 - Peer item IDs
+
+### Peer mentoring follows the WAS item ID rule
+
+A peer row with no Participant ID in a JSON Lines export becomes
+`PM-item<id>`, for the reasons under "A blank Participant ID uses the
+SharePoint item ID in an export". The peer list reaches GCS the same way
+as the WAS list, so its line numbers move in the same way.
+
+## 2026-11-05 - WAS item IDs
+
+### A blank Participant ID uses the SharePoint item ID in an export
+
+A JSON Lines WAS export loads each item's `id` as `SharePoint item ID`,
+and a request with no Participant ID becomes `WAS-item<id>`. The
+workbook route keeps `WAS-row<row>`, as a workbook has no item IDs.
+
+Why: a line number moves when an earlier item is deleted, which would
+give the request a new id and split its history. The `item` prefix keeps
+it apart from a request whose Participant ID has the same number.
+
+**Trade-off**: the two routes give this request different ids, so
+compare them with that allowed for. Its id also changes when it gains a
+Participant ID, as it does on the workbook route.
+
 ## 2026-11-05 - Fewer routes
 
 ### The upload-triggered service is removed

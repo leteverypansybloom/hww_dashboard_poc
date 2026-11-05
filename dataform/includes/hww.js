@@ -108,6 +108,8 @@ const SIGNUPS = {
 
 const WAS = {
   id: "Participant ID",
+  // Loaded from a JSON Lines export only, so not in `loaded` below.
+  itemId: "SharePoint item ID",
   org: "Title",
   enquiryDate: "Date of Enquiry",
   fallbackEnquiryDate: "Date allocated to adviser",
@@ -158,6 +160,8 @@ const WAS = {
 
 const PEER = {
   id: "Participant ID",
+  // Loaded from a JSON Lines export only, so not in `loaded` below.
+  itemId: "SharePoint item ID",
   org: "Business Name",
   interestDate: "Date of expression of interest",
   size: "Business Size",

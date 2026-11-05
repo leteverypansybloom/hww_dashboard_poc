@@ -67,6 +67,7 @@ from hww_dashboard.logs import (
     new_run_id,
 )
 from hww_dashboard.wrangle import (
+    ITEM_ID,
     MAPPING_COLUMNS,
     SOURCES,
     Config,
@@ -389,16 +390,19 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
     sheets = {"signups": SIGNUPS, "survey": survey, "was": WAS, "peer": PEER}
     result: dict[str, SourceContract] = {}
     for source in SOURCES:
+        json_lines = (
+            str(cfg[source].get("file", ""))
+            .lower()
+            .endswith((".jsonl", ".ndjson"))
+        )
+        columns = sheets[source].columns
+        if source in ("was", "peer") and json_lines:
+            columns = [*columns, Column(ITEM_ID, "string")]
         sheet = replace(
             sheets[source],
+            columns=columns,
             allow_empty=cfg[source].get("allow_empty", False),
-            header_row=(
-                1
-                if str(cfg[source].get("file", ""))
-                .lower()
-                .endswith((".jsonl", ".ndjson"))
-                else sheets[source].header_row
-            ),
+            header_row=1 if json_lines else sheets[source].header_row,
         )
         if source == "survey":
             names = survey_names
@@ -486,13 +490,17 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
                 ],
                 excluded=[],
             )
+            metadata_map = first.get("metadata_map", {})
+            loaded = {column.name for column in canonical.columns}
+            if ITEM_ID in loaded and isinstance(metadata_map, dict):
+                metadata_map = {**metadata_map, ITEM_ID: "id"}
             try:
                 contract = GraphJsonLinesContract(
                     worksheets=[canonical],
                     file_name=file_name,
                     file_format="jsonl",
                     field_map=first.get("field_map", {}),
-                    metadata_map=first.get("metadata_map", {}),
+                    metadata_map=metadata_map,
                     excluded_fields=first.get("excluded_fields", []),
                     site_time_zone=str(first.get("site_time_zone", "")),
                     multi_value_separators=_multi_value_separators(

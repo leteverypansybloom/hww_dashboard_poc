@@ -26,6 +26,14 @@ migration. This repository holds no production internal names.
 The sidecar is preserved by the transfer process; ingestion does not treat
 it as a source table.
 
+A list item's `fields` also hold SharePoint's system fields and a
+`<name>@odata.type` entry for each multi-choice column, and each needs
+listing in `excluded_fields`. `tests/data/was_graph.toml` is a complete
+example for a synthetic copy of the WAS list.
+
+A WAS or peer export's item `id` also loads, as `SharePoint item ID`,
+without any setting. It gives a row with no Participant ID a stable id.
+
 Configure each list section with `field_map`, `metadata_map`,
 `excluded_fields` and `site_time_zone`. Map canonical contract headings to internal names under
 `field_map`, and canonical headings to envelope properties under

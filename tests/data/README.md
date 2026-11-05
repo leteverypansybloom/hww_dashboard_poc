@@ -10,6 +10,8 @@ own settings.
 |---|---|
 | `config.toml` | Frozen copy of the project config. Reads `inputs/` and the live `mappings/`. Also the demo config: `python wrangle.py tests/data/config.toml` writes the synthetic tables to the project's `output/` (the tests write to temporary folders instead). |
 | `inputs/*.xlsx` | Synthetic copies of the three dummy HWW workbooks the pipeline reads. |
+| `inputs/dummy_was_database.jsonl` | The WAS workbook as a Graph list export. |
+| `was_graph.toml` | How that export's fields map to the WAS contract's columns. |
 
 ## How the inputs were made
 
@@ -45,6 +47,30 @@ byte, and the data quality report matched the one it wrote from the
 dummy workbooks. So the snapshot describes these inputs exactly. The
 Survey info sheet was copied the same way, and the snapshot refreshed
 from it with `scripts/refresh_golden.py`.
+
+## The JSON Lines export
+
+`python scripts/make_was_jsonl.py` writes
+`inputs/dummy_was_database.jsonl` from the WAS workbook, one list item
+per line, as Microsoft Graph returns it: an envelope around nested
+`fields`, SharePoint's system fields, internal column names, dates in
+UTC, multi-choice columns as arrays, the adviser as a person lookup, and
+blank values left out.
+
+Three things in it are assumptions until there is a real export to
+check against:
+
+- the internal names, which follow SharePoint's naming rule (spaces and
+  symbols encoded, cut to 32 characters, a digit added on a clash) but
+  are not read from a real list;
+- each column's kind, such as the adviser being a person column;
+- a date-only value arriving as local midnight in UTC.
+
+Change `COLUMNS` in the script and `was_graph.toml` together.
+`tests/test_was_jsonl.py` fails if the committed file isn't what the
+script writes. The request with no Participant ID is `WAS-item21` here
+(its SharePoint item ID) and `WAS-row22` from the workbook. That is the
+only difference in the tables.
 
 ## Changing them
 
