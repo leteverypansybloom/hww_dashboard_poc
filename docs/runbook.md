@@ -75,3 +75,8 @@ Before scheduling, name a primary and backup operator, data owner, alert
 recipient and expected arrival date for each source. Test a failed-run alert,
 a warning alert and a missing-run alert. A report with no warnings is not proof
 that the latest data arrived. Review the freshness of every source separately.
+
+## Production deployment
+
+[Production operation](production.md) covers the production inputs, access,
+retention and what remains before cut-over.

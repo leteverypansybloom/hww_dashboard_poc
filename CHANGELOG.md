@@ -17,12 +17,48 @@
 - A Dataform CI workflow: the reference data built from `mappings/`
   must be current and the models must compile.
 - `docs/rules.md` names the Dataform model behind each rule.
+- JSON Lines exports of the SharePoint lists: a WAS or peer source whose
+  `file` ends in `.jsonl` reads through py-common's
+  `GraphJsonLinesContract`, configured with `field_map`, `metadata_map`,
+  `excluded_fields` and `site_time_zone` in its config section.
+- `config.gcp.dummy.toml`: `config.gcp.toml` with the dummy workbooks,
+  for proving a GCP set-up before the real exports exist.
+- `privacy.org_overrides_file` and the Dataform variable
+  `org_overrides_table`: real organisation overrides stay out of Git.
+  A committed `mappings/org_overrides.csv` with rows is refused.
+- Dataform checks that run before any gold table: keys, contact details,
+  row counts, freshness, payload keys and duplicate loads.
+- `hww_gold.published_loads`, recording the loads behind each published
+  run, which the row-count check compares with.
+- `docs/production.md`: the production inputs, access, retention,
+  rollback and acceptance steps.
+- `.github/workflows/pipeline.yml`, and a CI job publishing `dataform/`
+  to the `dataform` branch.
+
+### Changed
+
+- **A source that loses more than `max_row_drop` of its rows holds
+  publication**, in `wrangle.py` and in Dataform. It used to be a
+  warning. `allow_row_drop` publishes an agreed reduction.
+- `wrangle.py` refuses a load older than `max_load_age_hours` on the GCP
+  route, and a workbook with formula cells holding no saved value.
+- One publication lease covers the read and publish of a GCP run.
+- `raw_latest_loads` is a table built once per Dataform run, and picks
+  the highest GCS generation. `survey_other_text` is always rebuilt, and
+  empty when free text is switched off.
+- `HeadingCheckedContract` is gone: `Column` type `"any"` from py-common
+  does its job.
 
 ### Fixed
 
 - `hww-ingest` (and so `hww-run`) exits 2 for an unexpected error,
   logged with its traceback, as `hww-wrangle` does. It used to exit 1,
   the code for a problem a person can fix.
+- A failure in one landing folder no longer stops the others loading;
+  the run still exits 2.
+- Spelling ties in `dim_employer` no longer depend on the order Python
+  happens to count them.
+- Error messages no longer repeat workbook values.
 - `constraints.txt` pins certifi 2026.10.19, which fixes
   PYSEC-2026-4320, and py-common at the commit whose image builds.
 

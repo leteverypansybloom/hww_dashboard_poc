@@ -81,3 +81,8 @@ and check the outputs against their intended use.
 Until these are done the project can't claim to be ready for
 production. It is ready for human review and cloud acceptance
 testing.
+
+## Production deployment
+
+[Production operation](production.md) covers the production inputs, access,
+retention and what remains before cut-over.

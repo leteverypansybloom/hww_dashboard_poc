@@ -97,7 +97,7 @@ listed_survey_keys AS (
   FROM UNNEST(${"[" + hww.surveyLoaded.map((c) => hww.str(c.payload_key)).join(", ") + "]"}) AS key
 )
 
-SELECT 'Unmapped values' AS section, source, CONCAT(dimension, ' not in its mapping file') AS issue, text AS detail, COUNT(*) AS row_count, TRUE AS needs_attention
+SELECT 'Unmapped values' AS section, source, CONCAT(dimension, ' not in its mapping file') AS issue, IF(REGEXP_CONTAINS(text, r'${hww.contactDetails}'), '[redacted]', text) AS detail, COUNT(*) AS row_count, TRUE AS needs_attention
 FROM unmapped
 GROUP BY source, dimension, text
 
@@ -145,7 +145,7 @@ WHERE org IS NULL
 HAVING COUNT(*) > 0
 
 UNION ALL
-SELECT 'Survey checks', 'survey', CONCAT('answer not in survey_answers.csv for ', question_id, ' (kept: add it or a translation)'), answer, COUNT(*), TRUE
+SELECT 'Survey checks', 'survey', CONCAT('answer not in survey_answers.csv for ', question_id, ' (kept: add it or a translation)'), IF(REGEXP_CONTAINS(answer, r'${hww.contactDetails}'), '[redacted]', answer), COUNT(*), TRUE
 FROM ${ref("stg_survey_answers")}
 WHERE NOT in_catalogue
 GROUP BY question_id, answer

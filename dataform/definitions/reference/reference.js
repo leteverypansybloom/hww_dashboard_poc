@@ -101,7 +101,7 @@ SELECT
   ${hww.nameKey(hww.tidy("raw_name"))} AS raw_key,
   ${hww.tidy("canonical_name")} AS canonical_name
 FROM (
-${values(
+${hww.orgOverridesTable ? `SELECT line, raw_name, canonical_name FROM \`${hww.orgOverridesTable}\`` : values(
   [
     ["line", "INT64"],
     ["raw_name", "STRING"],

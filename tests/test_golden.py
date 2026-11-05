@@ -50,7 +50,11 @@ class TestRun:
     """The pipeline's output matches tests/golden/ exactly."""
 
     def test_same_set_of_csv_files(self, fresh_output: Path) -> None:
-        """The run writes exactly the tables in the snapshot."""
+        """The run writes exactly the tables in the snapshot.
+
+        Args:
+            fresh_output: Freshly generated synthetic output folder.
+        """
         made = sorted(p.name for p in fresh_output.glob("*.csv"))
         saved = sorted(p.name for p in GOLDEN.glob("*.csv"))
         assert made == saved

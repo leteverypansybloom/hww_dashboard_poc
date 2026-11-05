@@ -120,8 +120,8 @@ section below, everything else is yours.
 | Cloud Scheduler Admin, Monitoring Editor (or the admin does steps 8–9) | App project |
 | Service Account User | The service account |
 | Storage Object User | Landing bucket (to upload test files) |
-| Storage Object Viewer | Store bucket |
-| BigQuery Data Viewer | Both datasets |
+| Storage Object Viewer | Synthetic development store only; no default production raw access |
+| BigQuery Data Viewer | Synthetic development datasets; approved production reporting only |
 | BigQuery Job User | Data project |
 
 For steps 3–4 from your laptop, also Storage Object Creator on the store
@@ -362,13 +362,13 @@ Shell, or, if the browser upload is blocked, copy them through a bucket
 you can write to, first from the laptop (PowerShell):
 
 ```powershell
-gcloud storage cp $HOME\hww_dashboard_poc.zip gs://<a bucket you can write>/tmp/
+gcloud storage cp $HOME\py-common.zip $HOME\hww_dashboard_poc.zip gs://<a bucket you can write>/tmp/
 ```
 
 then into Cloud Shell (bash):
 
 ```bash
-gcloud storage cp gs://<a bucket you can write>/tmp/hww_dashboard_poc.zip ~
+gcloud storage cp gs://<a bucket you can write>/tmp/py-common.zip gs://<a bucket you can write>/tmp/hww_dashboard_poc.zip ~
 ```
 
 If Cloud Shell says there's no active account, run `gcloud auth login`
@@ -390,6 +390,7 @@ gcloud config set project "$APP_PROJECT"
 gcloud auth configure-docker "$REGION-docker.pkg.dev"
 
 PY_COMMON_COMMIT="<py-common commit>"
+HWW_COMMIT="<approved full HWW commit from 5a>"
 BASE_IMAGE="$REGISTRY/py-common:$PY_COMMON_COMMIT"
 IMAGE="$REGISTRY/hww-job:<this project's commit from 5a>"
 
@@ -398,7 +399,7 @@ docker build -t "$BASE_IMAGE" .
 docker push "$BASE_IMAGE"
 
 cd ~/hww_dashboard_poc
-docker build --build-arg BASE_IMAGE="$BASE_IMAGE" -t "$IMAGE" .
+docker build --build-arg BASE_IMAGE="$BASE_IMAGE" --build-arg HWW_GIT_COMMIT="$HWW_COMMIT" -t "$IMAGE" .
 docker push "$IMAGE"
 ```
 
@@ -429,7 +430,7 @@ gcloud builds submit --project="$APP_PROJECT" \
   --substitutions="_IMAGE=$BASE_IMAGE" --gcs-source-staging-dir="$STAGING" .
 cd ~/hww_dashboard_poc
 gcloud builds submit --project="$APP_PROJECT" --config=cloudbuild.yaml \
-  --substitutions="_BASE_IMAGE=$BASE_IMAGE,_IMAGE=$IMAGE" \
+  --substitutions="_BASE_IMAGE=$BASE_IMAGE,_IMAGE=$IMAGE,_HWW_GIT_COMMIT=$HWW_COMMIT" \
   --gcs-source-staging-dir="$STAGING" .
 ```
 
@@ -453,8 +454,11 @@ pasting: press Ctrl+C and paste it again as one line.
 
 The job runs in the app project; the six variables all point at the
 **data** project's buckets and datasets. The image runs `hww-run
-/app/config.gcp.toml`, which is `config.toml` with only these locations
-changed. Every variable must have a value, or the job stops naming the
+/app/config.gcp.toml`, which is `config.toml` with these locations and the
+production file names changed. Until the real exports and their field
+mappings exist, run it on the dummy workbooks with
+`config.gcp.dummy.toml`, as in [production operation](production.md). Every
+variable must have a value, or the job stops naming the
 one that's missing. Check them with:
 
 ```bash
@@ -633,3 +637,14 @@ datasets:
 
 py-common's `docs/RUNBOOK.md` covers reloading, undoing a bad load and
 renaming a workbook.
+
+## GitHub operation and production access
+
+A development Cloud Run job has run with the combined image. Its outputs
+have not been signed off, and Dataform has not run.
+The daily 06:00 UTC GitHub workflow and upload dispatch route are described
+in [production operation](production.md). Use that document's production
+role table, retention decisions, Graph mappings and rollback procedure.
+Pass _HWW_GIT_COMMIT as the reviewed full commit when building the image.
+The two source archives must both be copied before either is unpacked.
+Do not grant development setup permissions on production data resources.

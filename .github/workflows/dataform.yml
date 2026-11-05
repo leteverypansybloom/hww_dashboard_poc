@@ -7,6 +7,11 @@ on:
       - "dataform/**"
       - "mappings/**"
       - "src/hww_dashboard/schema/**"
+      - "src/hww_dashboard/wrangle.py"
+      - "src/hww_dashboard/landing.py"
+      - "tests/golden/**"
+      - "tests/scenarios/**"
+      - "config.gcp.toml"
       - "tests/data/identifier_cases.json"
       - ".github/workflows/dataform.yml"
   pull_request:
@@ -15,6 +20,11 @@ on:
       - "dataform/**"
       - "mappings/**"
       - "src/hww_dashboard/schema/**"
+      - "src/hww_dashboard/wrangle.py"
+      - "src/hww_dashboard/landing.py"
+      - "tests/golden/**"
+      - "tests/scenarios/**"
+      - "config.gcp.toml"
       - "tests/data/identifier_cases.json"
       - ".github/workflows/dataform.yml"
   workflow_dispatch:
@@ -41,9 +51,30 @@ jobs:
         run: node scripts/build_reference_data.js --check
 
       - name: Compile the models
-        run: npx --yes @dataform/cli@3.0.71 compile
+        run: |
+          npx --yes @dataform/cli@3.0.71 compile --json > compiled.json
+          node scripts/check_compiled.js compiled.json
 
       - name: Compile with every option switched on
         run: >
           npx --yes @dataform/cli@3.0.71 compile
           --vars=keep_other_free_text=true,expected_dataset=hww_expected,completed_rule=last_session_held
+
+  publish:
+    needs: compile
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - name: Publish the reviewed Dataform source commit
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          split=$(git subtree split --prefix=dataform "$SOURCE_COMMIT")
+          git push origin "$split:refs/heads/dataform"
+          echo "Dataform source commit: $split"

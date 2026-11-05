@@ -1,0 +1,60 @@
+name: HWW pipeline
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [hww-upload]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: hww-production-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    environment: hww-production
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check deployment settings
+        env:
+          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          COMMON_REF: ${{ vars.PY_COMMON_REF }}
+        run: |
+          test -n "$PROVIDER" && test -n "$ACCOUNT"
+          [[ "$COMMON_REF" =~ ^[0-9a-f]{40}$ ]]
+      - name: Install the approved source versions
+        env:
+          COMMON_REF: ${{ vars.PY_COMMON_REF }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[bigquery]" -c constraints.txt
+          pip install "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@$COMMON_REF" -c constraints.txt
+          pip check
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - name: Ingest and publish
+        env:
+          HWW_GCP_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          HWW_BQ_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          HWW_LANDING_BUCKET: ${{ vars.HWW_LANDING_BUCKET }}
+          HWW_STORE_BUCKET: ${{ vars.HWW_STORE_BUCKET }}
+          HWW_LANDED_DATASET: ${{ vars.HWW_RAW_DATASET }}
+          HWW_BQ_DATASET: ${{ vars.HWW_REPORTING_DATASET }}
+          HWW_GIT_COMMIT: ${{ github.sha }}
+          HWW_LOG_FORMAT: json
+        run: hww-run config.gcp.toml

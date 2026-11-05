@@ -1,0 +1,12 @@
+config {
+  type: "assertion",
+  description: "A source generation commits at most once per destination",
+  tags: ["gold", "publication_checks"]
+}
+
+SELECT destination, TO_HEX(SHA256(filename)) AS source_key,
+  source_version, COUNT(*) AS load_count
+FROM ${ref("audit")}
+WHERE outcome = 'LOADED'
+GROUP BY destination, filename, source_version
+HAVING COUNT(*) > 1

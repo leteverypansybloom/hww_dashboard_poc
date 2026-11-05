@@ -1,0 +1,15 @@
+config {
+  type: "assertion",
+  description: "Every retained source column exists in each selected payload",
+  tags: ["gold", "publication_checks"]
+}
+
+${hww.SOURCES.map((source) => {
+  const keys = source === "survey" ? hww.surveyLoaded.map((c) => c.payload_key)
+    : source === "was" ? hww.WAS.loaded : source === "peer" ? hww.PEER.loaded
+    : Object.values(hww.SIGNUPS);
+  return `SELECT ${hww.str(source)} AS source, COUNT(*) AS row_count
+FROM ${hww.latestRows(source, ref(hww.RAW[source].table), ref("raw_latest_loads"))}
+WHERE ${keys.map((key) => `${hww.field(key)} IS NULL`).join(" OR ")}
+HAVING COUNT(*) > 0`;
+}).join("\nUNION ALL\n")}

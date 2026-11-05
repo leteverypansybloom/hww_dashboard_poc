@@ -33,7 +33,7 @@ PLATFORMS = {
     ),
     "windows": ("win_amd64",),
 }
-EXTRAS = ("dashboard", "bigquery")
+EXTRAS = ("dashboard", "bigquery", "service")
 STUBS = ("pandas-stubs", "types-openpyxl")
 HEADER = """\
 # Pinned runtime dependencies of hww-dashboard[dashboard,bigquery], for

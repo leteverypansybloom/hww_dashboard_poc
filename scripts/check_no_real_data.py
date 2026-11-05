@@ -9,9 +9,10 @@ output/ folder; this catches a copy added by mistake. pre-commit passes
 the names of the files being committed.
 """
 
+import csv
 import sys
 from collections.abc import Sequence
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 SPREADSHEETS = {".xls", ".xlsb", ".xlsm", ".xlsx", ".ods"}
 SPREADSHEET_FOLDERS = ("tests/data/inputs/",)
@@ -33,10 +34,14 @@ def problems(paths: Sequence[str]) -> list[str]:
         path = PurePosixPath(raw.replace("\\", "/"))
         name = path.as_posix()
         suffix = path.suffix.lower()
-        if name == "output" or name.startswith("output/"):
-            found.append(
-                f"{name}: output/ holds real tables and is never committed."
-            )
+        if path.parts and path.parts[0] in {
+            "output",
+            "store",
+            "landed",
+            "landing",
+            "logs",
+        }:
+            found.append(f"{name}: data and log folders are never committed.")
         elif suffix in SPREADSHEETS and not name.startswith(
             SPREADSHEET_FOLDERS
         ):
@@ -49,6 +54,14 @@ def problems(paths: Sequence[str]) -> list[str]:
                 f"{name}: CSV files belong in mappings/ or tests/; real "
                 "tables stay in output/, which git ignores."
             )
+        elif suffix in {".jsonl", ".ndjson", ".log"} and not name.startswith(
+            "tests/"
+        ):
+            found.append(f"{name}: keep source exports and logs outside Git.")
+        elif suffix == ".json" and not name.startswith(
+            ("tests/", "src/hww_dashboard/schema/", "dataform/")
+        ):
+            found.append(f"{name}: JSON data belongs outside the repository.")
     return found
 
 
@@ -61,7 +74,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         Exit code: 1 if any file was refused, otherwise 0.
     """
-    found = problems(sys.argv[1:] if argv is None else argv)
+    paths = list(sys.argv[1:] if argv is None else argv)
+    if paths == ["--stdin0"]:
+        paths = [
+            path
+            for path in sys.stdin.buffer.read().decode().split("\0")
+            if path
+        ]
+    found = problems(paths)
+    if "mappings/org_overrides.csv" in paths:
+        with Path("mappings/org_overrides.csv").open(
+            encoding="utf-8-sig", newline=""
+        ) as stream:
+            if any(csv.DictReader(stream)):
+                found.append(
+                    "mappings/org_overrides.csv: keep organisation overrides "
+                    "in a private file or table, outside Git."
+                )
     for message in found:
         print(message)
     return 1 if found else 0

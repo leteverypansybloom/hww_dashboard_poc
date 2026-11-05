@@ -127,7 +127,9 @@ industry = "Industry"
 # broken export. Where no rows is a real answer, add allow_empty = true to
 # that source's section.
 # A source with a larger share of rows gone than this, compared with the
-# last published run, is a warning to check the upload (0.1 = 10%).
+# last published run, holds publication (0.1 = 10%). After checking the
+# upload, allow_row_drop = true publishes an agreed reduction; set it
+# back to false after that one run.
 max_row_drop = 0.1
 
 [employers]

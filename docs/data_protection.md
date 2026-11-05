@@ -102,9 +102,10 @@ audit records.
 - **The repository** holds only synthetic data: the test workbooks use
   reserved values (`example.org`, `192.0.2.x`), and a test fails if a
   real-looking email address, IP address or link appears in them.
-  Once people merge duplicate employers, `mappings/org_overrides.csv`
-  will hold real organisation names; keep the repository private, or
-  move that file next to the inputs before publishing the code.
+  Real organisation overrides belong in a private file configured by
+  privacy.org_overrides_file, or a private reference table for Dataform.
+  The committed override CSV remains an empty template. The repositories
+  are public; no production values belong in Git or generated JavaScript.
 - **BigQuery** (in GCP, with `[output] target = "bigquery"`): the
   tables and the report are in one interim dataset, which only the
   pipeline's service account, and whoever the DPIA allows, should be
@@ -139,3 +140,14 @@ completely).
 - Whether free-text fields should be limited to fixed lists of values,
   since the contact-detail check can't recognise names.
 - Where `mappings/org_overrides.csv` lives once it holds real names.
+
+## Dataform and production policy
+
+Silver includes retained source values and restricted data-quality output.
+Gold contains reporting data; assertion results and acceptance differences
+can also expose retained rows. Apply the approved access and retention
+policy to silver, gold, assertions, job history and logs as well as raw.
+Disabling free text empties current tables but does not erase old exports
+or backups. See [production operation](production.md) for the per-source
+correction and erasure procedure, production roles, and decisions awaiting
+the data owner and IG lead. No retention period is approved by the code.

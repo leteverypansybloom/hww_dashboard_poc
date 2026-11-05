@@ -12,6 +12,7 @@ snapshot with the code change. The tests never write to tests/golden/.
 
 import argparse
 import shutil
+import subprocess
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -109,6 +110,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="snapshot folder to update (default: tests/golden)",
     )
     args = parser.parse_args(argv)
+    checked = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_scenarios.py",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+        ],
+        cwd=PROJECT,
+        check=False,
+    )
+    if checked.returncode:
+        print("Scenario checks failed; the golden snapshot is unchanged.")
+        return checked.returncode
     changes = refresh(args.golden)
     if not changes:
         print("The snapshot already matches the pipeline's output.")

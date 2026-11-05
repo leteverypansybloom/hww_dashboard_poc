@@ -33,23 +33,52 @@ if (
   );
 }
 
+if (!["true", "false"].includes(vars.keep_other_free_text)) {
+  throw new Error("keep_other_free_text must be true or false");
+}
 const keepOtherText = vars.keep_other_free_text === "true";
 const allowEmpty = vars.allow_empty
   .split(",")
   .map((s) => s.trim())
   .filter((s) => s);
 const maxRowDrop = Number(vars.max_row_drop);
+if (!Number.isFinite(maxRowDrop) || maxRowDrop < 0 || maxRowDrop > 1) {
+  throw new Error("max_row_drop must be a number from 0 to 1");
+}
+const allowRowDrop = (vars.allow_row_drop || "false") === "true";
+if (!["true", "false"].includes(vars.allow_row_drop || "false")) {
+  throw new Error("allow_row_drop must be true or false");
+}
+if (allowEmpty.some((source) => !SOURCES.includes(source))) {
+  throw new Error("allow_empty contains an unknown source");
+}
+const maxLoadAgeHours = Number(vars.max_load_age_hours || "1080");
+if (!Number.isFinite(maxLoadAgeHours) || maxLoadAgeHours <= 0) {
+  throw new Error("max_load_age_hours must be a positive number");
+}
+const contactDetails = String.raw`(?i)[\p{L}\p{N}_.+-]+@[\p{L}\p{N}_-]+\.[\p{L}\p{N}_.]+|(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://`;
 
 // The gold dataset, and the checks that must pass before any gold
 // table is rebuilt: if one fails, the gold tables keep the previous
 // run's rows, as wrangle.py keeps the previous outputs when it stops.
+const orgOverridesTable = vars.org_overrides_table || "";
+if (orgOverridesTable && !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/.test(orgOverridesTable)) {
+  throw new Error("org_overrides_table must be project.dataset.table");
+}
 const gold = vars.gold_dataset;
+const goldTables = Object.keys(reference_data.schemas);
 const stopChecks = [
   "assert_loads_complete",
   "assert_mappings_valid",
   "assert_sources_not_empty",
   "assert_signup_months_valid",
   "assert_identifier_cases",
+  "assert_keys_valid",
+  "assert_no_contact_details",
+  "assert_row_counts_valid",
+  "assert_loads_fresh",
+  "assert_payload_keys_valid",
+  "assert_no_duplicate_loads",
 ];
 
 // Raw table, landing folder workbook and sheet of each source, as in
@@ -150,6 +179,21 @@ const surveyColumns = reference_data.surveyColumns.map((column, index) => ({
   ...column,
   position: index + 1,
 }));
+const personalColumns = new Set([
+  "name", "first name", "last name", "email", "email address", "phone",
+  "telephone", "contact details", "full name", "job role", "job role title",
+  "key contact", "preferred contact details", "accessibility requirements including language",
+  "hww adviser", "hww adviser (cohort)", "user ip", "user agent",
+  "created by (user id)", "source url", "post id", "transaction id",
+  "payment amount", "payment date", "payment status", "submission speed (ms)",
+  "pdf: hww employer survey tool", "pdf: hww employer survey tool (internal)",
+  "item type", "path"
+]);
+if (surveyColumns.some((column) =>
+  personalColumns.has(column.column.trim().toLowerCase()) && column.role !== "drop"
+)) {
+  throw new Error("Personal survey columns must use the drop role");
+}
 const surveyLoaded = surveyColumns.filter(
   (c) => c.role !== "drop" && (c.role !== "other_text" || keepOtherText)
 );
@@ -376,6 +420,12 @@ module.exports = {
   band,
   clean,
   columns,
+  allowRowDrop,
+  contactDetails,
+  goldTables,
+  personalColumns,
+  orgOverridesTable,
+  maxLoadAgeHours,
   completedRule,
   date,
   employerId,

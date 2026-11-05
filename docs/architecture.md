@@ -41,7 +41,7 @@ repository (README, `docs/RAW_JSON_VS_CONTRACT_VALIDATION.md`,
   folder of a GCS landing bucket (SharePoint files are copied there
   first) and keeps one agreed file name. A contract per workbook reads
   the heading row, loads only the columns it lists, leaves personal
-  columns out, and warns rather than rejects when the layout drifts.
+  columns out, and quarantines an export when its layout drifts.
   Every row of every configured worksheet is inserted into a raw
   BigQuery table (`raw_hww.hww_was_database`, for example) as a JSON
   payload, with the file's version, an audit record and a kept copy of

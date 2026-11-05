@@ -132,7 +132,7 @@ def selected_audit(
             "settings. Run python ingest.py first."
         )
 
-    def rank(record: dict[str, Any]) -> tuple[date, float, str, str]:
+    def rank(record: dict[str, Any]) -> tuple[date, int, float, str, str]:
         """Rank filename dates before ingestion timestamps.
 
         Args:
@@ -147,6 +147,11 @@ def selected_audit(
             moment = moment.replace(tzinfo=UTC)
         return (
             (date_in_name(Path(name)) or date.min) if pattern else date.min,
+            (
+                int(str(record.get("source_version", "0")))
+                if str(record.get("source_version", "")).isdigit()
+                else -1
+            ),
             moment.timestamp(),
             name.casefold(),
             name,
@@ -249,7 +254,8 @@ class BigQueryTables:
                 f"SELECT filename, checksum, timestamp, row_count, "
                 f"source_version FROM `{audit_id}` "
                 "WHERE destination = @destination "
-                "AND outcome = 'LOADED' ORDER BY timestamp DESC"
+                "AND outcome = 'LOADED' ORDER BY "
+                "SAFE_CAST(source_version AS BIGNUMERIC) DESC, timestamp DESC"
                 + (" LIMIT 1" if settings is None else ""),
                 job_config=config,
             ).result()
@@ -397,6 +403,8 @@ class LandedInputs:
 
     tables: Tables
     contracts: dict[str, SourceContract]
+    max_load_age_hours: float | None = None
+    as_of: datetime | None = None
 
     def read(
         self,
@@ -423,6 +431,18 @@ class LandedInputs:
         """
         contract = self.contracts[section]
         load = self.tables.newest_load(contract.table, cfg)
+        if self.max_load_age_hours is not None:
+            as_of = self.as_of or datetime.now(UTC)
+            loaded_at = load.loaded_at
+            if as_of.tzinfo is None:
+                as_of = as_of.replace(tzinfo=UTC)
+            if loaded_at.tzinfo is None:
+                loaded_at = loaded_at.replace(tzinfo=UTC)
+            age = (as_of - loaded_at).total_seconds() / 3600
+            if age > self.max_load_age_hours:
+                raise InputError(
+                    f"{source}: selected load is overdue; publication is held."
+                )
         frame = to_sheet(load, contract)
         require(
             frame,
@@ -440,13 +460,16 @@ class LandedInputs:
         return SheetInput(frame, load.file, facts)
 
 
-def landed_inputs(cfg: Config, base: Path, maps: Path) -> LandedInputs:
+def landed_inputs(
+    cfg: Config, base: Path, maps: Path, as_of: datetime | None = None
+) -> LandedInputs:
     """Inputs reading the tables [landed] points at.
 
     Args:
         cfg: The checked config.
         base: Folder of the config file.
         maps: The mappings folder.
+        as_of: Analysis time used for source freshness checks.
 
     Returns:
         The inputs.
@@ -463,4 +486,9 @@ def landed_inputs(cfg: Config, base: Path, maps: Path) -> LandedInputs:
         )
     else:
         tables = LocalTables(settings.tables)
-    return LandedInputs(tables, source_contracts(cfg, maps))
+    limit = (
+        float(cfg.get("checks", {}).get("max_load_age_hours", 1080))
+        if settings.target == "gcp"
+        else None
+    )
+    return LandedInputs(tables, source_contracts(cfg, maps), limit, as_of)

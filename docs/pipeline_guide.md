@@ -1018,7 +1018,7 @@ Splitting `wrangle` into several modules was considered and not done:
 A natural split point, if one is needed later, is a separate module per source once a fifth
 source (events, badges) adds its own loader.
 
-**No py-common in the prototype.** py-common, the shared ingestion library, lands files in
+**Ingestion uses py-common.** py-common, the shared ingestion library, lands files in
 BigQuery for the production route. The prototype's own reading (a local folder, sheets by
 position, pandas-style column names) doesn't match it, and using it
 would change the names in `config.toml` and `mappings/`. The comparison, and what to share
