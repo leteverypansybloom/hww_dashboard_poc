@@ -25,7 +25,7 @@ RECORD_NAME = "run_record.json"
 RECORD_VERSION = 1
 #: Set in a container image, where there is no git checkout.
 COMMIT_VARIABLE = "HWW_GIT_COMMIT"
-LIBRARIES = ("pandas", "numpy", "openpyxl")
+LIBRARIES = ("py-common", "pandas", "numpy", "openpyxl")
 
 Record = dict[str, Any]
 

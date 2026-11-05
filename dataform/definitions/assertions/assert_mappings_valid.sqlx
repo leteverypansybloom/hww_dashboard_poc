@@ -1,5 +1,6 @@
 config {
   type: "assertion",
+  tags: ["gold", "publication_checks"],
   description: "R09, R30, R37: the mapping files have no blank or conflicting rows, override cycles, unknown targets or question ids. One row per problem"
 }
 

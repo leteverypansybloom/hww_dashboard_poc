@@ -1,5 +1,6 @@
 config {
   type: "assertion",
+  tags: ["gold", "publication_checks"],
   description: "R60, R64: every name in tests/data/identifier_cases.json gets the key and employer_id wrangle.py gives it"
 }
 

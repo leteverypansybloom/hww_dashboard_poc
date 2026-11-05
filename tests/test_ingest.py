@@ -196,7 +196,11 @@ class TestNewestMatch:
     """``newest_match``: pick the latest survey export in a folder."""
 
     def test_uses_the_date_in_the_name(self, tmp_path: Path) -> None:
-        """The latest YYYY-MM-DD in the name wins, whatever the save order."""
+        """The latest YYYY-MM-DD in the name wins, whatever the save order.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         for day in ("2026-09-23", "2026-10-01", "2025-12-31"):
             name = f"hww-employer-survey-tool-{day}.xlsx"
             (tmp_path / name).write_bytes(b"")
@@ -209,7 +213,11 @@ class TestNewestMatch:
         assert chosen.name == "hww-employer-survey-tool-2026-10-01.xlsx"
 
     def test_breaks_ties_by_save_time(self, tmp_path: Path) -> None:
-        """Two exports from the same day: the one saved last wins."""
+        """Two exports from the same day: the one saved last wins.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         first = tmp_path / "survey-2026-10-01.xlsx"
         second = tmp_path / "survey-2026-10-01 (1).xlsx"
         for path, saved in ((first, 2_000_000_000), (second, 1_000_000_000)):
@@ -219,7 +227,11 @@ class TestNewestMatch:
         assert chosen == first
 
     def test_no_match_names_the_pattern(self, tmp_path: Path) -> None:
-        """The message gives the pattern and the Excel files that exist."""
+        """The message gives the pattern and the Excel files that exist.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         (tmp_path / "something else.xlsx").write_bytes(b"")
         with pytest.raises(
             wrangle.InputError,
@@ -228,7 +240,11 @@ class TestNewestMatch:
             wrangle.newest_match(tmp_path, "*survey*.xlsx", "Survey")
 
     def test_equal_timestamps_use_filename(self, tmp_path: Path) -> None:
-        """Resolve full timestamp ties without filesystem iteration order."""
+        """Resolve full timestamp ties without filesystem iteration order.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         paths = [tmp_path / f"survey-2026-10-01-{c}.xlsx" for c in "az"]
         for path in paths:
             path.write_bytes(b"")
@@ -242,7 +258,11 @@ class TestInputFile:
     def test_missing_file_is_reported_with_a_suggestion(
         self, tmp_path: Path
     ) -> None:
-        """A misspelt file name points at the closest file in the folder."""
+        """A misspelt file name points at the closest file in the folder.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         (tmp_path / "dummy_was_database.xlsx").write_bytes(b"")
         with pytest.raises(
             wrangle.InputError,
@@ -257,7 +277,11 @@ class TestReadSheet:
     """``read_sheet``: read one sheet, with clear errors for bad files."""
 
     def test_missing_sheet_lists_the_sheets(self, tmp_path: Path) -> None:
-        """A wrong sheet name or number names the sheets there are."""
+        """A wrong sheet name or number names the sheets there are.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = save_xlsx(
             tmp_path / "signups.xlsx", {"Account signups": [["Org"], ["A"]]}
         )
@@ -272,7 +296,11 @@ class TestReadSheet:
     def test_missing_column_is_caught_as_the_file_is_read(
         self, tmp_path: Path
     ) -> None:
-        """Missing headings are reported with file, sheet and heading row."""
+        """Missing headings are reported with file, sheet and heading row.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = save_xlsx(
             tmp_path / "was.xlsx",
             {"query": [["Title", "Sector"], ["Org 1", "Public"]]},
@@ -291,7 +319,11 @@ class TestReadSheet:
     def test_header_row_past_the_end_of_the_sheet(
         self, tmp_path: Path
     ) -> None:
-        """A header_row beyond the data says how many rows the sheet has."""
+        """A header_row beyond the data says how many rows the sheet has.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = save_xlsx(tmp_path / "small.xlsx", {"Sheet1": [["Org"], ["A"]]})
         with pytest.raises(
             wrangle.InputError, match=r"header_row is 5 .* only 2 row"
@@ -299,7 +331,11 @@ class TestReadSheet:
             wrangle.read_sheet(path, 0, 5)
 
     def test_file_that_is_not_excel(self, tmp_path: Path) -> None:
-        """A file with the wrong content gets a plain message."""
+        """A file with the wrong content gets a plain message.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = tmp_path / "broken.xlsx"
         path.write_text("not a workbook", encoding="utf-8")
         with pytest.raises(
@@ -310,7 +346,11 @@ class TestReadSheet:
     def test_blank_duplicate_headers_and_empty_body(
         self, tmp_path: Path
     ) -> None:
-        """Header-only exports keep unique names and row metadata."""
+        """Header-only exports keep unique names and row metadata.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = save_xlsx(
             tmp_path / "empty.xlsx", {"Sheet1": [["Org", None, "Org"]]}
         )
@@ -323,7 +363,11 @@ class TestLoadLookup:
     """``load_lookup``: read a raw_value -> agreed_value mapping."""
 
     def test_mapping_file_missing_a_column(self, tmp_path: Path) -> None:
-        """Mapping CSVs are checked for their headings too."""
+        """Mapping CSVs are checked for their headings too.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = tmp_path / "sector.csv"
         path.write_text("raw,agreed_value\nPublic,Public\n", encoding="utf-8")
         with pytest.raises(
@@ -439,7 +483,11 @@ class TestCheckConfig:
     def test_rejects_personal_source_column(
         self, settings: wrangle.Config
     ) -> None:
-        """A personal name cannot be configured as the employer name."""
+        """A personal name cannot be configured as the employer name.
+
+        Args:
+            settings: Source or pipeline settings.
+        """
         settings["signups"]["org"] = "Full Name"
         with pytest.raises(wrangle.InputError, match="personal"):
             wrangle.check_config(settings)
@@ -458,13 +506,21 @@ class TestCheckConfig:
             return tomllib.load(f)
 
     def test_passes_the_checks(self, shipped: wrangle.Config) -> None:
-        """Every required setting is there, with a valid value."""
+        """Every required setting is there, with a valid value.
+
+        Args:
+            shipped: Shipped synthetic configuration.
+        """
         wrangle.check_config(shipped)
 
     def test_survey_is_on_the_monitoring_workbook(
         self, shipped: wrangle.Config
     ) -> None:
-        """Survey info is read from the same workbook as Account signups."""
+        """Survey info is read from the same workbook as Account signups.
+
+        Args:
+            shipped: Shipped synthetic configuration.
+        """
         assert shipped["survey"]["file"] == shipped["signups"]["file"]
         assert shipped["survey"]["sheet"] == "Survey info"
         assert "file_pattern" not in shipped["survey"]
@@ -517,7 +573,16 @@ class TestMain:
         run_time: datetime,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A bad survey pattern: no traceback, exit 1, nothing written."""
+        """A bad survey pattern: no traceback, exit 1, nothing written.
+
+        Args:
+            settings: Source or pipeline settings.
+            write_config: Writes an isolated test configuration.
+            tmp_path: Isolated test folder.
+            caplog: Captured log records.
+            run_time: Fixed analysis timestamp.
+            monkeypatch: Replaces configuration or service boundaries.
+        """
         monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
         settings["survey"]["file_pattern"] = "no-such-export-*.xlsx"
         code = wrangle.main([str(write_config(settings))])
@@ -699,7 +764,13 @@ class TestWriteConfig:
         write_config: ConfigWriter,
         run_time: datetime,
     ) -> None:
-        """An unchanged copy of the fixture config runs normally."""
+        """An unchanged copy of the fixture config runs normally.
+
+        Args:
+            settings: Source or pipeline settings.
+            write_config: Writes an isolated test configuration.
+            run_time: Fixed analysis timestamp.
+        """
         tables = wrangle.run(write_config(settings), now=run_time)
         assert len(tables["dim_employer"]) > 0
 
@@ -715,7 +786,15 @@ class TestLauncher:
         tmp_path: Path,
         run_time: datetime,
     ) -> None:
-        """The script runs in its own process and writes every table."""
+        """The script runs in its own process and writes every table.
+
+        Args:
+            project_folder: Project source folder.
+            settings: Source or pipeline settings.
+            write_config: Writes an isolated test configuration.
+            tmp_path: Isolated test folder.
+            run_time: Fixed analysis timestamp.
+        """
         config = write_config(settings)
         harness = (
             "from datetime import datetime; from functools import partial; "
@@ -792,7 +871,11 @@ class TestReadCsvText:
             wrangle.read_csv_text(path)
 
     def test_bom_and_literal_null_strings(self, tmp_path: Path) -> None:
-        """A BOM is ignored while NA and None remain literal text."""
+        """A BOM is ignored while NA and None remain literal text.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = tmp_path / "map.csv"
         path.write_text(
             "raw_value,agreed_value\nNA,None\n", encoding="utf-8-sig"
@@ -807,7 +890,12 @@ class TestLoadWas:
     def test_rejects_duplicate_ids(
         self, tmp_path: Path, settings: wrangle.Config
     ) -> None:
-        """Duplicate requests cannot produce duplicate session/event keys."""
+        """Duplicate requests cannot produce duplicate session/event keys.
+
+        Args:
+            tmp_path: Isolated test folder.
+            settings: Source or pipeline settings.
+        """
         cfg = settings["was"].copy()
         cfg.update(file="was.xlsx", sheet=0, header_row=1, sessions=[])
         keys = [
@@ -839,7 +927,12 @@ class TestLoadPeer:
     def test_rejects_duplicate_ids(
         self, tmp_path: Path, settings: wrangle.Config
     ) -> None:
-        """Repeated source keys cannot silently double engagement counts."""
+        """Repeated source keys cannot silently double engagement counts.
+
+        Args:
+            tmp_path: Isolated test folder.
+            settings: Source or pipeline settings.
+        """
         cfg = settings["peer"].copy()
         cfg.update(file="peer.xlsx", sheet=0, header_row=1)
         keys = ["id", "org", "interest_date", "size", "sector", "industry"]
@@ -866,7 +959,14 @@ class TestLoadSurvey:
         fixture_config: Path,
         settings: wrangle.Config,
     ) -> None:
-        """Case-equivalent translation keys cannot disagree."""
+        """Case-equivalent translation keys cannot disagree.
+
+        Args:
+            tmp_path: Isolated test folder.
+            project_folder: Project source folder.
+            fixture_config: Frozen synthetic configuration.
+            settings: Source or pipeline settings.
+        """
         maps = tmp_path / "maps"
         shutil.copytree(project_folder / "mappings", maps)
         (maps / "survey_answer_translations.csv").write_text(
@@ -889,7 +989,13 @@ class TestLoadSurvey:
     def test_personal_heading_must_be_dropped(
         self, tmp_path: Path, project_folder: Path, settings: wrangle.Config
     ) -> None:
-        """Reject personal survey columns before opening a workbook."""
+        """Reject personal survey columns before opening a workbook.
+
+        Args:
+            tmp_path: Isolated test folder.
+            project_folder: Project source folder.
+            settings: Source or pipeline settings.
+        """
         maps = tmp_path / "maps"
         shutil.copytree(project_folder / "mappings", maps)
         path = maps / "survey_columns.csv"
@@ -912,7 +1018,11 @@ class TestLoadConfig:
     """Read configuration without opening any real workbooks."""
 
     def test_valid_fixture(self, fixture_config: Path) -> None:
-        """The frozen config keeps optional free text disabled."""
+        """The frozen config keeps optional free text disabled.
+
+        Args:
+            fixture_config: Frozen synthetic configuration.
+        """
         assert (
             wrangle.load_config(fixture_config)["survey"][
                 "keep_other_free_text"
@@ -921,7 +1031,11 @@ class TestLoadConfig:
         )
 
     def test_missing_and_invalid_files(self, tmp_path: Path) -> None:
-        """Missing and malformed TOML are actionable input errors."""
+        """Missing and malformed TOML are actionable input errors.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         path = tmp_path / "config.toml"
         with pytest.raises(wrangle.InputError, match="Config file not found"):
             wrangle.load_config(path)
@@ -1012,7 +1126,11 @@ class TestFilesIn:
     """Missing input directories provide an empty suggestion list."""
 
     def test_existing_and_missing_folders(self, tmp_path: Path) -> None:
-        """Only direct children contribute file-name suggestions."""
+        """Only direct children contribute file-name suggestions.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         (tmp_path / "A.xlsx").write_bytes(b"")
         assert wrangle.files_in(tmp_path) == ["A.xlsx"]
         assert wrangle.files_in(tmp_path / "missing") == []
@@ -1059,7 +1177,12 @@ class TestLoadSignups:
     def test_merged_month_and_role_cleanup(
         self, tmp_path: Path, today: date
     ) -> None:
-        """A blank month inherits the previous month before rows are linked."""
+        """A blank month inherits the previous month before rows are linked.
+
+        Args:
+            tmp_path: Isolated test folder.
+            today: Fixed analysis date.
+        """
         cfg: wrangle.Config = {
             "file": "signups.xlsx",
             "sheet": 0,
@@ -1122,7 +1245,12 @@ class TestLoadSignups:
     def test_invalid_month_does_not_forward_fill(
         self, tmp_path: Path, today: date
     ) -> None:
-        """A nonblank invalid month cannot inherit the previous month."""
+        """A nonblank invalid month cannot inherit the previous month.
+
+        Args:
+            tmp_path: Isolated test folder.
+            today: Fixed analysis date.
+        """
         keys = [
             "month",
             "org",
@@ -1257,7 +1385,15 @@ class TestRun:
         write_config: ConfigWriter,
         run_time: datetime,
     ) -> None:
-        """Header-only workbooks, when allowed, produce every empty table."""
+        """Header-only workbooks, when allowed, produce every empty table.
+
+        Args:
+            tmp_path: Isolated test folder.
+            fixture_config: Frozen synthetic configuration.
+            settings: Source or pipeline settings.
+            write_config: Writes an isolated test configuration.
+            run_time: Fixed analysis timestamp.
+        """
         config = header_only_config(
             tmp_path, fixture_config, settings, write_config, wrangle.SOURCES
         )
@@ -1304,7 +1440,7 @@ class TestRun:
         fixture_config: Path,
         run_time: datetime,
     ) -> None:
-        """Far fewer rows than the last run is a warning, not a stop.
+        """A large row reduction holds publication and keeps the last record.
 
         Args:
             tmp_path: The output folder's parent.
@@ -1318,11 +1454,11 @@ class TestRun:
             "inputs": [{"source": "WAS database", "rows": 100}],
         }
         (out / "run_record.json").write_text(json.dumps(previous), "utf-8")
-        wrangle.run(fixture_config, output_folder=out, now=run_time)
-        report = (out / "data_quality_report.md").read_text("utf-8")
-        assert "WAS database: 35 rows read, 65% fewer" in report
+        with pytest.raises(wrangle.InputError, match="publication is held"):
+            wrangle.run(fixture_config, output_folder=out, now=run_time)
         record = json.loads((out / "run_record.json").read_text("utf-8"))
-        assert record["attention"]["shrunk_sources"] == 1
+        assert record == previous
+        assert not (out / "data_quality_report.md").exists()
 
 
 class TestCheckAgreedValues:

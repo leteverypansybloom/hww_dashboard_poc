@@ -42,15 +42,21 @@ import shutil
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from fnmatch import fnmatch
 from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
 from py_common.adapters import LocalObjectStore, LocalSource
-from py_common.contract import Column, Contract, SheetRows, Worksheet
-from py_common.errors import ServiceError, ValidationError
+from py_common.contract import (
+    FILE_EXTENSIONS,
+    Column,
+    Contract,
+    Worksheet,
+)
+from py_common.errors import ConfigError, ServiceError
+from py_common.graph import GraphJsonLinesContract
 from py_common.model import Outcome, Result, SourceItem, digest
 from py_common.pipeline import Pipeline
 from py_common.ports import ObjectStore, Source, Warehouse
@@ -73,6 +79,7 @@ from hww_dashboard.wrangle import (
     input_file,
     load_config,
     read_csv_text,
+    validate_survey_columns,
 )
 
 logger = logging.getLogger("hww_dashboard.landing")
@@ -122,12 +129,11 @@ def _dates(*names: str) -> list[Column]:
 SIGNUPS = Worksheet(
     name="Account signups",
     header_row=2,
-    # "Number of sites" holds numbers and text (1, "2-5"), which no
-    # declared type accepts. HeadingCheckedContract separately requires
-    # this heading and refuses any other undeclared loaded column.
-    column_selection="all_except",
+    # Site counts mix numbers and bands; the heading remains required.
+    column_selection="listed",
     columns=[
         Column("col_B", "date", nullable=True),
+        Column("Number of sites", "any", nullable=True),
         *_strings(
             "Org (duplicates in red)",
             "Role (complete if duplicate org)",
@@ -229,60 +235,6 @@ SURVEY_HEADER_ROW = 2
 
 
 @dataclass
-class HeadingCheckedContract(Contract):
-    """A py-common Contract that also requires its untyped headings.
-
-    Attributes:
-        untyped_columns: Worksheet name -> extra required headings
-            loaded without a type check (their cells hold numbers and
-            text). Any other heading that is neither listed nor
-            excluded is refused.
-    """
-
-    untyped_columns: dict[str, list[str]] = field(default_factory=dict)
-
-    def read(
-        self,
-        excel_bytes: bytes,
-        source_name: str,
-        warnings: list[str] | None = None,
-    ) -> dict[str, SheetRows]:
-        """Check and read the workbook, then check the loaded headings.
-
-        Args:
-            excel_bytes: Raw Excel file bytes.
-            source_name: The file's name.
-            warnings: As Contract.read().
-
-        Returns:
-            As Contract.read().
-
-        Raises:
-            ValidationError: A required untyped heading is absent, or
-                an unrecognised column would enter a raw table.
-        """
-        sheets = super().read(excel_bytes, source_name, warnings)
-        for worksheet in self.worksheets:
-            expected = {c.name for c in worksheet.columns}
-            expected.update(self.untyped_columns.get(worksheet.name, []))
-            actual = set(sheets[worksheet.name].columns)
-            missing = expected - actual
-            unexpected = actual - expected
-            if missing or unexpected:
-                problems = []
-                if missing:
-                    problems.append(f"Missing columns: {sorted(missing)}")
-                if unexpected:
-                    problems.append(
-                        f"Unexpected columns: {sorted(unexpected)}"
-                    )
-                raise ValidationError(
-                    f"{source_name} [{worksheet.name}]: " + "; ".join(problems)
-                )
-        return sheets
-
-
-@dataclass
 class SourceContract:
     """What py-common checks and loads for one source.
 
@@ -314,7 +266,7 @@ class Workbook:
 
     folder: str
     sources: list[str]
-    contract: HeadingCheckedContract
+    contract: Contract
     tables: dict[str, str]
 
 
@@ -347,7 +299,9 @@ def py_common_name(name: str) -> str:
 
 
 def survey_worksheet(
-    maps: Path, keep_other_text: bool
+    maps: Path,
+    keep_other_text: bool,
+    personal_columns: Sequence[str] = (),
 ) -> tuple[Worksheet, dict[str, str], list[str]]:
     """The Survey info contract, from mappings/survey_columns.csv.
 
@@ -361,6 +315,7 @@ def survey_worksheet(
     Args:
         maps: The mappings folder.
         keep_other_text: The survey's keep_other_free_text setting.
+        personal_columns: Additional headings that must use the drop role.
 
     Returns:
         The worksheet; py-common name -> wrangle.py name for each
@@ -369,6 +324,29 @@ def survey_worksheet(
     table = read_csv_text(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
     )
+    validate_survey_columns(table)
+    personal = {
+        clean_text(name).casefold()
+        for name in (
+            "Name",
+            "First Name",
+            "Last Name",
+            "Email address",
+            "Email",
+            "Phone",
+            "Telephone",
+            "Contact details",
+            *personal_columns,
+        )
+    }
+    selected = table["column"].map(
+        lambda name: clean_text(name).casefold() in personal
+    ) & table["role"].ne("drop")
+    if selected.any():
+        raise InputError(
+            "mappings/survey_columns.csv: personal columns must use "
+            "the drop role."
+        )
     columns: list[Column] = []
     excluded: list[str] = []
     untyped: list[str] = []
@@ -383,7 +361,7 @@ def survey_worksheet(
             excluded.append(name)
             continue
         if role == "sites":
-            untyped.append(name)
+            columns.append(Column(name, "any", nullable=True))
         else:
             columns.append(
                 Column(name, data_types.get(role, "string"), nullable=True)
@@ -392,9 +370,7 @@ def survey_worksheet(
     worksheet = Worksheet(
         name=SURVEY_SHEET,
         header_row=SURVEY_HEADER_ROW,
-        # HeadingCheckedContract requires the untyped headings and
-        # refuses any other column that is neither listed nor excluded.
-        column_selection="all_except",
+        column_selection="listed",
         columns=columns,
         excluded=excluded,
         on_mismatch="quarantine",
@@ -413,14 +389,24 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
         SourceContract per source, in SOURCES order.
     """
     survey, survey_names, survey_untyped = survey_worksheet(
-        maps, bool(cfg["survey"]["keep_other_free_text"])
+        maps,
+        bool(cfg["survey"]["keep_other_free_text"]),
+        cfg.get("privacy", {}).get("personal_columns", []),
     )
     sheets = {"signups": SIGNUPS, "survey": survey, "was": WAS, "peer": PEER}
-    untyped = {"signups": ["Number of sites"], "survey": survey_untyped}
+    untyped = {"survey": survey_untyped}
     result: dict[str, SourceContract] = {}
     for source in SOURCES:
         sheet = replace(
-            sheets[source], allow_empty=cfg[source].get("allow_empty", False)
+            sheets[source],
+            allow_empty=cfg[source].get("allow_empty", False),
+            header_row=(
+                1
+                if str(cfg[source].get("file", ""))
+                .lower()
+                .endswith((".jsonl", ".ndjson"))
+                else sheets[source].header_row
+            ),
         )
         undeclared = untyped.get(source, [])
         if source == "survey":
@@ -432,6 +418,34 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
             sheet, TABLES[source], names, undeclared
         )
     return result
+
+
+def _multi_value_separators(
+    section: Mapping[str, Any], worksheet: Worksheet
+) -> dict[str, str]:
+    """The text columns a Graph list sends as lists of choices.
+
+    A workbook export separates a multi-choice column's values with
+    topic_separator, so joining Graph's lists the same way gives the
+    pipeline and the Dataform models one form to read.
+
+    Args:
+        section: The source's config section.
+        worksheet: The source's contract worksheet.
+
+    Returns:
+        Canonical heading -> separator.
+    """
+    separator = section.get("topic_separator")
+    if not separator:
+        return {}
+    text_columns = {
+        column.name
+        for column in worksheet.columns
+        if column.data_type == "string"
+    }
+    topics = {str(s.get("topics")) for s in section.get("sessions", [])}
+    return {name: str(separator) for name in topics & text_columns}
 
 
 def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
@@ -467,15 +481,54 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
             )
         first = cfg[sources[0]]
         file_name = None if "file_pattern" in first else first.get("file")
-        contract = HeadingCheckedContract(
-            worksheets=sheets,
-            file_name=str(file_name) if file_name else None,
-            untyped_columns={
-                contracts[s].worksheet.name: contracts[s].undeclared
-                for s in sources
-                if contracts[s].undeclared
-            },
+        json_lines = (
+            str(file_name or "").lower().endswith((".jsonl", ".ndjson"))
         )
+        contract: Contract
+        if json_lines:
+            canonical = replace(
+                sheets[0],
+                header_row=1,
+                column_selection="listed",
+                columns=[
+                    (
+                        replace(column, data_type="any")
+                        if column.data_type == "integer"
+                        else column
+                    )
+                    for column in sheets[0].columns
+                ]
+                + [
+                    Column(name, "any", nullable=True)
+                    for name in contracts[sources[0]].undeclared
+                ],
+                excluded=[],
+            )
+            try:
+                contract = GraphJsonLinesContract(
+                    worksheets=[canonical],
+                    file_name=str(file_name),
+                    file_format="jsonl",
+                    field_map=first.get("field_map", {}),
+                    metadata_map=first.get("metadata_map", {}),
+                    excluded_fields=first.get("excluded_fields", []),
+                    site_time_zone=str(first.get("site_time_zone", "")),
+                    multi_value_separators=_multi_value_separators(
+                        first, canonical
+                    ),
+                )
+            except ConfigError:
+                raise InputError(
+                    f"[{sources[0]}]: configure Graph field_map, metadata_map "
+                    "and excluded_fields from the migrated list's column "
+                    "definitions, and site_time_zone from its regional "
+                    "settings, before ingesting JSON Lines."
+                ) from None
+        else:
+            contract = Contract(
+                worksheets=sheets,
+                file_name=str(file_name) if file_name else None,
+            )
         tables = {
             contracts[s].worksheet.name: contracts[s].table for s in sources
         }
@@ -534,7 +587,7 @@ def local_rows(
     """
     name = load_name(str(record["filename"]), str(record["source_version"]))
     text = (folder / table / f"{name}.ndjson").read_text(encoding="utf-8")
-    return [json.loads(line) for line in text.splitlines() if line.strip()]
+    return [json.loads(line) for line in text.split("\n") if line.strip()]
 
 
 def _replace(path: Path, data: bytes) -> None:
@@ -647,6 +700,13 @@ class LocalRawWarehouse:
                 f"Row count mismatch: expected {rows}, got {total}"
             )
         timestamp = datetime.now(UTC)
+        earlier = [
+            datetime.fromisoformat(record["timestamp"])
+            for table in self.tables.values()
+            for record in local_audit(self.folder, table)
+        ]
+        if earlier and timestamp <= max(earlier):
+            timestamp = max(earlier) + timedelta(microseconds=1)
         written = False
         for sheet, table in self.tables.items():
             if self._committed(table, key, item.version):
@@ -958,13 +1018,19 @@ def build_pipelines(
                 p for p in (settings.landing_prefix, folder) if p
             )
             files = GCSSource(
-                settings.project, settings.landing_bucket, prefix
+                settings.project,
+                settings.landing_bucket,
+                prefix,
+                extensions=FILE_EXTENSIONS[book.contract.file_format],
             )
             warehouse = RawJsonWarehouse(
                 settings.project, settings.dataset, book.tables
             )
         else:
-            files = LocalSource(settings.landing / folder)
+            files = LocalSource(
+                settings.landing / folder,
+                extensions=FILE_EXTENSIONS[book.contract.file_format],
+            )
             warehouse = LocalRawWarehouse(settings.tables, book.tables)
         pattern = cfg[book.sources[0]].get("file_pattern")
         if pattern is not None:
@@ -1032,8 +1098,11 @@ def ingest(
         Each landing folder's py-common Results, one per file seen.
 
     Raises:
-        InputError: The config is invalid, or staging was asked for
-            with the GCP target.
+        InputError: The config is invalid, staging was asked for with
+            the GCP target, or the raw load health checks failed.
+        Exception: The first unexpected error from a pipeline (another
+            run holding its lock, a service failing, a bug), once every
+            folder has been tried.
     """
     config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
@@ -1048,8 +1117,37 @@ def ingest(
         for copy in stage(cfg, stage_from, settings.landing):
             logger.info("Staged %s", copy)
     results: dict[str, list[Result]] = {}
+    first_error: Exception | None = None
     for folder, pipeline in build_pipelines(cfg, maps, settings).items():
-        results[folder] = pipeline.run()
+        try:
+            results[folder] = pipeline.run()
+        except Exception as error:
+            # One folder's failure must not stop the others loading.
+            logger.exception(
+                "Ingestion could not finish for %s (%s); carrying on with "
+                "the other folders.",
+                folder,
+                type(error).__name__,
+            )
+            first_error = first_error or error
+    if first_error is not None:
+        raise first_error
+    if settings.target == "gcp":
+        from google.cloud import bigquery
+        from py_common.runner import check_duplicate_loads, check_freshness
+
+        client = bigquery.Client(project=settings.project)
+        duplicates = check_duplicate_loads(
+            client, f"{settings.project}.{settings.dataset}.audit"
+        )
+        freshness_view = cfg.get("checks", {}).get("freshness_view")
+        overdue = (
+            check_freshness(client, freshness_view) if freshness_view else []
+        )
+        if duplicates or overdue:
+            raise InputError(
+                "Raw load health checks failed; publication is held."
+            )
     return results
 
 
@@ -1131,7 +1229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 2
         text, ok = summary(results)
-        for line in text.splitlines():
+        for line in text.split("\n"):
             logger.info("%s", line)
         if not ok:
             logger.error(
@@ -1147,7 +1245,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 __all__ = [
     "RAW_COLUMNS",
     "TABLES",
-    "HeadingCheckedContract",
     "LocalRawWarehouse",
     "SourceContract",
     "Workbook",

@@ -25,12 +25,8 @@ const KEYS = {
   dim_date: ["date"],
 };
 
-// The same pattern wrangle.check_public_text uses.
-const CONTACT_DETAILS = String.raw`[\w.+-]+@[\w-]+\.[\w.]+|(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://`;
-
-const tables = Object.keys(reference_data.schemas).filter(
-  (table) => table !== "survey_other_text" || hww.keepOtherText
-);
+const CONTACT_DETAILS = hww.contactDetails;
+const tables = Object.keys(reference_data.schemas);
 
 for (const table of tables) {
   const schema = reference_data.schemas[table];

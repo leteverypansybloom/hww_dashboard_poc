@@ -154,7 +154,11 @@ class TestContracts:
     """The HWW contracts accept the workbooks and keep personal data out."""
 
     def test_every_source_loads(self, landed_run: Path) -> None:
-        """Each source's raw table has the workbook's data rows."""
+        """Each source's raw table has the workbook's data rows.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         rows = {
             source: len(newest_rows(landed_run / "landed", table))
             for source, table in landing.TABLES.items()
@@ -164,7 +168,11 @@ class TestContracts:
     def test_one_upload_loads_signups_and_survey(
         self, landed_run: Path
     ) -> None:
-        """Both tables come from the one monitoring workbook upload."""
+        """Both tables come from the one monitoring workbook upload.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         tables = landed.LocalTables(landed_run / "landed")
         signups = tables.newest_load("hww_signups")
         survey = tables.newest_load("hww_survey")
@@ -173,7 +181,11 @@ class TestContracts:
         assert signups.sha256 == survey.sha256
 
     def test_rows_say_where_they_came_from(self, landed_run: Path) -> None:
-        """Each row has the raw table's columns and its Excel row."""
+        """Each row has the raw table's columns and its Excel row.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         first, *_ = newest_rows(landed_run / "landed", "hww_signups")
         assert tuple(first) == landing.RAW_COLUMNS
         assert first["sheet_name"] == "Account signups"
@@ -185,7 +197,11 @@ class TestContracts:
     def test_survey_info_loads_only_what_the_map_reads(
         self, landed_run: Path
     ) -> None:
-        """Email address, Month and free text stay out; sites are in."""
+        """Email address, Month and free text stay out; sites are in.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         keys = payload_keys(landed_run / "landed", "hww_survey")
         assert "Email address" not in keys
         assert "Month" not in keys
@@ -199,6 +215,10 @@ class TestContracts:
 
         Signups and survey come from one upload, so neither loads
         without the other.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
         """
         config = landing_config(tmp_path, data_folder, read=False)
         cfg = settings_of(config)
@@ -216,7 +236,8 @@ class TestContracts:
 
         (monitoring,) = results["signups"]
         assert monitoring.outcome == Outcome.QUARANTINED
-        assert "Phone number" in "; ".join(monitoring.errors)
+        assert "Unexpected columns: 1" in "; ".join(monitoring.errors)
+        assert "Phone number" not in "; ".join(monitoring.errors)
         assert not landing.local_audit(tmp_path / "landed", "hww_signups")
         assert not landing.local_audit(tmp_path / "landed", "hww_survey")
 
@@ -239,7 +260,11 @@ class TestContracts:
         assert not keys & set(contract.worksheet.excluded)
 
     def test_personal_columns_are_not_loaded(self, landed_run: Path) -> None:
-        """No column named in [privacy] reaches a raw table."""
+        """No column named in [privacy] reaches a raw table.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         cfg = settings_of(landed_run / "config.toml")
         personal = set(cfg["privacy"]["personal_columns"])
         for table in landing.TABLES.values():
@@ -250,7 +275,11 @@ class TestContracts:
             assert not keys & personal, table
 
     def test_values_keep_their_excel_types(self, landed_run: Path) -> None:
-        """Dates are ISO text and the WAS id a whole number."""
+        """Dates are ISO text and the WAS id a whole number.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         rows = newest_rows(landed_run / "landed", "hww_was")
         dates = [
             row["payload"]["Date of Enquiry"]
@@ -268,7 +297,11 @@ class TestContracts:
     def test_every_config_column_is_in_its_contract(
         self, landed_run: Path
     ) -> None:
-        """Each heading config.toml reads is a loaded column."""
+        """Each heading config.toml reads is a loaded column.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+        """
         cfg = settings_of(landed_run / "config.toml")
         maps = Path(cfg["paths"]["mappings_folder"])
         contracts = landing.source_contracts(cfg, maps)
@@ -293,7 +326,12 @@ class TestContracts:
     def test_new_column_quarantines_the_file(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """A column the WAS contract doesn't know stops the load."""
+        """A column the WAS contract doesn't know stops the load.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
         config = landing_config(tmp_path, data_folder, read=False)
         landing.stage(
             settings_of(config), data_folder / "inputs", tmp_path / "landing"
@@ -310,13 +348,19 @@ class TestContracts:
 
         (was,) = results["was"]
         assert was.outcome == Outcome.QUARANTINED
-        assert "Home address" in "; ".join(was.errors)
+        assert "Unexpected columns: 1" in "; ".join(was.errors)
+        assert "Home address" not in "; ".join(was.errors)
         assert not (tmp_path / "landed" / "hww_was").exists()
 
     def test_wrong_type_quarantines_the_file(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """Text in a date column stops the load (schema checked)."""
+        """Text in a date column stops the load (schema checked).
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
         config = landing_config(tmp_path, data_folder, read=False)
         landing.stage(
             settings_of(config), data_folder / "inputs", tmp_path / "landing"
@@ -335,7 +379,12 @@ class TestContracts:
     def test_running_again_loads_nothing_twice(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """A second run with the same files skips them."""
+        """A second run with the same files skips them.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
         config = landing_config(tmp_path, data_folder, read=False)
         landing.ingest(config, stage_from=data_folder / "inputs")
 
@@ -354,7 +403,12 @@ class TestWorkbooks:
     def test_the_monitoring_workbook_holds_two_sheets(
         self, fixture_config: Path, project_folder: Path
     ) -> None:
-        """Signups and survey share one contract, each with its table."""
+        """Signups and survey share one contract, each with its table.
+
+        Args:
+            fixture_config: Frozen synthetic configuration.
+            project_folder: Project source folder.
+        """
         books = landing.workbooks(
             settings_of(fixture_config), project_folder / "mappings"
         )
@@ -369,10 +423,11 @@ class TestWorkbooks:
         assert monitoring.contract.file_name == (
             "dummy_HWW monitoring and reporting.xlsx"
         )
-        assert set(monitoring.contract.untyped_columns) == {
-            "Account signups",
-            "Survey info",
-        }
+        for sheet in monitoring.contract.worksheets:
+            assert any(
+                column.name == "Number of sites" and column.data_type == "any"
+                for column in sheet.columns
+            )
 
 
 class TestRepeatedHeadings:
@@ -404,7 +459,11 @@ class TestLocalRawWarehouse:
         return landing.LocalRawWarehouse(folder, {"S": "s_raw", "T": "t_raw"})
 
     def test_load_inserts_once_per_upload(self, tmp_path: Path) -> None:
-        """A load inserts each sheet's rows; the same upload is skipped."""
+        """A load inserts each sheet's rows; the same upload is skipped.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         warehouse = self.warehouse(tmp_path)
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
         data = ndjson({"S": ["a", "b"], "T": ["c"]})
@@ -419,7 +478,11 @@ class TestLocalRawWarehouse:
         ] == ["f.xlsx"]
 
     def test_a_revert_loads_again(self, tmp_path: Path) -> None:
-        """A, then B, then A again: each upload loads (latest wins)."""
+        """A, then B, then A again: each upload loads (latest wins).
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "s_raw"})
         uploads = [("v1", ["a"]), ("v2", ["a", "b"]), ("v3", ["a"])]
 
@@ -439,7 +502,11 @@ class TestLocalRawWarehouse:
         assert [r["source_version"] for r in audit] == ["v1", "v2", "v3"]
 
     def test_rows_have_the_bigquery_raw_columns(self, tmp_path: Path) -> None:
-        """Local rows have exactly RawJsonWarehouse's raw table columns."""
+        """Local rows have exactly RawJsonWarehouse's raw table columns.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         bigquery_raw = pytest.importorskip("py_common.adapters.bigquery_raw")
         warehouse = self.warehouse(tmp_path)
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
@@ -453,7 +520,11 @@ class TestLocalRawWarehouse:
     def test_a_table_added_later_loads_on_its_own(
         self, tmp_path: Path
     ) -> None:
-        """Adding T to the mapping loads T, without loading S again."""
+        """Adding T to the mapping loads T, without loading S again.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
         data = ndjson({"S": ["a"], "T": ["b"]})
         landing.LocalRawWarehouse(tmp_path, {"S": "s_raw"}).load(
@@ -466,7 +537,11 @@ class TestLocalRawWarehouse:
         assert len(landing.local_audit(tmp_path, "t_raw")) == 1
 
     def test_row_count_mismatch_is_refused(self, tmp_path: Path) -> None:
-        """A wrong expected count fails the load, as in BigQuery."""
+        """A wrong expected count fails the load, as in BigQuery.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
         with pytest.raises(ValueError, match="Row count mismatch"):
             self.warehouse(tmp_path).load(
@@ -474,7 +549,11 @@ class TestLocalRawWarehouse:
             )
 
     def test_a_sheet_with_no_table_is_refused(self, tmp_path: Path) -> None:
-        """Rows from a sheet the mapping doesn't name are not loaded."""
+        """Rows from a sheet the mapping doesn't name are not loaded.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
         with pytest.raises(ValueError, match="No raw table"):
             self.warehouse(tmp_path).load(
@@ -482,7 +561,11 @@ class TestLocalRawWarehouse:
             )
 
     def test_identity_is_a_plain_name(self, tmp_path: Path) -> None:
-        """Like RawJsonWarehouse's, with no colon or slash for keys."""
+        """Like RawJsonWarehouse's, with no colon or slash for keys.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         identity = self.warehouse(tmp_path).identity
         assert identity.endswith(".s_raw+t_raw")
         assert ":" not in identity and "/" not in identity
@@ -490,7 +573,12 @@ class TestLocalRawWarehouse:
     def test_a_failed_commit_is_retried_exactly_once(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Rows written without their audit record are not committed."""
+        """Rows written without their audit record are not committed.
+
+        Args:
+            tmp_path: Isolated test folder.
+            monkeypatch: Replaces configuration or service boundaries.
+        """
         warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "s_raw"})
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
         data = ndjson({"S": ["a", "b"]})
@@ -639,7 +727,12 @@ class TestLongPath:
     def test_windows_gets_the_extended_form(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """On Windows the path gets the extended prefix; elsewhere not."""
+        """On Windows the path gets the extended prefix; elsewhere not.
+
+        Args:
+            monkeypatch: Replaces configuration or service boundaries.
+            tmp_path: Isolated test folder.
+        """
         monkeypatch.setattr("hww_dashboard.landing.os.name", "posix")
         assert landing.long_path(tmp_path) == tmp_path
         monkeypatch.setattr("hww_dashboard.landing.os.name", "nt")
@@ -652,7 +745,13 @@ class TestLandedInputs:
     def test_newest_load_wins(
         self, tmp_path: Path, data_folder: Path, run_time: datetime
     ) -> None:
-        """After a second upload, the reader returns only its rows."""
+        """After a second upload, the reader returns only its rows.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+            run_time: Fixed analysis timestamp.
+        """
         config = landing_config(tmp_path, data_folder, read=True)
         landing.ingest(config, stage_from=data_folder / "inputs")
         book = tmp_path / "landing" / "peer" / "dummy_peer_montoring.xlsx"
@@ -676,7 +775,12 @@ class TestLandedInputs:
     def test_frame_matches_the_workbook_reader(
         self, landed_run: Path, data_folder: Path
     ) -> None:
-        """Headings, row numbers and values match read_sheet's."""
+        """Headings, row numbers and values match read_sheet's.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+            data_folder: Synthetic input fixture folder.
+        """
         cfg = settings_of(landed_run / "config.toml")
         inputs = landed.landed_inputs(
             cfg, landed_run, Path(cfg["paths"]["mappings_folder"])
@@ -694,7 +798,12 @@ class TestLandedInputs:
     def test_survey_frame_matches_the_workbook_reader(
         self, landed_run: Path, data_folder: Path
     ) -> None:
-        """Survey info read back has read_sheet's headings and values."""
+        """Survey info read back has read_sheet's headings and values.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+            data_folder: Synthetic input fixture folder.
+        """
         cfg = settings_of(landed_run / "config.toml")
         inputs = landed.landed_inputs(
             cfg, landed_run, Path(cfg["paths"]["mappings_folder"])
@@ -714,7 +823,12 @@ class TestLandedInputs:
     def test_blank_ticks_load_as_not_ticked(
         self, landed_run: Path, data_folder: Path
     ) -> None:
-        """A tick cell holding a space or a non-breaking space is blank."""
+        """A tick cell holding a space or a non-breaking space is blank.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+            data_folder: Synthetic input fixture folder.
+        """
         cfg = settings_of(landed_run / "config.toml")
         inputs = landed.landed_inputs(
             cfg, landed_run, Path(cfg["paths"]["mappings_folder"])
@@ -735,7 +849,12 @@ class TestLandedInputs:
     def test_missing_table_says_to_run_ingest(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """Reading before ingest.py has run stops with a clear message."""
+        """Reading before ingest.py has run stops with a clear message.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
         config = landing_config(tmp_path, data_folder, read=True)
         with pytest.raises(wrangle.InputError, match="python ingest.py"):
             wrangle.run(config, output_folder=tmp_path / "out")
@@ -818,7 +937,12 @@ class TestCheckLanded:
         ],
     )
     def test_bad_settings(self, section: dict[str, Any], message: str) -> None:
-        """Each bad setting names itself."""
+        """Each bad setting names itself.
+
+        Args:
+            section: Configuration section under test.
+            message: Expected diagnostic text.
+        """
         with pytest.raises(wrangle.InputError, match=message):
             wrangle.check_landed(section, "config.toml")
 
@@ -829,7 +953,13 @@ class TestEndToEnd:
     def test_tables_match_the_golden_snapshot(
         self, landed_run: Path, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Every output CSV equals the one made from the workbooks."""
+        """Every output CSV equals the one made from the workbooks.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+            tmp_path: Isolated test folder.
+            run_time: Fixed analysis timestamp.
+        """
         out = tmp_path / "out"
         wrangle.run(
             landed_run / "config.toml", output_folder=out, now=run_time
@@ -843,7 +973,13 @@ class TestEndToEnd:
     def test_run_record_names_the_landed_tables(
         self, landed_run: Path, tmp_path: Path, run_time: datetime
     ) -> None:
-        """The run record says which table and load each input was."""
+        """The run record says which table and load each input was.
+
+        Args:
+            landed_run: Folder holding a synthetic ingestion run.
+            tmp_path: Isolated test folder.
+            run_time: Fixed analysis timestamp.
+        """
         out = tmp_path / "out"
         wrangle.run(
             landed_run / "config.toml", output_folder=out, now=run_time
@@ -861,29 +997,17 @@ class TestEndToEnd:
         }
 
 
-def test_stage_copies_each_named_workbook(
-    tmp_path: Path, data_folder: Path
-) -> None:
-    """--stage puts each workbook in its landing folder, once."""
-    config = landing_config(tmp_path, data_folder, read=False)
-    copies = landing.stage(
-        settings_of(config), data_folder / "inputs", tmp_path / "landing"
-    )
-    assert sorted(p.parent.name for p in copies) == ["peer", "signups", "was"]
-    signups = tmp_path / "landing" / "signups"
-    assert [p.name for p in signups.iterdir()] == [
-        "dummy_HWW monitoring and reporting.xlsx"
-    ]
-    shutil.rmtree(tmp_path / "landing")
-
-
 class TestLandingFolders:
     """landing_folders(): which folder each source reads."""
 
     def test_sources_sharing_a_workbook_share_a_folder(
         self, fixture_config: Path
     ) -> None:
-        """Signups and survey both read the monitoring workbook's folder."""
+        """Signups and survey both read the monitoring workbook's folder.
+
+        Args:
+            fixture_config: Frozen synthetic configuration.
+        """
         folders = landing.landing_folders(settings_of(fixture_config))
         assert folders == {
             "signups": "signups",
@@ -895,7 +1019,11 @@ class TestLandingFolders:
     def test_separate_workbooks_get_their_own_folders(
         self, fixture_config: Path
     ) -> None:
-        """A source with its own file, or a file_pattern, reads its own."""
+        """A source with its own file, or a file_pattern, reads its own.
+
+        Args:
+            fixture_config: Frozen synthetic configuration.
+        """
         cfg = deepcopy(settings_of(fixture_config))
         cfg["survey"]["file"] = "survey.xlsx"
         cfg["peer"] = {**cfg["peer"], "file_pattern": "*peer*.xlsx"}
@@ -910,7 +1038,12 @@ class TestLandingRegressions:
     def test_signups_rejects_unexpected_personal_column(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """An extra signup column never reaches its raw table."""
+        """An extra signup column never reaches its raw table.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
         config = landing_config(tmp_path, data_folder, read=True)
         cfg = settings_of(config)
         landing.stage(cfg, data_folder / "inputs", tmp_path / "landing")
@@ -926,13 +1059,19 @@ class TestLandingRegressions:
         (result,) = landing.ingest(config)["signups"]
 
         assert result.outcome == Outcome.QUARANTINED
-        assert "Home address" in "; ".join(result.errors)
+        assert "Unexpected columns: 1" in "; ".join(result.errors)
+        assert "Home address" not in "; ".join(result.errors)
         assert not (tmp_path / "landed" / "hww_signups").exists()
 
     def test_signups_requires_the_mixed_type_column(
         self, tmp_path: Path, data_folder: Path
     ) -> None:
-        """Number of sites is required even without a cell type check."""
+        """Number of sites is required even without a cell type check.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
         config = landing_config(tmp_path, data_folder, read=True)
         cfg = settings_of(config)
         landing.stage(cfg, data_folder / "inputs", tmp_path / "landing")
@@ -955,7 +1094,13 @@ class TestLandingRegressions:
     def test_allow_empty_is_per_source(
         self, source: str, fixture_config: Path, project_folder: Path
     ) -> None:
-        """Allowing one empty source does not mutate other contracts."""
+        """Allowing one empty source does not mutate other contracts.
+
+        Args:
+            source: Synthetic source adapter.
+            fixture_config: Frozen synthetic configuration.
+            project_folder: Project source folder.
+        """
         cfg = deepcopy(settings_of(fixture_config))
         cfg[source]["allow_empty"] = True
 
@@ -973,6 +1118,10 @@ class TestLandingRegressions:
         """Filename dates win over discovery order and unrelated files.
 
         A source with file_pattern reads a folder named after itself.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
         """
         config = landing_config(tmp_path, data_folder, read=True)
         workbook = settings_of(config)["survey"]["file"]
@@ -1006,7 +1155,11 @@ class TestLandingRegressions:
         )
 
     def test_empty_load_replaces_previous_rows(self, tmp_path: Path) -> None:
-        """An audited zero-row snapshot does not revive an older load."""
+        """An audited zero-row snapshot does not revive an older load.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
         warehouse.load(
             "old",
@@ -1031,7 +1184,11 @@ class TestLandingRegressions:
     def test_existing_survey_history_uses_filename_dates(
         self, tmp_path: Path
     ) -> None:
-        """Older exports loaded last cannot win on load time alone."""
+        """Older exports loaded last cannot win on load time alone.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
         data = ndjson({"S": ["a"]})
         newest = "a-survey-2026-10-01.xlsx"
@@ -1050,7 +1207,11 @@ class TestLandingRegressions:
     def test_exact_filename_can_select_a_previous_committed_load(
         self, tmp_path: Path
     ) -> None:
-        """Changing a pinned file does not silently read another file."""
+        """Changing a pinned file does not silently read another file.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
         data = ndjson({"S": ["a"]})
         for name in ("wanted.xlsx", "other.xlsx"):
@@ -1080,7 +1241,13 @@ class TestLandingRegressions:
     def test_empty_peer_snapshot_reaches_dashboard_tables(
         self, tmp_path: Path, data_folder: Path, run_time: datetime
     ) -> None:
-        """The configured empty-source path works end to end."""
+        """The configured empty-source path works end to end.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+            run_time: Fixed analysis timestamp.
+        """
         config = landing_config(tmp_path, data_folder, read=True)
         config.write_text(
             config.read_text(encoding="utf-8").replace(
@@ -1152,7 +1319,14 @@ class TestSourceSelection:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Cloud selection reads timestamps for discovered generations."""
+        """Cloud selection reads timestamps for discovered generations.
+
+        Args:
+            fixture_config: Frozen synthetic configuration.
+            project_folder: Project source folder.
+            tmp_path: Isolated test folder.
+            monkeypatch: Replaces configuration or service boundaries.
+        """
         cfg = settings_of(fixture_config)
         cfg["survey"].pop("file")
         cfg["survey"]["file_pattern"] = "*survey-*.xlsx"
@@ -1164,7 +1338,12 @@ class TestSourceSelection:
         requested: list[tuple[str, int]] = []
 
         def get_blob(name: str, generation: int) -> SimpleNamespace:
-            """Return metadata without contacting a cloud service."""
+            """Return metadata without contacting a cloud service.
+
+            Args:
+                name: Source or object name.
+                generation: Synthetic object generation.
+            """
             requested.append((name, generation))
             return SimpleNamespace(updated=datetime(2026, 10, 2, tzinfo=UTC))
 
@@ -1174,7 +1353,7 @@ class TestSourceSelection:
             bucket=SimpleNamespace(get_blob=get_blob),
         )
         monkeypatch.setattr(
-            "py_common.adapters.gcs.GCSSource", lambda *args: source
+            "py_common.adapters.gcs.GCSSource", lambda *args, **kwargs: source
         )
         monkeypatch.setattr(
             "py_common.adapters.gcs.GCSObjectStore",
@@ -1226,7 +1405,11 @@ class TestCommittedSnapshots:
     """Readers reject incomplete loads and preserve empty snapshots."""
 
     def test_first_local_load_can_be_empty(self, tmp_path: Path) -> None:
-        """An audit record identifies a load with no rows."""
+        """An audit record identifies a load with no rows.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
         item = SourceItem("f.xlsx", "f.xlsx", "v1", 1)
         warehouse.load("empty", "empty", b"", 0, item)
@@ -1242,7 +1425,12 @@ class TestCommittedSnapshots:
         """Rows without a successful audit cannot become current data."""
 
         def query(sql: str, job_config: Any = None) -> SimpleNamespace:
-            """Return no committed loads and refuse any table query."""
+            """Return no committed loads and refuse any table query.
+
+            Args:
+                sql: Generated SQL text.
+                job_config: Query or load job configuration.
+            """
             assert "FROM `p.d.audit`" in sql
             return SimpleNamespace(result=lambda: [])
 
@@ -1303,3 +1491,31 @@ class TestCommittedSnapshots:
 
         with pytest.raises(wrangle.InputError, match="row count differs"):
             tables.newest_load("t")
+
+
+class TestStage:
+    """Local source staging."""
+
+    def test_stage_copies_each_named_workbook(
+        self, tmp_path: Path, data_folder: Path
+    ) -> None:
+        """--stage puts each workbook in its landing folder, once.
+
+        Args:
+            tmp_path: Isolated test folder.
+            data_folder: Synthetic input fixture folder.
+        """
+        config = landing_config(tmp_path, data_folder, read=False)
+        copies = landing.stage(
+            settings_of(config), data_folder / "inputs", tmp_path / "landing"
+        )
+        assert sorted(p.parent.name for p in copies) == [
+            "peer",
+            "signups",
+            "was",
+        ]
+        signups = tmp_path / "landing" / "signups"
+        assert [p.name for p in signups.iterdir()] == [
+            "dummy_HWW monitoring and reporting.xlsx"
+        ]
+        shutil.rmtree(tmp_path / "landing")

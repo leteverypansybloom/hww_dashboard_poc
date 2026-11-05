@@ -45,8 +45,9 @@ the schema files and `tests/data/identifier_cases.json` into
 built from it. Keep editing the CSV files, then rebuild that file and
 commit both. CI fails if they disagree.
 
-**Each source reads one load.** `raw_latest_loads` takes, for each raw
-table, the newest load of its agreed file name from py-common's
+**Each invocation pins its source loads.** `raw_latest_loads` is a table
+rebuilt before staging. It takes, for each raw table, the highest GCS
+generation of its agreed file name from py-common's
 `audit` table, as `landed.py` does. An upload with no rows counts as a
 load, so it is never mistaken for the upload before it.
 
@@ -59,7 +60,7 @@ rebuilt and readers keep the previous run's tables.
 
 **Warnings are a view.** What `data_quality_report.md` lists
 (unmapped values, unreadable flags, new survey columns or answers,
-undated sessions, a large drop in rows) is in
+undated sessions) is in
 `hww_silver.data_quality_issues`, one row per kind of issue.
 `needs_attention` marks the ones the report's "Needs attention" block
 lists.
@@ -67,7 +68,7 @@ lists.
 **Settings live in `workflow_settings.yaml`.** The settings
 `config.toml` holds for the modelling (`completed_rule`,
 `keep_other_free_text`, `source_priority`, `max_row_drop`,
-`allow_empty` and each workbook's file name) are Dataform variables
+`allow_row_drop`, `allow_empty` and each workbook's file name) are Dataform variables
 with the same values. The WAS session columns (`[[was.sessions]]`)
 and the payload keys of each sheet are in `includes/hww.js`.
 
@@ -311,9 +312,10 @@ same inputs:
   anyone reads the tables.
 - **No run record table (R83).** Dataform keeps each run's history,
   with its logs and compiled SQL, in the repository.
-- **Row drop (R84)** compares the selected upload with the previous
-  upload of the same file in py-common's audit table, instead of with
-  the last published run.
+- **Row drop (R84)** compares the selected upload with the last
+  published run, recorded in `hww_gold.published_loads`, where
+  `wrangle.py` uses its run record. The table starts empty, so the first
+  run has nothing to compare with.
 - **File names (R02).** Only the agreed file name is read; there is no
   `file_pattern`. py-common's contracts already require one name per
   workbook.
@@ -331,3 +333,20 @@ same inputs:
 - **The report** is the `data_quality_issues` view, not a Markdown
   file, and "dated after today" uses today's date in Europe/London
   when the view is read.
+
+## Production controls
+
+Use [production operation](production.md) for the current export names,
+Graph field mapping, GitHub schedule, access, retention and cut-over checks.
+All gold tables, including placeholders, wait for the shared publication
+checks. Table-level assertions remain additional checks after replacement;
+they do not provide atomic publication across the entire gold dataset.
+Free-text tables are rebuilt empty when retention is switched off.
+Development must override raw_dataset or use a separate project; a schema
+suffix alone does not isolate raw data. The data quality view redacts
+recognisable contact identifiers, but still belongs to restricted silver.
+Dataform and its assertions require a recorded BigQuery run before cut-over.
+
+A custom Dataform execution account needs the Service Account User and Service
+Account Token Creator roles granted to the Dataform service agent on that
+account ([access control](https://docs.cloud.google.com/dataform/docs/access-control)).

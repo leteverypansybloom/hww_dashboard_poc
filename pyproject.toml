@@ -57,11 +57,10 @@ bigquery = [
 ]
 # Ingestion with py-common (python ingest.py; [landed] in config.toml).
 # Pinned to a commit of the shared library; its gcp extra brings the GCS
-# and BigQuery adapters. Replace <GITHUB_ORG> with the GitHub
-# organisation that hosts py-common before installing this extra (or
-# dev, which includes it).
+# and BigQuery adapters. Update the commit after reviewing and
+# releasing a coordinated py-common change.
 landing = [
-    "py-common[gcp] @ git+https://github.com/<GITHUB_ORG>/py-common.git@1d5aea4c55811451419197c1f9e262bf79f8c881",
+    "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@8d3195cad10dac729b98a5e642d5c81113a1213e",
 ]
 # The upload-triggered Cloud Run service (hww_dashboard.service).
 service = [
@@ -80,7 +79,7 @@ dev = [
     "pandas-stubs",
     "types-openpyxl",
     "pre-commit>=3.7",
-    "detect-secrets>=1.5",
+    "detect-secrets==1.5.0",
     "pip-audit>=2.7",
 ]
 
@@ -126,18 +125,17 @@ strict = true
 untyped_calls_exclude = ["google.api_core.exceptions"]
 
 [[tool.mypy.overrides]]
-# py-common is fully typed (it runs mypy --strict) but ships no py.typed
-# marker, so mypy is told to follow it rather than treat it as untyped.
-module = ["py_common", "py_common.*"]
-follow_untyped_imports = true
-
-[[tool.mypy.overrides]]
 # plotly ships without type information.
 module = ["plotly", "plotly.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "error",
+    # Python 3.11 is supported; the SDK announces its future EOL date.
+    "ignore:You are using a Python version.*which Google will stop supporting.*:FutureWarning:google.api_core._python_version_support",
+]
 # Import test modules without putting their folder on sys.path: the code
 # under test is imported from the installed package, as users import it.
 addopts = ["--import-mode=importlib"]

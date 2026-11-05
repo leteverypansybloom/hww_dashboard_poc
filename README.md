@@ -194,7 +194,8 @@ workbooks directly (`tests/test_landing.py` checks this against the
 golden snapshot). `[landed] target = "gcp"` uses a landing bucket, a
 store bucket and a BigQuery dataset instead of the local folders; see
 [docs/gcp_ingestion.md](docs/gcp_ingestion.md) for every step. That route is unit-tested against a fake
-BigQuery client but has not been run against a real project yet.
+BigQuery client. A development Cloud Run job has run using the combined
+image; a recorded revision and output acceptance are still required.
 `landing/`, `store/` and `landed/` hold copies of the data, so they are
 not kept in git.
 

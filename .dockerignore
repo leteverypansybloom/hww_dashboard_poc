@@ -7,6 +7,7 @@
 !LICENSE
 !src/
 !config.gcp.toml
+!config.gcp.dummy.toml
 !mappings/
 **/__pycache__
 **/*.pyc

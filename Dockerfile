@@ -17,11 +17,14 @@
 
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
+ARG HWW_GIT_COMMIT
+ARG PY_COMMON_VERSION=0.5.0
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    HWW_LOG_FORMAT=json
+    HWW_LOG_FORMAT=json \
+    HWW_GIT_COMMIT=${HWW_GIT_COMMIT}
 
 # The base image ends as its unprivileged user; installing needs root.
 USER root
@@ -35,9 +38,10 @@ COPY src ./src
 RUN pip install --no-cache-dir --constraint constraints.txt \
         ".[bigquery,service]" && \
     pip check
+RUN python -c "import importlib.metadata as m, re; from py_common import GraphJsonLinesContract; assert m.version('py-common') == '${PY_COMMON_VERSION}'; assert re.fullmatch('[0-9a-f]{40}', '${HWW_GIT_COMMIT}'), 'Pass the reviewed HWW commit as HWW_GIT_COMMIT'"
 
 # The settings and mappings the job runs with.
-COPY config.gcp.toml ./
+COPY config.gcp.toml config.gcp.dummy.toml ./
 COPY mappings ./mappings
 
 # Check the code and both libraries load, and the config is readable

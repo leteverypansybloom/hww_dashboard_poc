@@ -15,7 +15,9 @@ run writes the tables to the output folder plus data_quality_report.md.
 import hashlib
 import json
 import logging
+import math
 import os
+import posixpath
 import re
 import shutil
 import sys
@@ -32,10 +34,12 @@ from datetime import date, datetime
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any, Protocol
+from xml.etree.ElementTree import ParseError
 
 import pandas as pd
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.datetime import from_excel
+from openpyxl.xml.functions import iterparse
 
 from hww_dashboard.logs import (
     close_logging,
@@ -826,6 +830,15 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
         raise InputError(
             f"{name}: [checks] max_row_drop must be a number from 0 to 1."
         )
+    if type(checks.get("allow_row_drop", False)) is not bool:
+        raise InputError(
+            f"{name}: [checks] allow_row_drop must be true or false."
+        )
+    age = checks.get("max_load_age_hours", 1080)
+    if type(age) not in (int, float) or not math.isfinite(age) or age <= 0:
+        raise InputError(
+            f"{name}: [checks] max_load_age_hours must be positive and finite."
+        )
     privacy = cfg.get("privacy", {})
     if not isinstance(privacy, dict) or not isinstance(
         privacy.get("personal_columns", []), list
@@ -1058,6 +1071,80 @@ def files_in(folder: Path) -> list[str]:
     return [p.name for p in folder.iterdir()] if folder.is_dir() else []
 
 
+def uncached_formula_rows(path: Path, sheet_name: str) -> list[int]:
+    """Find the rows of formula cells stored with no saved result.
+
+    Reading values can't tell such a cell from an empty one, so the
+    sheet's XML is read directly. A text formula may hold an empty
+    result, such as one that returns "".
+
+    Args:
+        path: The workbook.
+        sheet_name: The sheet to scan.
+
+    Returns:
+        The row number of each such cell.
+
+    Raises:
+        KeyError: The sheet's part is not in the workbook.
+    """
+
+    def local(tag: str) -> str:
+        """Strip the namespace from an XML tag.
+
+        Args:
+            tag: A tag such as "{http://...}c".
+
+        Returns:
+            The tag without its namespace.
+        """
+        return tag.rsplit("}", 1)[-1]
+
+    with zipfile.ZipFile(path) as archive:
+        with archive.open("xl/_rels/workbook.xml.rels") as rels:
+            targets = {
+                element.get("Id"): element.get("Target", "")
+                for _, element in iterparse(rels)
+                if local(element.tag) == "Relationship"
+            }
+        with archive.open("xl/workbook.xml") as workbook:
+            target = next(
+                (
+                    targets[value]
+                    for _, element in iterparse(workbook)
+                    if local(element.tag) == "sheet"
+                    and element.get("name") == sheet_name
+                    for key, value in element.attrib.items()
+                    if local(key) == "id"
+                ),
+                None,
+            )
+        if target is None:
+            raise KeyError(sheet_name)
+        name = (
+            target.lstrip("/")
+            if target.startswith("/")
+            else posixpath.normpath(f"xl/{target}")
+        )
+        rows = []
+        with archive.open(name) as part:
+            for _, element in iterparse(part):
+                if local(element.tag) != "c":
+                    continue
+                children = {local(child.tag): child for child in element}
+                value = children.get("v")
+                saved = value is not None and (
+                    bool(value.text) or element.get("t") == "str"
+                )
+                if "f" in children and not saved:
+                    digits = "".join(
+                        c for c in element.get("r", "") if c.isdigit()
+                    )
+                    rows.append(int(digits) if digits else 0)
+                element.clear()
+    return rows
+
+
 def read_sheet(
     path: Path,
     sheet: str | int,
@@ -1116,7 +1203,7 @@ def read_sheet(
     except (zipfile.BadZipFile, ValueError) as error:
         raise InputError(
             f"{source}: {path.name} is not a readable .xlsx file "
-            f"({error})."
+            f"({type(error).__name__})."
         ) from None
 
     if not isinstance(header_row, int) or header_row < 1:
@@ -1124,6 +1211,18 @@ def read_sheet(
             f"{source}: header_row must be a whole number from 1, "
             f"got {header_row!r}."
         )
+    try:
+        uncached = uncached_formula_rows(path, sheet_name)
+    except (zipfile.BadZipFile, KeyError, ParseError):
+        raise InputError(
+            f"{source}: cannot check workbook formula values."
+        ) from None
+    if any(row >= header_row for row in uncached):
+        raise InputError(
+            f"{source}: formula cells have no saved value; "
+            "open and save the workbook in Excel before uploading."
+        )
+
     if header_row > len(raw):
         raise InputError(
             f"{source}: header_row is {header_row} but sheet "
@@ -1297,19 +1396,23 @@ def require_rows(
 
 
 def compare_with_previous(
-    report: Report, previous: Record | None, max_drop: float
+    report: Report,
+    previous: Record | None,
+    max_drop: float,
+    allow_drop: bool = False,
 ) -> None:
-    """Warn when a source has noticeably fewer rows than the last run.
+    """Hold publication when a cumulative source loses too many rows.
 
     The workbooks are cumulative, so their rows should only grow; a
     big drop usually means an incomplete upload. Edits can remove rows
-    legitimately, so this warns rather than stops.
+    legitimately; allow_drop records an explicit exception.
 
     Args:
         report: Data quality report, with this run's inputs.
         previous: The previous published run's record, or None.
         max_drop: The largest share of rows (0 to 1) that may go before
-            a warning, e.g. 0.1 for 10%.
+            publication is held, e.g. 0.1 for 10%.
+        allow_drop: Permit a deliberate reduction after investigation.
     """
     if not previous:
         return
@@ -1333,6 +1436,13 @@ def compare_with_previous(
                 "only grow, so check the upload is complete.",
             )
             report.needs("shrunk_sources")
+            if not allow_drop:
+                raise InputError(
+                    f"{entry['source']}: row count fell by {drop:.0%}; "
+                    "publication is held. Check the export is complete. "
+                    "For an agreed reduction, set "
+                    "checks.allow_row_drop = true for one run."
+                )
 
 
 def read_record(path: Path) -> Record | None:
@@ -1508,11 +1618,14 @@ def check_agreed_values(lookups: Mapping[str, Lookup], path: Path) -> None:
             )
 
 
-def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
+def load_mappings(
+    maps: Path, overrides_path: Path | None = None
+) -> tuple[dict[str, Lookup], Lookup]:
     """Read the band/topic lookups and the organisation-name overrides.
 
     Args:
         maps: The mappings folder.
+        overrides_path: Private organisation overrides outside Git.
 
     Returns:
         (lookups, overrides): lookups maps a name such as ``"sector"`` to
@@ -1523,10 +1636,8 @@ def load_mappings(maps: Path) -> tuple[dict[str, Lookup], Lookup]:
         name: load_lookup(maps / f"{name}.csv") for name in LOOKUP_NAMES
     }
     check_agreed_values(lookups, maps / "agreed_values.csv")
-    table = read_csv_text(
-        maps / "org_overrides.csv", MAPPING_COLUMNS["org_overrides"]
-    )
-    path = maps / "org_overrides.csv"
+    path = overrides_path or maps / "org_overrides.csv"
+    table = read_csv_text(path, MAPPING_COLUMNS["org_overrides"])
     pairs = mapping_pairs(table, "raw_name", "canonical_name", path)
     overrides: Lookup = {}
     for raw, canonical in pairs.items():
@@ -2639,7 +2750,14 @@ def build_dim_employer(
     org_rows["key"] = org_rows["org"].map(name_key)
     rows = []
     for _key, group in org_rows.groupby("key", sort=False):
-        name = Counter(group["org"]).most_common(1)[0][0]
+        spellings_by_count = Counter(group["org"])
+        name = min(
+            spellings_by_count,
+            key=lambda value: (
+                -spellings_by_count[value],
+                group.loc[group["org"] == value, "position"].min(),
+            ),
+        )
         spellings = sorted(set(group["org"]))
         if len(spellings) > 1:
             report.add(
@@ -3559,6 +3677,39 @@ def run(
             column is missing or unreadable, or the outputs can't be
             written.
     """
+    from hww_dashboard.publishing import publication_lock
+
+    with publication_lock(config_path):
+        return _run(config_path, output_folder, now, run_id)
+
+
+def _run(
+    config_path: str | Path = DEFAULT_CONFIG,
+    output_folder: str | Path | None = None,
+    now: datetime | None = None,
+    run_id: str | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Run the whole pipeline.
+
+    Args:
+        config_path: The config file. Folder paths inside it are relative
+            to it.
+        output_folder: Write here instead of the output_folder in the
+            config (the tests use a temporary folder).
+        now: Treat this as the time of the run (the tests fix it).
+            Defaults to the real time. It is shown in the report, and
+            dates after its day are reported as in the future.
+        run_id: The run's id, shared with its log (``main`` passes it);
+            a new one by default.
+
+    Returns:
+        The output tables as a dict of DataFrames, keyed by table name.
+
+    Raises:
+        InputError: A config setting, mapping file, input file, sheet or
+            column is missing or unreadable, or the outputs can't be
+            written.
+    """
     run_at = datetime.now() if now is None else now
     run_id = run_id or new_run_id()
     today = run_at.date()
@@ -3597,18 +3748,26 @@ def run(
             ) from error
     bq_target = connect_bigquery(output) if target == "bigquery" else None
     report = Report()
-    lookups, overrides = load_mappings(maps)
+    private_overrides = cfg.get("privacy", {}).get("org_overrides_file")
+    overrides_path = (
+        (base / str(private_overrides)).resolve()
+        if private_overrides
+        else None
+    )
+    lookups, overrides = load_mappings(maps, overrides_path)
     inputs: Inputs
     if read_landed:
         # Only this route needs py-common, so it's imported only here.
         from hww_dashboard.landed import landed_inputs
 
-        inputs = landed_inputs(cfg, base, maps)
+        inputs = landed_inputs(cfg, base, maps, as_of=run_at)
     else:
         inputs = FolderInputs(input_folder)
     record = start_record(
         run_id, run_at, config_path, sorted(maps.glob("*.csv"))
     )
+    if overrides_path is not None:
+        record["mappings"].append(file_facts(overrides_path))
 
     # 1. Read and clean each source.
     signups = load_signups(
@@ -3686,6 +3845,7 @@ def run(
         report,
         previous_record(bq_target, out),
         float(checks.get("max_row_drop", 0.1)),
+        checks.get("allow_row_drop", False) is True,
     )
     record["inputs"] = report.inputs
     record["attention"] = report.to_act_on()

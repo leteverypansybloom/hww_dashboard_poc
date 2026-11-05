@@ -13,6 +13,44 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-04 - Production inputs and publication
+
+### A shrunken source holds publication
+
+Supersedes the warning in "R84" of `docs/rules.md`. The real files are
+cumulative, so a large drop is far more likely to be a broken export
+than a real change, and a warning can go unread while the smaller
+tables reach reports. `allow_row_drop` covers an agreed reduction, for
+one run.
+
+### Row drops compare with the last published run, in both pipelines
+
+Dataform records the loads behind each successful run in
+`hww_gold.published_loads`, and the check compares with those. Comparing
+with the previous upload would let a broken export through at its
+second upload, because the first, though held, becomes the comparison.
+The table is written only after every gold table and its checks pass.
+
+### Graph values are stored as a workbook export holds them
+
+py-common converts dates to the SharePoint site's time zone and joins
+multi-choice topics with `topic_separator`. `wrangle.py` and the
+Dataform models keep one form to read, and the routes can be compared
+table by table.
+
+### py-common stays optional for the folder route
+
+Building the tables from a folder of workbooks needs only pandas and
+openpyxl, so `read_sheet` scans for unsaved formulas itself, and
+py-common is imported only on the landed and GCP routes.
+
+### The production and dummy GCP configs are separate files
+
+`config.gcp.toml` names the real exports, which need field mappings
+from the migrated lists. `config.gcp.dummy.toml` names the dummy
+workbooks, so a GCP set-up and the Dataform models can be proved before
+those exist, without changing what the production config says.
+
 ## 2026-11-01 - Dataform gold layer
 
 ### The modelling moves to Dataform, in bronze, silver and gold layers

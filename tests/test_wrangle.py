@@ -128,7 +128,12 @@ class TestRun:
     def test_no_personal_columns_in_output(
         self, outputs: dict[str, pd.DataFrame], settings: wrangle.Config
     ) -> None:
-        """No column named in [privacy] personal_columns reaches a table."""
+        """No column named in [privacy] personal_columns reaches a table.
+
+        Args:
+            outputs: Synthetic output tables.
+            settings: Source or pipeline settings.
+        """
         personal = {
             c.casefold() for c in settings["privacy"]["personal_columns"]
         }
@@ -139,7 +144,11 @@ class TestRun:
     def test_no_personal_values_in_output(
         self, outputs: dict[str, pd.DataFrame]
     ) -> None:
-        """No email addresses, IP addresses or web links in any cell."""
+        """No email addresses, IP addresses or web links in any cell.
+
+        Args:
+            outputs: Synthetic output tables.
+        """
         patterns = (
             (EMAIL, "an email"),
             (IP, "an IP address"),
@@ -156,7 +165,11 @@ class TestRun:
     def test_every_employer_id_exists_in_dim_employer(
         self, outputs: dict[str, pd.DataFrame]
     ) -> None:
-        """employer_id is unique in dim_employer; tables use known ids."""
+        """employer_id is unique in dim_employer; tables use known ids.
+
+        Args:
+            outputs: Synthetic output tables.
+        """
         ids = set(outputs["dim_employer"]["employer_id"])
         rows = len(outputs["dim_employer"])
         assert len(ids) == rows, "employer_id is not unique in dim_employer"
@@ -172,7 +185,11 @@ class TestRun:
     def test_dim_employer_has_one_row_per_name(
         self, outputs: dict[str, pd.DataFrame]
     ) -> None:
-        """Names that differ only by case are merged into one employer."""
+        """Names that differ only by case are merged into one employer.
+
+        Args:
+            outputs: Synthetic output tables.
+        """
         names = outputs["dim_employer"]["employer_name"].str.casefold()
         assert not names.duplicated().any()
 
@@ -182,7 +199,13 @@ class TestRun:
         settings: wrangle.Config,
         fixture_config: Path,
     ) -> None:
-        """Every sign-up row stays a user, though employers are merged."""
+        """Every sign-up row stays a user, though employers are merged.
+
+        Args:
+            outputs: Synthetic output tables.
+            settings: Source or pipeline settings.
+            fixture_config: Frozen synthetic configuration.
+        """
         s = settings["signups"]
         inputs = fixture_config.parent / settings["paths"]["input_folder"]
         raw = wrangle.read_sheet(
@@ -196,20 +219,32 @@ class TestRun:
     def test_every_survey_answer_is_in_the_catalogue(
         self, outputs: dict[str, pd.DataFrame]
     ) -> None:
-        """Every answer row links to a question_catalogue row."""
+        """Every answer row links to a question_catalogue row.
+
+        Args:
+            outputs: Synthetic output tables.
+        """
         answers = outputs["fact_survey_answer"]
         assert (answers["answer_id"] != "").all()
 
     def test_at_most_one_tick_per_respondent_and_option(
         self, outputs: dict[str, pd.DataFrame]
     ) -> None:
-        """So counting rows in fact_survey_answer gives the tick count."""
+        """So counting rows in fact_survey_answer gives the tick count.
+
+        Args:
+            outputs: Synthetic output tables.
+        """
         answers = outputs["fact_survey_answer"]
         key = ["response_id", "question_id", "answer"]
         assert not answers.duplicated(key).any()
 
     def test_report_uses_frozen_clock(self, pipeline_output: Path) -> None:
-        """Shared pipeline reports carry only the injected timestamp."""
+        """Shared pipeline reports carry only the injected timestamp.
+
+        Args:
+            pipeline_output: Shared synthetic pipeline output.
+        """
         report = (pipeline_output / "data_quality_report.md").read_text()
         assert "Run at 2026-10-10 12:00." in report
 
@@ -222,6 +257,9 @@ class TestSyntheticInputs:
 
         The workbooks the pipeline reads hold no IP addresses or links;
         TestCheckPublicText checks those with made-up values.
+
+        Args:
+            input_cells: Synthetic worksheet cells.
         """
         assert any(EMAIL.search(cell) for cell in input_cells)
         assert "Email address" in input_cells
@@ -233,6 +271,9 @@ class TestSyntheticInputs:
 
         example.org is reserved by RFC 2606 and 192.0.2.0/24 by RFC 5737,
         so these values can never reach a real person or site.
+
+        Args:
+            input_cells: Synthetic worksheet cells.
         """
         for cell in input_cells:
             for email in EMAIL.findall(cell):
@@ -249,7 +290,11 @@ class TestUnpivotSurvey:
     def test_free_text_stays_out(
         self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
     ) -> None:
-        """Text typed into an Other box is neither an answer nor kept."""
+        """Text typed into an Other box is neither an answer nor kept.
+
+        Args:
+            unpivoted: Synthetic long-form survey rows.
+        """
         answers, other_text = unpivoted
         assert "my free text" not in set(answers["answer"])
         assert other_text.empty
@@ -257,7 +302,11 @@ class TestUnpivotSurvey:
     def test_ticked_boxes_give_the_mapped_option(
         self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
     ) -> None:
-        """Any value in a tick-box column is the option from the mapping."""
+        """Any value in a tick-box column is the option from the mapping.
+
+        Args:
+            unpivoted: Synthetic long-form survey rows.
+        """
         answers, _ = unpivoted
         r1 = answers[answers["response_id"] == "R1"]
         q04 = set(r1.loc[r1["question_id"] == "Q04", "answer"])
@@ -266,7 +315,11 @@ class TestUnpivotSurvey:
     def test_welsh_answer_is_translated(
         self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
     ) -> None:
-        """Weithiau is recorded as the English answer Sometimes."""
+        """Weithiau is recorded as the English answer Sometimes.
+
+        Args:
+            unpivoted: Synthetic long-form survey rows.
+        """
         answers, _ = unpivoted
         q14 = answers[answers["question_id"] == "Q14"]
         assert list(q14["answer"]) == ["Yes", "Sometimes", "No"]
@@ -606,7 +659,12 @@ class TestWriteOutputs:
     def test_success_replaces_generation(
         self, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Successful publication removes stale free text and keeps notes."""
+        """Successful publication removes stale free text and keeps notes.
+
+        Args:
+            tmp_path: Isolated test folder.
+            run_time: Fixed analysis timestamp.
+        """
         out = tmp_path / "out"
         out.mkdir()
         (out / "notes.txt").write_text("keep", encoding="utf-8")
@@ -648,7 +706,11 @@ class TestWriteCsv:
         assert not (tmp_path / "badges.csv").exists()
 
     def test_schema_dates_and_private_columns(self, tmp_path: Path) -> None:
-        """Extra personal columns are dropped and dates use ISO format."""
+        """Extra personal columns are dropped and dates use ISO format.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
         frame = pd.DataFrame(
             {
                 "employer_id": ["E1"],
@@ -669,7 +731,12 @@ class TestReport:
     def test_blocks_personal_values(
         self, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Reject identifiers in report notes without echoing them."""
+        """Reject identifiers in report notes without echoing them.
+
+        Args:
+            tmp_path: Isolated test folder.
+            run_time: Fixed analysis timestamp.
+        """
         report = wrangle.Report()
         report.add("Warnings", "bad value person@example.org")
         path = tmp_path / "data_quality_report.md"
@@ -680,7 +747,12 @@ class TestReport:
     def test_repeated_write_is_identical(
         self, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Rendering a report twice must not duplicate unmapped notes."""
+        """Rendering a report twice must not duplicate unmapped notes.
+
+        Args:
+            tmp_path: Isolated test folder.
+            run_time: Fixed analysis timestamp.
+        """
         report = wrangle.Report()
         report.unmapped[("sector", "signups", "New band")] = 2
         path = tmp_path / "report.md"
@@ -1104,7 +1176,11 @@ class TestBuildSurveyTables:
     """Response attributes fall back to employers without losing answers."""
 
     def test_fills_unknown_attributes(self, project_folder: Path) -> None:
-        """One known employer fills only Unknown response attributes."""
+        """One known employer fills only Unknown response attributes.
+
+        Args:
+            project_folder: Project source folder.
+        """
         survey = pd.DataFrame(
             {
                 "response_id": ["R1"],
@@ -1188,7 +1264,11 @@ class TestBuildEngagement:
         assert len(fact) == 3
 
     def test_invalid_rule_with_no_sessions(self, today: date) -> None:
-        """An invalid rule must fail even when there are no session rows."""
+        """An invalid rule must fail even when there are no session rows.
+
+        Args:
+            today: Fixed analysis date.
+        """
         empty = pd.DataFrame()
         sessions = pd.DataFrame(columns=wrangle.COLUMNS["fact_was_session"])
         with pytest.raises(wrangle.InputError, match="completed_rule"):
@@ -1246,7 +1326,13 @@ class TestCompareWithPrevious:
             "run_id": "r1",
             "inputs": [{"source": "WAS database", "rows": previous}],
         }
-        wrangle.compare_with_previous(report, record, 0.1)
+        if warned:
+            with pytest.raises(
+                wrangle.InputError, match="publication is held"
+            ):
+                wrangle.compare_with_previous(report, record, 0.1)
+        else:
+            wrangle.compare_with_previous(report, record, 0.1)
         assert bool(report.sections["Warnings"]) is warned
         assert ("shrunk_sources" in report.to_act_on()) is warned
 

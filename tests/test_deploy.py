@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from hww_dashboard import job, serve, wrangle
+from hww_dashboard import job, landing, serve, wrangle
 
 #: Sections that say where things are, so may differ between configs.
 LOCATIONS = ("paths", "output", "landed")
@@ -57,7 +57,43 @@ class TestGcpConfig:
         for section in LOCATIONS:
             shipped.pop(section, None)
             gcp.pop(section, None)
+        for source in wrangle.SOURCES:
+            gcp[source].pop("file", None)
+            gcp[source].pop("site_time_zone", None)
+            shipped[source].pop("file", None)
+        gcp.get("checks", {}).pop("allow_row_drop", None)
         assert gcp == shipped
+
+    def test_dummy_config_matches_config_toml(
+        self, project_folder: Path
+    ) -> None:
+        """The dummy GCP config differs only in its locations.
+
+        Args:
+            project_folder: The project folder.
+        """
+        shipped = read(project_folder / "config.toml")
+        dummy = read(project_folder / "config.gcp.dummy.toml")
+        for section in LOCATIONS:
+            shipped.pop(section, None)
+            dummy.pop(section, None)
+        dummy.get("checks", {}).pop("allow_row_drop", None)
+        assert dummy == shipped
+
+    def test_dummy_config_can_build_its_pipelines(
+        self, project_folder: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The dummy GCP config needs no list mappings.
+
+        Args:
+            project_folder: The project folder.
+            monkeypatch: Sets the environment variables.
+        """
+        for name in GCP_VARIABLES:
+            monkeypatch.setenv(name, f"test-{name.lower()}")
+        cfg = wrangle.load_config(project_folder / "config.gcp.dummy.toml")
+        books = landing.workbooks(cfg, project_folder / "mappings")
+        assert set(books) == {"signups", "was", "peer"}
 
     def test_passes_the_checks(
         self, project_folder: Path, monkeypatch: pytest.MonkeyPatch
@@ -263,5 +299,11 @@ class TestPackaging:
         dockerfile = (project_folder / "Dockerfile").read_text("utf-8")
         ignore = (project_folder / ".dockerignore").read_text("utf-8")
         assert 'CMD ["hww-run", "/app/config.gcp.toml"]' in dockerfile
-        for needed in ("config.gcp.toml", "mappings/", "src/"):
+        assert "COPY config.gcp.toml config.gcp.dummy.toml ./" in dockerfile
+        for needed in (
+            "config.gcp.toml",
+            "config.gcp.dummy.toml",
+            "mappings/",
+            "src/",
+        ):
             assert f"!{needed}" in ignore

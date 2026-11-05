@@ -21,9 +21,9 @@ vars:
   gold_dataset: hww_gold
   # The agreed file name of each workbook, as in config.toml. Only
   # loads of these files are read.
-  signups_file: dummy_HWW monitoring and reporting.xlsx
-  was_file: dummy_was_database.xlsx
-  peer_file: dummy_peer_montoring.xlsx
+  signups_file: HWW monitoring and reporting.xlsx
+  was_file: WAS database.jsonl
+  peer_file: Peer Mentoring Programme Database.jsonl
   # The rest mirrors config.toml: [was] completed_rule,
   # [survey] keep_other_free_text, [employers] source_priority and
   # [checks] max_row_drop.
@@ -31,12 +31,16 @@ vars:
   keep_other_free_text: "false"
   source_priority: signups,survey,was,peer
   max_row_drop: "0.1"
+  # Set to "true" for one run to publish an agreed reduction in rows.
+  allow_row_drop: "false"
+  max_load_age_hours: "1080"
   # Sources where an upload with no rows is a real answer (allow_empty
   # in config.toml), comma separated, e.g. "peer".
   allow_empty: ""
   # A dataset holding the expected tables (docs/output_contract.md,
   # "Comparing another implementation"). When set, the acceptance
   # assertions compare every gold table with it.
+  org_overrides_table: ""
   expected_dataset: ""
   # The tables to compare, comma separated; empty compares them all.
   # The hand-worked scenarios have expected files for only some tables.

@@ -1,0 +1,9 @@
+config {
+  type: "assertion",
+  description: "Selected source loads are within the configured freshness window",
+  tags: ["gold", "publication_checks"]
+}
+
+SELECT raw_table, loaded_at
+FROM ${ref("raw_latest_loads")}
+WHERE TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), loaded_at, HOUR) > ${hww.maxLoadAgeHours}

@@ -100,8 +100,11 @@ function readCsv(name, required) {
     }
   }
   return rows
-    .filter((cells) => cells.some((cell) => cell !== ""))
+    .filter((cells) => !(cells.length === 1 && cells[0].trim() === ""))
     .map((cells, index) => {
+      if (cells.every((cell) => cell.trim() === "")) {
+        throw new Error(`mappings/${name} line ${index + 2}: no mapping values`);
+      }
       if (cells.length !== header.length) {
         throw new Error(`mappings/${name} line ${index + 2}: wrong field count`);
       }
@@ -153,10 +156,14 @@ function build() {
       "utf8"
     )
   );
+  const orgOverrides = readCsv("org_overrides.csv", ["raw_name", "canonical_name"]);
+  if (orgOverrides.length) {
+    throw new Error("Keep organisation overrides in a private table, outside generated source");
+  }
   const data = {
     lookups,
     agreedValues: readCsv("agreed_values.csv", ["dimension", "agreed_value"]),
-    orgOverrides: readCsv("org_overrides.csv", ["raw_name", "canonical_name"]),
+    orgOverrides,
     surveyColumns: readCsv("survey_columns.csv", [
       "column",
       "role",
