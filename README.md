@@ -37,8 +37,6 @@ as `pip install -e ".[dev]"`), with the same `-c constraints.txt`.
 **py-common comes from GitHub.** The `landing` extra installs it with
 Git from its repository, pinned to a commit. Before installing:
 
-- set `<GITHUB_ORG>` in `pyproject.toml` (the `landing` extra) to the
-  GitHub organisation that hosts py-common;
 - make sure Git is installed and can reach that repository (signed in,
   if it's private).
 
@@ -82,8 +80,7 @@ python wrangle.py tests/data/config.toml
 
 Inputs are read from the folder above this one (set in `config.toml`).
 Each file is named exactly in `config.toml`. The monitoring workbook holds both Account signups
-and the Survey info tab, which has the survey responses. A source can use `file_pattern`
-instead, to take the newest download (by the date in its name).
+and the Survey info tab, which has the survey responses.
 If a file, sheet, column, mapping file or setting is missing, `wrangle.py` stops with a message
 saying which one before writing anything. So does a source with no data rows, because an empty
 upload usually means a broken export; set `allow_empty = true` in that source's section if no rows
@@ -162,12 +159,6 @@ same upload too, so the two always come from the same upload.
 text, so it is loaded as text without a type check. Its heading is
 still required, and extra columns on those sheets are rejected just as
 they are for the other sources.
-
-A source with `file_pattern` ingests only the newest matching workbook,
-using the date in its filename, then its modification time and filename
-to break ties. Excel lock files and nonmatching workbooks are ignored.
-Readers apply the configured filename selection to committed history,
-so an older export loaded later cannot replace a newer dated export.
 
 `allow_empty = true` in a source's section also applies to
 ingestion. The readers select from audit records, including successful
@@ -336,6 +327,6 @@ to that question (distinct `response_id` in `fact_survey_answer` for that `quest
 ## Readiness and release status
 
 See [CHANGELOG.md](CHANGELOG.md) for 0.2.0 and
-[docs/readiness.md](docs/readiness.md) for the RAP assessment and remaining
-cloud acceptance, DPIA and human-review gates. Code is MIT licensed
+[docs/production.md](docs/production.md) for the remaining cloud acceptance,
+DPIA and human-review gates. Code is MIT licensed
 ([LICENSE](LICENSE)).

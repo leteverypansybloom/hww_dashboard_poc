@@ -13,6 +13,39 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-05 - Fewer routes
+
+### The upload-triggered service is removed
+
+Files arrive monthly or weekly, and a daily run picks up a late or
+corrected file the next morning, so a load within a minute of an upload
+isn't needed. Removing `hww_dashboard.service` also removes its Pub/Sub
+and Eventarc set-up and the functions-framework dependency. py-common's
+`handle_upload` stays, for other pipelines.
+
+Whether production runs start from Cloud Scheduler and the Cloud Run
+job, from the GitHub workflow, or from both is not settled, so both stay
+and so does the publication lease that stops them overlapping.
+
+Not chosen: keeping the service unused, in case timing changes. Git
+keeps it, and it is easy to restore with a real requirement.
+
+### A source is named by its exact file name
+
+`file_pattern` picked the newest dated export. It was only for the
+survey tool's export, and Survey info replaced that export, so every
+source now has one agreed name, as py-common's contracts and Dataform
+already require. Supersedes the laptop's dated export discovery in "GCP
+deployment uses a read-only landing mount" (2026-10-18).
+
+### Library log fields reach HWW's JSON lines
+
+HWW's formatter dropped py-common's structured fields, so alerts on
+`jsonPayload.outcome` could not match HWW's logs. It now copies them.
+
+Not chosen: using py-common's formatter. It includes the error's own
+message, which HWW leaves out because it could quote a cell.
+
 ## 2026-11-04 - Production inputs and publication
 
 ### A shrunken source holds publication
@@ -149,7 +182,8 @@ source in "The flags on Account signups are not the source of truth"
 
 The monitoring workbook lands once, in the signups folder, and loads
 both `hww_signups` and `hww_survey`: sources naming the same `file`
-share a landing folder, and the upload service runs every pipeline of
+share a landing folder, and the upload service (removed, see "The
+upload-triggered service is removed", 2026-11-05) runs every pipeline of
 that folder. py-common is unchanged; its "already loaded" markers and
 run lock are per warehouse, so the two loads don't interfere.
 
@@ -523,7 +557,8 @@ The Cloud Run job reads a read-only Cloud Storage mount and writes directly to
 its own interim BigQuery dataset. No py-common dependency or GCS adapter is
 added. Uploads must be frozen for the run (prefer an immutable batch prefix),
 and executions must be serialized. A fixed survey name matches py-common's
-contract. The laptop keeps dated export discovery.
+contract. The laptop keeps dated export discovery (superseded by "A source
+is named by its exact file name", 2026-11-05).
 
 Deployment instructions, least-privilege roles, alerting, schema maintenance
 and synthetic acceptance checks are in `docs/gcp.md`. Docker was unavailable;

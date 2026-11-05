@@ -157,3 +157,28 @@ class TestPruneLogs:
             *names[3:],
             "notes.txt",
         ]
+
+
+class TestJsonFormatterFields:
+    """``JsonFormatter`` keeps py-common's structured fields."""
+
+    def test_copies_library_fields(self) -> None:
+        """A file's outcome reaches the JSON line, so alerts can match it."""
+        record = logging.makeLogRecord(
+            {
+                "msg": "Done",
+                "levelname": "ERROR",
+                "outcome": "failed",
+                "rows": 3,
+            }
+        )
+        entry = json.loads(logs.JsonFormatter("run-1").format(record))
+        assert entry["outcome"] == "failed"
+        assert entry["rows"] == 3
+        assert entry["run_id"] == "run-1"
+        assert "version" not in entry
+
+    def test_lists_every_library_field(self) -> None:
+        """The list stays the same as py-common's, apart from run_id."""
+        library = pytest.importorskip("py_common.logging")
+        assert set(logs.LIBRARY_FIELDS) == set(library.FIELDS) - {"run_id"}

@@ -12,13 +12,11 @@ workbook uploaded to the landing bucket
      reporting tables
 ```
 
-In GCP this runs once a day as a Cloud Run job, and, optionally, within
-a minute of an upload as a Cloud Run service.
+In GCP this runs once a day as a Cloud Run job.
 
 > **Status.** Tested end to end on local folders. The daily job has been
 > built and run in a development project. The two-project layout below
-> and the upload trigger haven't been run yet, so treat the first run of
-> each as a test.
+> hasn't been run yet, so treat its first run as a test.
 
 The workbook contracts are in `src/hww_dashboard/landing.py`. For the
 same route on local folders, see the README section "Ingesting with
@@ -32,10 +30,9 @@ project and things that **hold data** are in the data project:
 | App project | Data project |
 |---|---|
 | Artifact Registry repository (the container images) | Landing bucket (workbooks are uploaded here) |
-| Cloud Run job (daily) and service (on upload) | Store bucket (py-common's copies, audit records, run lock) |
+| Cloud Run job (daily) | Store bucket (py-common's copies, audit records, run lock) |
 | Cloud Scheduler (starts the job each morning) | `hww_landed` dataset (raw tables and `audit`) |
-| Pub/Sub topic and Eventarc trigger (upload events) | `hww_reporting` dataset (reporting tables) |
-| The service account the job, service and scheduler run as | |
+| The service account the job and scheduler run as | `hww_reporting` dataset (reporting tables) |
 
 The pipeline's service account lives in the app project and is given
 access to the data project's buckets and datasets. The code doesn't care
@@ -52,9 +49,8 @@ depend on any of them):
 | Datasets | `hww_landed`, `hww_reporting` |
 | Artifact Registry repository | `hww` |
 | Service account | an existing one for this work, or `hww-pipeline` |
-| Cloud Run job / service | `hww-daily` / `hww-on-upload` |
+| Cloud Run job | `hww-daily` |
 | Scheduler job | `hww-daily-0600` |
-| Pub/Sub topic / Eventarc trigger | `hww-landing-uploads` / `hww-landing-uploads-trigger` |
 
 Bucket names are global across all of Google Cloud, so they need an
 organisation prefix. Dataset names can't contain hyphens. If your
@@ -74,9 +70,7 @@ section below, everything else is yours.
 | 1b: Create the `audit` table | You |
 | 1–4: Try the ingestion from your laptop (optional) | You |
 | 5–9: Build the images, deploy the daily job, run it, schedule it, alert | You |
-| 10a: Deploy the upload service | You |
-| 10b: Topic, bucket notification and Eventarc trigger | Admin |
-| 11: Move from a test set-up | You, then the admin removes the old access |
+| 10: Move from a test set-up | You, then the admin removes the old access |
 
 ## What the admin sets up
 
@@ -94,10 +88,10 @@ section below, everything else is yours.
 **App project**
 
 - Artifact Registry repository `hww` (Docker, `europe-west2`).
-- APIs on: Cloud Run, Artifact Registry, Cloud Scheduler, Pub/Sub,
-  Eventarc (and BigQuery and Cloud Storage in the data project).
-- The service account: an existing one for this work is fine. The job,
-  the upload service and the scheduler all run as it.
+- APIs on: Cloud Run, Artifact Registry, Cloud Scheduler (and BigQuery
+  and Cloud Storage in the data project).
+- The service account: an existing one for this work is fine. The job
+  and the scheduler both run as it.
 
 **Roles for the service account**
 
@@ -108,8 +102,7 @@ section below, everything else is yours.
 | Storage Object User, condition: objects under `locks/` only | Store bucket |
 | BigQuery Data Editor | `hww_landed` and `hww_reporting` |
 | BigQuery Job User | Data project |
-| Cloud Run Invoker | The daily job and the upload service (or the app project) |
-| Eventarc Event Receiver | App project |
+| Cloud Run Invoker | The daily job (or the app project) |
 
 **Roles for you (development)**
 
@@ -128,36 +121,6 @@ For steps 3–4 from your laptop, also Storage Object Creator on the store
 bucket and BigQuery Data Editor on both datasets. People who upload the
 workbooks each month need only Storage Object User on the landing
 bucket.
-
-**Upload trigger (step 10b), once the service is deployed**
-
-```bash
-gcloud pubsub topics create hww-landing-uploads --project=<APP_PROJECT_ID>
-
-gcloud storage buckets notifications create gs://<LANDING_BUCKET> \
-  --project=<DATA_PROJECT_ID> \
-  --topic=projects/<APP_PROJECT_ID>/topics/hww-landing-uploads \
-  --payload-format=json --event-types=OBJECT_FINALIZE
-
-gcloud eventarc triggers create hww-landing-uploads-trigger \
-  --project=<APP_PROJECT_ID> --location=europe-west2 \
-  --destination-run-service=hww-on-upload \
-  --destination-run-region=europe-west2 \
-  --event-filters="type=google.cloud.pubsub.topic.v1.messagePublished" \
-  --transport-topic=projects/<APP_PROJECT_ID>/topics/hww-landing-uploads \
-  --service-account=<SERVICE_ACCOUNT_EMAIL>
-
-SUBSCRIPTION=$(gcloud eventarc triggers describe hww-landing-uploads-trigger \
-  --project=<APP_PROJECT_ID> --location=europe-west2 \
-  --format="value(transport.pubsub.subscription)")
-gcloud pubsub subscriptions update "$SUBSCRIPTION" \
-  --project=<APP_PROJECT_ID> --ack-deadline=600
-```
-
-The 600-second acknowledgement deadline stops a run that takes a few
-minutes being resent while it's still going. On older projects, the app
-project's Pub/Sub service agent may also need Service Account Token
-Creator.
 
 ## What you need
 
@@ -210,7 +173,6 @@ REPORT_DATASET="hww_reporting"
 SA="<the service account's email>"
 REGISTRY="$REGION-docker.pkg.dev/$APP_PROJECT/hww"
 JOB="hww-daily"
-SERVICE="hww-on-upload"
 ```
 
 Check there are no blanks: `echo "$REGISTRY" "$SA"` should print two full
@@ -334,7 +296,7 @@ dashboard reads.
 
 ## 5. Build the images (laptop, then Cloud Shell)
 
-One image runs both the daily job and the upload service. It's built in
+One image runs the daily job. It's built in
 two layers: py-common's own image first, then this project's on top, so
 the build never needs access to py-common's GitHub repository. Building
 in Cloud Shell with Docker needs only Artifact Registry Writer on the
@@ -410,7 +372,7 @@ code, py-common and the config load.
 
 Check both arrived: `gcloud artifacts docker images list "$REGISTRY"`.
 
-Remember `$IMAGE`: steps 6 and 10 use it. Afterwards, delete any zips you
+Remember `$IMAGE`: step 6 uses it. Afterwards, delete any zips you
 copied through a bucket.
 
 <details>
@@ -522,81 +484,7 @@ enter a filter, then **Create alert** to the team's channel:
 - `jsonPayload.message:"Report needs attention:"`: the data quality
   report has something to look at.
 
-## 10. Optional: load within a minute of an upload
-
-```
-workbook uploaded to the landing bucket (data project)
-  -> bucket notification to a Pub/Sub topic (app project)
-  -> Eventarc trigger
-  -> Cloud Run service (app project), same image as the daily job:
-     ingests the folder the file landed in, then, if nothing was
-     quarantined, rebuilds the reporting tables
-```
-
-**Keep the daily job.** Pub/Sub can drop an event (for example if the
-service is down for over a day), and the daily run loads anything
-missed. The two don't get in each other's way:
-
-- **One load at a time.** Both take py-common's lock in the store
-  bucket; whichever is refused tries again (Pub/Sub resends the event,
-  the job runs tomorrow).
-- **Nothing loads twice.** A file already loaded is skipped.
-- **Rebuilding is repeatable.** The tables come from the newest load of
-  every source, so rebuilding twice gives the same tables.
-- **A quarantined file stops the rebuild,** so the reporting tables keep
-  the last complete set.
-
-When the three workbooks arrive at different times, each upload rebuilds
-the tables, so for a while they mix this month's file for one source
-with last month's for another. The daily job does the same. Uploading
-all three together avoids it.
-
-**10a. Deploy the service** (you, Cloud Shell):
-
-```bash
-gcloud run deploy "$SERVICE" \
-  --project="$APP_PROJECT" --region="$REGION" --image="$IMAGE" \
-  --service-account="$SA" --no-allow-unauthenticated \
-  --max-instances=1 --concurrency=1 --timeout=540 \
-  --command="functions-framework" \
-  --args="--source=/app/src/hww_dashboard/service.py,--target=on_upload,--signature-type=cloudevent" \
-  --set-env-vars="HWW_GCP_PROJECT=$DATA_PROJECT,HWW_LANDING_BUCKET=$LANDING_BUCKET,HWW_STORE_BUCKET=$STORE_BUCKET,HWW_LANDED_DATASET=$DATASET,HWW_BQ_PROJECT=$DATA_PROJECT,HWW_BQ_DATASET=$REPORT_DATASET"
-```
-
-| Setting | Why |
-|---|---|
-| `--max-instances=1 --concurrency=1` | One upload at a time: when four files land together, later events wait rather than being refused by the lock. |
-| `--timeout=540` | Below the 600-second acknowledgement deadline, so a long run isn't resent while still going. |
-| `--no-allow-unauthenticated` | Only Eventarc, as the pipeline service account, can call it. |
-
-**10b. Ask for the trigger** (Data Engineering): tell them the service
-is deployed, so they can set up the upload trigger ("What the admin
-sets up": topic, bucket
-notification, Eventarc trigger, acknowledgement deadline).
-
-**10c. Check it works:**
-
-1. Upload a workbook again to its folder.
-2. Console: Cloud Run → Services → `hww-on-upload` → Logs. Within a
-   minute or so: `Upload gs://...: running ...`, then
-   `Upload handled: rebuilt`.
-3. Upload any file to a folder with no pipeline, e.g. `hww/test/`: the
-   logs say `Ignoring upload` and `Upload handled: ignored`.
-
-| Event | Result |
-|---|---|
-| New file in a source's folder | That folder is ingested, then the tables are rebuilt |
-| The same event delivered again | Files skipped as already loaded; tables rebuilt again, same result |
-| A file is quarantined | Tables not rebuilt; ERROR logged; not retried |
-| The rebuild stops on something to fix (a mapping, a setting) | ERROR logged; not retried |
-| A file fails, the lock is held, or BigQuery fails | Retried by Pub/Sub |
-| Upload to another folder or bucket, or a delete | Ignored |
-
-For alerts (step 9) to cover the service as well as the job, include
-both `resource.type="cloud_run_job"` and
-`resource.type="cloud_run_revision"` in the filters.
-
-## 11. Moving from a test set-up (Cloud Shell)
+## 10. Moving from a test set-up (Cloud Shell)
 
 If you first ran this in one project, or with other buckets and
 datasets:
@@ -615,8 +503,7 @@ datasets:
 ## Updating
 
 - **Code, config or mapping change:** commit it, rebuild this project's
-  image (step 5, tag it with the new commit) and deploy it: step 6 again
-  for the job, step 10a for the service.
+  image (step 5, tag it with the new commit) and deploy it: step 6 again.
 - **py-common change:** update the commit pinned in `pyproject.toml`,
   rebuild both images, and deploy.
 

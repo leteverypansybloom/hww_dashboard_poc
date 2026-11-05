@@ -19,7 +19,8 @@ input folder  →  hww_dashboard.wrangle  →  output/*.csv       →  Streamlit
                                           (star schema)
 ```
 
-Until the Dataform models exist, the pipeline runs for real: on
+Until the Dataform models have been accepted on BigQuery, the pipeline
+runs for real: on
 laptops it writes CSV files, and in GCP it loads the same tables into
 an interim BigQuery dataset (`[output] target = "bigquery"`), with the
 table names and schemas Dataform is expected to produce, so reports
@@ -60,7 +61,7 @@ design (its `INGESTION_FRAMEWORK_GUIDE.md`, section 8).
 
 | Prototype piece | What it does | Production home |
 |---|---|---|
-| `input_folder`, `input_file`, `newest_match` | Find each workbook in a local folder by its name (or the newest matching a `file_pattern`); the monitoring workbook holds both Account signups and Survey info | py-common `GCSSource`, one landing folder per workbook, fixed names; the monitoring workbook's folder feeds the signups and survey tables |
+| `input_folder`, `input_file` | Find each workbook in a local folder by its name; the monitoring workbook holds both Account signups and Survey info | py-common `GCSSource`, one landing folder per workbook, fixed names; the monitoring workbook's folder feeds the signups and survey tables |
 | `read_sheet`, `require`, `check_config` | Read a sheet by name or position below a heading row; stop with a clear message on missing files, sheets or columns | py-common `Contract` (heading row, listed columns, warn or quarantine) |
 | `COLUMNS`, survey `drop` roles, `keep_other_free_text` | Never write personal columns or free text (the tests check against `[privacy]` in the config) | py-common contracts' `excluded` columns (personal data never loaded), then Dataform's selected columns |
 | `clean_text`, `to_date`, `drop_blank_rows` | Tidy cells, read dates day-first, skip blank rows | Dataform staging models (`SAFE_CAST`, trimming) |

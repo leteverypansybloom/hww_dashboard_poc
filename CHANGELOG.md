@@ -61,6 +61,10 @@
 - Error messages no longer repeat workbook values.
 - `constraints.txt` pins certifi 2026.10.19, which fixes
   PYSEC-2026-4320, and py-common at the commit whose image builds.
+- JSON log lines carry py-common's structured fields such as `outcome`,
+  so log-based alerts can match them.
+- Out-of-date statements in `docs/architecture.md`, `docs/gcp.md` and the
+  README.
 
 ### Changed
 
@@ -85,13 +89,18 @@
 ### Removed
 
 - `landing.ROW_COLUMN`, `ROW_FIELD`, `LOADED_AT` and the Parquet tables.
+- The upload-triggered Cloud Run service (`hww_dashboard.service`, the
+  `service` extra and its Pub/Sub and Eventarc set-up). The daily run picks
+  up a late or corrected file the next morning.
+- `file_pattern` and the newest-export selection behind it
+  (`newest_match`, `date_in_name`, `landing.NewestSource`). Every source now
+  has one exact `file` name.
+- `SourceContract.undeclared`, which was always empty.
+- `docs/readiness.md`, last assessed on 2026-10-18. Its open limitations
+  moved to `docs/production.md`.
 
 ### Added
 
-- An upload-triggered Cloud Run service (`hww_dashboard.service`, the
-  `service` extra): it ingests the folder a workbook was uploaded to, then
-  rebuilds the tables unless a file was quarantined. The daily job stays
-  as a catch-up. `docs/gcp_ingestion.md`, step 9, sets it up.
 - `cloudbuild.py-common.yaml`, and build steps that stage the source in a
   named bucket, for projects that don't allow the default Cloud Build
   bucket.
@@ -113,10 +122,8 @@
 - One upload of the monitoring workbook, to `hww/signups/` (or
   `landing/signups/`), loads both `hww_signups` and `hww_survey`. Sources
   that name the same workbook share a landing folder
-  (`landing.landing_folders`), and the upload service runs every pipeline
-  that reads the upload's folder.
-- `requirements.txt` installs py-common (the `landing` extra). Its GitHub
-  organisation is a placeholder, `<GITHUB_ORG>`, to set before installing.
+  (`landing.landing_folders`).
+- `requirements.txt` installs py-common (the `landing` extra).
 - Ingestion logs through the package's logging, so `HWW_LOG_FORMAT=json`
   gives structured lines for its own and py-common's messages.
 

@@ -264,8 +264,7 @@ class TestPackaging:
         """The image's import check names modules that exist.
 
         Only hww_dashboard and py_common modules are imported:
-        third-party ones (functions_framework) come from extras a dev
-        install may lack.
+        third-party ones come from extras a dev install may lack.
 
         Args:
             project_folder: The project folder.

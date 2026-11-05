@@ -257,7 +257,7 @@ this way) and **Gotchas** (what can trip you up).
   rules behind them. If you change a rule, change its text here too.
 - `UNKNOWN = "Unknown"` is the value for "no usable answer" in sector, industry, size and sites.
   An empty string `""` means "no value at all" (e.g. no `employer_id`, no duration).
-- `MONTHS`, `SOURCES`, `COMPLETED_RULES` and `DATE_IN_NAME` are small lookup constants.
+- `MONTHS`, `SOURCES` and `COMPLETED_RULES` are small lookup constants.
 - `DEFAULT_CONFIG` is the config used when none is given: `config.toml` in the current folder.
   The `wrangle.py` launcher passes the one next to it instead.
 - Black lays the tables out one name per line, so adding a column is a one-line change.
@@ -355,7 +355,7 @@ this way) and **Gotchas** (what can trip you up).
   - headers and session numbers are positive integers; session numbers are unique;
   - the free-text switch is a boolean, and column names and paths are nonblank text;
   - configured personal source headings cannot be selected as business fields;
-  - each source has `file` or `file_pattern`;
+  - each source has `file`;
   - each `[[was.sessions]]` entry has `number` and `date`;
   - `completed_rule` is a known rule;
   - `source_priority` lists each of the four sources once.
@@ -364,24 +364,10 @@ this way) and **Gotchas** (what can trip you up).
 - **Gotcha:** if you add a setting the code requires, add it to `REQUIRED_SETTINGS`. Optional
   settings (like a session's `duration`) are checked with `"key" in cfg` where they are used.
 
-#### `date_in_name(path)`, `newest_match(folder, pattern, source)` (with inner `newness`)
-- **What:** `newest_match` globs the input folder for the pattern and skips Excel's `~$` lock
-  files. It picks the file with the latest `YYYY-MM-DD` in its name, and on a tie the one saved
-  most recently, then the lexicographically greatest filename. It logs the choice and any files it ignored. If nothing matches, it raises
-  `InputError` and lists the `.xlsx` files that are there.
-- **Why:** the survey tool is downloaded again for each refresh, with the export date in the
-  file name. Matching by pattern means a new download needs no config edit. The date in the name
-  is the export date, which is more reliable than the file's saved time: copying or syncing a file
-  can change its saved time.
-- **Gotchas:** a file with no date in its name counts as older than any dated file. The pattern is
-  a glob (`*` = anything), not a regular expression. Old exports are ignored, not deleted, so
-  clear them out now and then.
-
 #### `input_file(folder, cfg, source)` and `files_in(folder)`
-- **What:** uses `file_pattern` if the source has one, otherwise `folder / file`. If the file is
-  missing, it raises `InputError` with a "did you mean" taken from the folder's actual file names.
-- **Why:** gives every source the same pattern-or-exact-name behaviour. Only the survey uses a
-  pattern today.
+- **What:** returns `folder / file`. If the file is missing, it raises `InputError` with a "did
+  you mean" taken from the folder's actual file names.
+- **Why:** gives every source the same exact-name behaviour.
 
 #### `read_sheet(path, sheet, header_row, source="", required=())`
 - **What:**
@@ -1002,8 +988,7 @@ unrelated scales.
 
 **Survey info, not the survey tool's export.** The team keeps Survey info as the record of
 responses, and it arrives in the monitoring workbook under one fixed name, so the survey and the
-sign-ups load from one upload. `file_pattern` (explained under `newest_match`) stays for a source
-that is downloaded again with a date in its name.
+sign-ups load from one upload.
 
 **An installable package, with one `wrangle` module.** The code is the package `hww_dashboard`
 in `src/`, installed with `pip install -e .`, so the tests and tools import it like any other

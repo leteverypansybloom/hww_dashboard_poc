@@ -4,8 +4,8 @@
 sheet into a raw table, one JSON payload per row. With
 ``[landed] read = true`` in config.toml, ``wrangle.py`` reads those
 tables instead of the workbooks: ``LandedInputs`` selects committed
-audit records, including empty loads, honouring each source's file or
-file_pattern selection. It shapes rows as ``wrangle.read_sheet`` would
+audit records, including empty loads, honouring each source's file
+name. It shapes rows as ``wrangle.read_sheet`` would
 read the workbook (same headings, Excel types and ``excel_row``), so
 everything after that step is unchanged.
 
@@ -16,8 +16,7 @@ tables (``target = "gcp"``).
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
-from fnmatch import fnmatch
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -34,7 +33,6 @@ from hww_dashboard.wrangle import (
     Config,
     InputError,
     SheetInput,
-    date_in_name,
     require,
 )
 
@@ -103,7 +101,7 @@ def selected_audit(
     Args:
         records: Audit rows already scoped to the destination table.
         table: Table name for error messages.
-        settings: Configured file or file_pattern, if supplied.
+        settings: Configured file, if supplied.
 
     Returns:
         The selected audit row with its source_file populated.
@@ -112,8 +110,7 @@ def selected_audit(
         InputError: No committed load matches the selection settings.
     """
     settings = settings or {}
-    pattern = settings.get("file_pattern")
-    wanted = settings.get("file") if pattern is None else None
+    wanted = settings.get("file")
     matches = []
     for record in records:
         if record.get("outcome") != "LOADED":
@@ -121,8 +118,6 @@ def selected_audit(
         name = record.get("source_file") or _file_name(
             record["filename"], record["checksum"]
         )
-        if pattern is not None and not fnmatch(name, pattern):
-            continue
         if wanted is not None and name != wanted:
             continue
         matches.append({**record, "source_file": name})
@@ -132,21 +127,20 @@ def selected_audit(
             "settings. Run python ingest.py first."
         )
 
-    def rank(record: dict[str, Any]) -> tuple[date, int, float, str, str]:
-        """Rank filename dates before ingestion timestamps.
+    def rank(record: dict[str, Any]) -> tuple[int, float, str, str]:
+        """Rank source versions before ingestion timestamps.
 
         Args:
             record: A matching committed audit record.
 
         Returns:
-            Filename date, load time and deterministic filename order.
+            Source version, load time and deterministic filename order.
         """
         name = str(record["source_file"])
         moment = datetime.fromisoformat(record["timestamp"])
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=UTC)
         return (
-            (date_in_name(Path(name)) or date.min) if pattern else date.min,
             (
                 int(str(record.get("source_version", "0")))
                 if str(record.get("source_version", "")).isdigit()

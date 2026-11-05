@@ -6,7 +6,7 @@ Run job has run with the combined image.
 
 The maintained image runs hww-run with config.gcp.toml: generation-pinned
 GCS ingestion, raw JSON loads, then the reporting rebuild. For image builds
-and the legacy Cloud Run triggers, use [GCP ingestion](gcp_ingestion.md).
+and the Cloud Run job, use [GCP ingestion](gcp_ingestion.md).
 Do not deploy that image with workbook-mount commands: they describe a
 different input route and do not use its ingestion contracts.
 

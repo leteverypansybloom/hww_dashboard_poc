@@ -105,8 +105,10 @@ GCS cannot directly trigger a GitHub Actions workflow. After a successful
 upload, the transfer tool or an approved event bridge must send a GitHub
 repository dispatch. Do not include record values or credentials in that
 payload. This repository deploys no bridge, credentials or GCP resources.
-Disable the old schedule and event trigger only after the replacement has a
-recorded successful development run.
+
+Whether production runs start from Cloud Scheduler and the Cloud Run job, from
+this workflow, or from both is not settled. Both can run: already-loaded files
+are skipped, and the publication lease stops them overlapping.
 
 Configure failure notifications and an independent absence check for an
 expected daily run. A check inside the job cannot detect a job that never
@@ -185,6 +187,21 @@ Do not apply partition expiry indiscriminately: an old but current snapshot
 can still be the latest valid load. Preserve current required snapshots until
 an approved replacement is available. The IG lead must decide whether job
 roles, free text and small-employer health answers may be retained.
+
+## Known limitations
+
+- Organisation names and some free-form values can identify people, and
+  pattern checks don't make data anonymous. The DPIA has to cover them.
+- Name the operators and their backup, and the expected source arrival dates.
+- Signup rows and survey responses have no stable source identifier, so ids
+  derived from the row or from Count can move. Ask for one, such as the survey
+  tool's Entry Id on Survey info.
+- Bare numeric date serials are read on the 1900 epoch. Agree a contract before
+  accepting 1904 serials.
+- Folder output rolls back ordinary errors, but a killed process or a reader at
+  the wrong moment can see the gap during the rename.
+- The dashboard reads CSV files and has no authentication. Its owners need to
+  add cloud reading and access control.
 
 ## Acceptance before cut-over
 

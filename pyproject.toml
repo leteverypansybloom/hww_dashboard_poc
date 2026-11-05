@@ -62,10 +62,6 @@ bigquery = [
 landing = [
     "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@8d3195cad10dac729b98a5e642d5c81113a1213e",
 ]
-# The upload-triggered Cloud Run service (hww_dashboard.service).
-service = [
-    "functions-framework>=3.8,<4",
-]
 dev = [
     "hww-dashboard[dashboard,bigquery,landing]",
     "pytest>=7.4",

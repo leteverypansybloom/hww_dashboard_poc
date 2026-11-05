@@ -73,7 +73,6 @@ OUTPUT_TARGETS = ("folder", "bigquery")
 LANDED_TARGETS = ("local", "gcp")
 #: ``${NAME}`` in config text, replaced by an environment variable.
 CONFIG_VARIABLE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
-DATE_IN_NAME = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 
 MONTHS = {
     "jan": 1,
@@ -762,10 +761,8 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
                 f"{name}: [{section}] is missing setting(s) {missing}."
             )
     for section in ("signups", "survey", "was", "peer"):
-        if "file" not in cfg[section] and "file_pattern" not in cfg[section]:
-            raise InputError(
-                f"{name}: [{section}] needs 'file' or 'file_pattern'."
-            )
+        if "file" not in cfg[section]:
+            raise InputError(f"{name}: [{section}] needs 'file'.")
     for section, keys in REQUIRED_SETTINGS.items():
         for key in keys:
             value = cfg[section][key]
@@ -788,13 +785,11 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
                     "Use the type and nonblank value in the shipped config."
                 )
     for section in SOURCES:
-        for key in ("file", "file_pattern"):
-            if key in cfg[section]:
-                value = cfg[section][key]
-                if not isinstance(value, str) or not value.strip():
-                    raise InputError(
-                        f"{name}: [{section}] {key} must be nonblank text."
-                    )
+        value = cfg[section]["file"]
+        if not isinstance(value, str) or not value.strip():
+            raise InputError(
+                f"{name}: [{section}] file must be nonblank text."
+            )
     folder = cfg["paths"].get("log_folder", "logs")
     if not isinstance(folder, str) or not folder.strip():
         raise InputError(f"{name}: [paths] log_folder must be nonblank text.")
@@ -856,7 +851,6 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
         for key, value in cfg[source].items():
             if key not in (
                 "file",
-                "file_pattern",
                 "completed_rule",
                 "topic_separator",
             ):
@@ -952,93 +946,12 @@ def check_landed(landed: Any, name: str) -> None:
         raise InputError(f"{name}: [landed] landing_prefix must be text.")
 
 
-def date_in_name(path: Path) -> date | None:
-    """Find a YYYY-MM-DD date in a file name.
-
-    Args:
-        path: The file.
-
-    Returns:
-        The last valid date in the name, or None.
-    """
-    found = None
-    for match in DATE_IN_NAME.finditer(path.stem):
-        try:
-            found = date(*(int(part) for part in match.groups()))
-        except ValueError:
-            continue
-    return found
-
-
-def newest_match(folder: Path, pattern: str, source: str) -> Path:
-    """Pick the newest file in a folder whose name matches a pattern.
-
-    Newest means the latest YYYY-MM-DD date in the file name (exports are
-    named like ``...-survey-tool-2026-09-23.xlsx``). Files without a date
-    in the name count as older than any dated file. Ties are broken by
-    the time the file was last saved. Excel's temporary lock files
-    (``~$...``) are ignored.
-
-    Args:
-        folder: Folder to search (not searched recursively).
-        pattern: Glob pattern, e.g. ``*employer-survey-tool-*.xlsx``.
-        source: Name of the source, for messages.
-
-    Returns:
-        The chosen file.
-
-    Raises:
-        InputError: No file matches.
-    """
-    matches = [
-        p
-        for p in folder.glob(pattern)
-        if p.is_file() and not p.name.startswith("~$")
-    ]
-    if not matches:
-        present = sorted(p.name for p in folder.glob("*.xlsx"))
-        raise InputError(
-            f"{source}: no file matching '{pattern}' in {folder}. "
-            f"Excel files there: {present or 'none'}. "
-            "Check file_pattern in config.toml."
-        )
-
-    def newness(path: Path) -> tuple[date, float, str, str]:
-        """Rank exports by date, save time and filename.
-
-        Args:
-            path: Matching export file.
-
-        Returns:
-            A total ordering independent of directory iteration order.
-        """
-        return (
-            date_in_name(path) or date.min,
-            path.stat().st_mtime,
-            path.name.casefold(),
-            path.name,
-        )
-
-    chosen = max(matches, key=newness)
-    others = sorted(p.name for p in matches if p != chosen)
-    logger.info(
-        "%s: using %s (newest of %d matching file(s))",
-        source,
-        chosen.name,
-        len(matches),
-    )
-    if others:
-        logger.info("%s: ignoring older file(s) %s", source, others)
-    return chosen
-
-
 def input_file(folder: Path, cfg: Config, source: str) -> Path:
     """Find the spreadsheet for one source.
 
     Args:
         folder: The input folder.
-        cfg: The source's section of config.toml. Uses ``file_pattern``
-            if set (newest match wins), otherwise ``file``.
+        cfg: The source's section of config.toml. Uses ``file``.
         source: Name of the source, for messages.
 
     Returns:
@@ -1047,8 +960,6 @@ def input_file(folder: Path, cfg: Config, source: str) -> Path:
     Raises:
         InputError: The file does not exist.
     """
-    if "file_pattern" in cfg:
-        return newest_match(folder, cfg["file_pattern"], source)
     path = folder / str(cfg["file"])
     if not path.is_file():
         raise InputError(

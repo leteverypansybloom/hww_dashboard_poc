@@ -40,11 +40,9 @@ import os
 import re
 import shutil
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
-from fnmatch import fnmatch
-from functools import partial
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -74,7 +72,6 @@ from hww_dashboard.wrangle import (
     Config,
     InputError,
     clean_text,
-    date_in_name,
     error_location,
     input_file,
     load_config,
@@ -243,14 +240,11 @@ class SourceContract:
         table: Raw table the sheet's rows load into.
         names: Heading as py-common reads it -> the heading wrangle.py
             knows it by (trimmed, repeats numbered as pandas does).
-        undeclared: Headings loaded without a type check ("Number of
-            sites" on Account signups and Survey info).
     """
 
     worksheet: Worksheet
     table: str
     names: dict[str, str] = field(default_factory=dict)
-    undeclared: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -302,7 +296,7 @@ def survey_worksheet(
     maps: Path,
     keep_other_text: bool,
     personal_columns: Sequence[str] = (),
-) -> tuple[Worksheet, dict[str, str], list[str]]:
+) -> tuple[Worksheet, dict[str, str]]:
     """The Survey info contract, from mappings/survey_columns.csv.
 
     The column map lists every column of the sheet with its role, so
@@ -318,8 +312,8 @@ def survey_worksheet(
         personal_columns: Additional headings that must use the drop role.
 
     Returns:
-        The worksheet; py-common name -> wrangle.py name for each
-        loaded column; and the untyped headings.
+        The worksheet, and py-common name -> wrangle.py name for each
+        loaded column.
     """
     table = read_csv_text(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
@@ -349,7 +343,6 @@ def survey_worksheet(
         )
     columns: list[Column] = []
     excluded: list[str] = []
-    untyped: list[str] = []
     names: dict[str, str] = {}
     data_types: dict[str, Literal["integer", "date", "string"]] = {
         "response_id": "integer",
@@ -375,7 +368,7 @@ def survey_worksheet(
         excluded=excluded,
         on_mismatch="quarantine",
     )
-    return worksheet, names, untyped
+    return worksheet, names
 
 
 def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
@@ -388,13 +381,12 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
     Returns:
         SourceContract per source, in SOURCES order.
     """
-    survey, survey_names, survey_untyped = survey_worksheet(
+    survey, survey_names = survey_worksheet(
         maps,
         bool(cfg["survey"]["keep_other_free_text"]),
         cfg.get("privacy", {}).get("personal_columns", []),
     )
     sheets = {"signups": SIGNUPS, "survey": survey, "was": WAS, "peer": PEER}
-    untyped = {"survey": survey_untyped}
     result: dict[str, SourceContract] = {}
     for source in SOURCES:
         sheet = replace(
@@ -408,15 +400,11 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
                 else sheets[source].header_row
             ),
         )
-        undeclared = untyped.get(source, [])
         if source == "survey":
             names = survey_names
         else:
             names = {c.name: pandas_name(c.name) for c in sheet.columns}
-            names.update({h: pandas_name(h) for h in undeclared})
-        result[source] = SourceContract(
-            sheet, TABLES[source], names, undeclared
-        )
+        result[source] = SourceContract(sheet, TABLES[source], names)
     return result
 
 
@@ -454,8 +442,8 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
     Sources whose ``file`` names the same workbook share a folder
     (landing_folders()), so their sheets share one contract and one
     pipeline: an upload loads all of them, or none if any sheet fails
-    its checks. A workbook named by ``file`` must arrive under that
-    name; one chosen by ``file_pattern`` takes the newest match.
+    its checks. A workbook must arrive under the name its ``file``
+    gives.
 
     Args:
         cfg: The checked config.
@@ -480,10 +468,8 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
                 "give each source its own sheet."
             )
         first = cfg[sources[0]]
-        file_name = None if "file_pattern" in first else first.get("file")
-        json_lines = (
-            str(file_name or "").lower().endswith((".jsonl", ".ndjson"))
-        )
+        file_name = str(first["file"])
+        json_lines = file_name.lower().endswith((".jsonl", ".ndjson"))
         contract: Contract
         if json_lines:
             canonical = replace(
@@ -497,17 +483,13 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
                         else column
                     )
                     for column in sheets[0].columns
-                ]
-                + [
-                    Column(name, "any", nullable=True)
-                    for name in contracts[sources[0]].undeclared
                 ],
                 excluded=[],
             )
             try:
                 contract = GraphJsonLinesContract(
                     worksheets=[canonical],
-                    file_name=str(file_name),
+                    file_name=file_name,
                     file_format="jsonl",
                     field_map=first.get("field_map", {}),
                     metadata_map=first.get("metadata_map", {}),
@@ -527,7 +509,7 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
         else:
             contract = Contract(
                 worksheets=sheets,
-                file_name=str(file_name) if file_name else None,
+                file_name=file_name,
             )
         tables = {
             contracts[s].worksheet.name: contracts[s].table for s in sources
@@ -797,99 +779,6 @@ class LocalRawWarehouse:
 
 
 @dataclass
-class NewestSource:
-    """A source exposing only its newest matching workbook.
-
-    Attributes:
-        source: Underlying local or GCS source.
-        pattern: Configured file_pattern.
-        modified: Get the discovered version's modification timestamp.
-    """
-
-    source: Source
-    pattern: str
-    modified: Callable[[SourceItem], float]
-
-    @property
-    def bucket_name(self) -> str | None:
-        """The wrapped GCSSource's bucket, or None for a local source.
-
-        py-common's upload handler reads it to check an event came from
-        the bucket this pipeline reads.
-        """
-        bucket = getattr(self.source, "bucket_name", None)
-        return bucket if isinstance(bucket, str) else None
-
-    def items(self) -> Iterable[SourceItem]:
-        """Select by filename date, modification time and filename.
-
-        Returns:
-            One selected workbook, or no items if nothing matches.
-        """
-        matches = [
-            item
-            for item in self.source.items()
-            if not item.name.startswith("~$")
-            and fnmatch(item.name, self.pattern)
-        ]
-        if not matches:
-            return []
-        chosen = max(
-            matches,
-            key=lambda item: (
-                date_in_name(Path(item.name)) or date.min,
-                self.modified(item),
-                item.name.casefold(),
-                item.name,
-            ),
-        )
-        return [chosen]
-
-    def download(self, item: SourceItem) -> bytes:
-        """Download the selected version through the underlying source.
-
-        Args:
-            item: Workbook selected by items().
-
-        Returns:
-            Its original bytes, with the source's version checks.
-        """
-        return self.source.download(item)
-
-
-def gcs_modified(source: Any, item: SourceItem) -> float:
-    """Read the modification time of a discovered GCS generation.
-
-    Args:
-        source: The GCSSource holding the landing bucket.
-        item: Discovered workbook and generation.
-
-    Returns:
-        Modification time in seconds since the Unix epoch.
-
-    Raises:
-        ServiceError: The generation or its modification time is absent.
-    """
-    blob = source.bucket.get_blob(item.identity, generation=int(item.version))
-    if blob is None or blob.updated is None:
-        raise ServiceError(f"Cannot read modification time for {item.name}")
-    return float(blob.updated.timestamp())
-
-
-def local_modified(folder: Path, item: SourceItem) -> float:
-    """Read the modification time used by local export selection.
-
-    Args:
-        folder: The source's landing folder.
-        item: Discovered workbook relative to that folder.
-
-    Returns:
-        Its saved timestamp in seconds since the Unix epoch.
-    """
-    return (folder / item.identity).stat().st_mtime
-
-
-@dataclass
 class LandingSettings:
     """Where the job reads, keeps and loads, from [landed] in config.
 
@@ -980,11 +869,8 @@ def landing_folders(cfg: Config) -> dict[str, str]:
     first: dict[str, str] = {}
     folders: dict[str, str] = {}
     for source in SOURCES:
-        if "file_pattern" in cfg[source]:
-            folders[source] = source
-        else:
-            name = str(cfg[source]["file"])
-            folders[source] = first.setdefault(name, source)
+        name = str(cfg[source]["file"])
+        folders[source] = first.setdefault(name, source)
     return folders
 
 
@@ -1032,14 +918,6 @@ def build_pipelines(
                 extensions=FILE_EXTENSIONS[book.contract.file_format],
             )
             warehouse = LocalRawWarehouse(settings.tables, book.tables)
-        pattern = cfg[book.sources[0]].get("file_pattern")
-        if pattern is not None:
-            modified: Callable[[SourceItem], float]
-            if settings.target == "gcp":
-                modified = partial(gcs_modified, files)
-            else:
-                modified = partial(local_modified, settings.landing / folder)
-            files = NewestSource(files, pattern, modified)
         pipelines[folder] = Pipeline(
             source=files,
             store=store,
@@ -1053,9 +931,8 @@ def stage(cfg: Config, inputs: Path, landing: Path) -> list[Path]:
     """Copy each source's workbook from a folder into its landing folder.
 
     The local stand-in for dropping the files in the landing bucket:
-    the files the config names (the newest match, for a source with
-    ``file_pattern``) are copied to their landing folders. A workbook
-    that feeds several sources is copied once.
+    the files the config names are copied to their landing folders. A
+    workbook that feeds several sources is copied once.
 
     Args:
         cfg: The checked config.

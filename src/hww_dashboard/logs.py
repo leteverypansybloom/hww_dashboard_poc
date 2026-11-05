@@ -7,7 +7,8 @@
   including the traceback of an unexpected error.
 - **JSON** (``HWW_LOG_FORMAT=json``, set in GCP): the console gets one
   JSON object per line, which Cloud Logging turns into a structured
-  entry with ``severity``, ``message`` and ``run_id``. An unexpected
+  entry with ``severity``, ``message``, ``run_id`` and, on py-common's
+  lines, fields such as ``outcome`` that alerts can match. An unexpected
   error carries its type and the code it passed through, but not its
   own message, which could quote data. There is no log file.
 
@@ -86,6 +87,21 @@ class OneLineFormatter(logging.Formatter):
             record.exc_info, record.exc_text, record.stack_info = saved
 
 
+#: py-common's structured fields (py_common.logging.FIELDS), copied into
+#: a JSON line when present. They name files and counts, never cell
+#: values. Listed here because the folder route runs without py-common.
+LIBRARY_FIELDS = (
+    "warehouse",
+    "item_identity",
+    "version",
+    "checksum",
+    "bq_job_id",
+    "outcome",
+    "rows",
+    "seconds",
+)
+
+
 class JsonFormatter(logging.Formatter):
     """One JSON object per line, in Cloud Logging's structured format."""
 
@@ -105,9 +121,9 @@ class JsonFormatter(logging.Formatter):
             record: The log record.
 
         Returns:
-            One line of JSON with time, severity, message, logger and
-            run_id; for an error, also its type and stack, but not its
-            message.
+            One line of JSON with time, severity, message, logger,
+            run_id and any library fields; for an error, also its type
+            and stack, but not its message.
         """
         entry: dict[str, object] = {
             "time": datetime.fromtimestamp(record.created, UTC).isoformat(),
@@ -116,6 +132,10 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "run_id": self.run_id,
         }
+        for name in LIBRARY_FIELDS:
+            value = getattr(record, name, None)
+            if value is not None:
+                entry[name] = value
         if record.exc_info and record.exc_info[1] is not None:
             error = record.exc_info[1]
             entry["error_type"] = type(error).__name__
@@ -124,7 +144,7 @@ class JsonFormatter(logging.Formatter):
             entry["stack"] = traceback.format_list(
                 traceback.extract_tb(error.__traceback__)
             )
-        return json.dumps(entry, ensure_ascii=False)
+        return json.dumps(entry, default=str, ensure_ascii=False)
 
 
 def configure_logging(

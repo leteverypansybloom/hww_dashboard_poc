@@ -5,7 +5,6 @@ copy of the frozen fixture config, so no test reads the real data.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -194,66 +193,6 @@ def write_config(tmp_path: Path, fixture_config: Path) -> ConfigWriter:
     return write
 
 
-class TestNewestMatch:
-    """``newest_match``: pick the latest survey export in a folder."""
-
-    def test_uses_the_date_in_the_name(self, tmp_path: Path) -> None:
-        """The latest YYYY-MM-DD in the name wins, whatever the save order.
-
-        Args:
-            tmp_path: Isolated test folder.
-        """
-        for day in ("2026-09-23", "2026-10-01", "2025-12-31"):
-            name = f"hww-employer-survey-tool-{day}.xlsx"
-            (tmp_path / name).write_bytes(b"")
-        lock_file = "~$hww-employer-survey-tool-2027-01-01.xlsx"
-        (tmp_path / lock_file).write_bytes(b"")  # Excel's lock file
-        (tmp_path / "other.xlsx").write_bytes(b"")
-        chosen = wrangle.newest_match(
-            tmp_path, "*employer-survey-tool-*.xlsx", "Survey"
-        )
-        assert chosen.name == "hww-employer-survey-tool-2026-10-01.xlsx"
-
-    def test_breaks_ties_by_save_time(self, tmp_path: Path) -> None:
-        """Two exports from the same day: the one saved last wins.
-
-        Args:
-            tmp_path: Isolated test folder.
-        """
-        first = tmp_path / "survey-2026-10-01.xlsx"
-        second = tmp_path / "survey-2026-10-01 (1).xlsx"
-        for path, saved in ((first, 2_000_000_000), (second, 1_000_000_000)):
-            path.write_bytes(b"")
-            os.utime(path, (saved, saved))
-        chosen = wrangle.newest_match(tmp_path, "survey-*.xlsx", "Survey")
-        assert chosen == first
-
-    def test_no_match_names_the_pattern(self, tmp_path: Path) -> None:
-        """The message gives the pattern and the Excel files that exist.
-
-        Args:
-            tmp_path: Isolated test folder.
-        """
-        (tmp_path / "something else.xlsx").write_bytes(b"")
-        with pytest.raises(
-            wrangle.InputError,
-            match=r"no file matching '\*survey\*.xlsx'.*something",
-        ):
-            wrangle.newest_match(tmp_path, "*survey*.xlsx", "Survey")
-
-    def test_equal_timestamps_use_filename(self, tmp_path: Path) -> None:
-        """Resolve full timestamp ties without filesystem iteration order.
-
-        Args:
-            tmp_path: Isolated test folder.
-        """
-        paths = [tmp_path / f"survey-2026-10-01-{c}.xlsx" for c in "az"]
-        for path in paths:
-            path.write_bytes(b"")
-            os.utime(path, (2_000_000_000, 2_000_000_000))
-        assert wrangle.newest_match(tmp_path, "*.xlsx", "Survey") == paths[1]
-
-
 class TestInputFile:
     """``input_file``: find one source's spreadsheet."""
 
@@ -411,10 +350,8 @@ class TestCheckConfig:
                 "source_priority",
             ),
             (
-                lambda c: [
-                    c["survey"].pop(k, None) for k in ("file", "file_pattern")
-                ],
-                r"\[survey\] needs 'file' or 'file_pattern'",
+                lambda c: c["survey"].pop("file", None),
+                r"\[survey\] needs 'file'",
             ),
             (
                 lambda c: c.update(output={"target": "cloud"}),
@@ -525,7 +462,6 @@ class TestCheckConfig:
         """
         assert shipped["survey"]["file"] == shipped["signups"]["file"]
         assert shipped["survey"]["sheet"] == "Survey info"
-        assert "file_pattern" not in shipped["survey"]
 
     def test_matches_the_frozen_test_config(
         self, shipped: wrangle.Config, settings: wrangle.Config
@@ -556,8 +492,7 @@ class TestCheckConfig:
                 if section not in ("paths", "output", "landed")
             }
             for values in kept.values():
-                for key in ("file", "file_pattern"):
-                    values.pop(key, None)
+                values.pop("file", None)
             return kept
 
         assert rules(shipped) == rules(settings)
@@ -575,7 +510,7 @@ class TestMain:
         run_time: datetime,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A bad survey pattern: no traceback, exit 1, nothing written.
+        """A missing survey file: no traceback, exit 1, nothing written.
 
         Args:
             settings: Source or pipeline settings.
@@ -586,13 +521,10 @@ class TestMain:
             monkeypatch: Replaces configuration or service boundaries.
         """
         monkeypatch.setattr(wrangle, "run", partial(wrangle.run, now=run_time))
-        settings["survey"]["file_pattern"] = "no-such-export-*.xlsx"
+        settings["survey"]["file"] = "no-such-export.xlsx"
         code = wrangle.main([str(write_config(settings))])
         assert code == 1
-        assert (
-            "Stopped: Survey info: no file matching 'no-such-export-*.xlsx'"
-            in caplog.text
-        )
+        assert "Stopped: Survey info: file not found" in caplog.text
         assert not list((tmp_path / "out").glob("*.csv"))
 
     def test_output_problem_exits_with_1_and_what_to_do(
@@ -1111,17 +1043,6 @@ class TestInterpolate:
             "b": {"c": "$NOT ${lower}"},
         }
         assert missing == set()
-
-
-class TestDateInName:
-    """Export names use their last valid date."""
-
-    def test_last_valid_date(self) -> None:
-        """Ignore invalid calendar dates and files without a date."""
-        assert wrangle.date_in_name(
-            Path("2026-03-04-to-2026-04-05-2026-02-30.xlsx")
-        ) == date(2026, 4, 5)
-        assert wrangle.date_in_name(Path("survey.xlsx")) is None
 
 
 class TestFilesIn:

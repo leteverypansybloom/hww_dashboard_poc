@@ -311,7 +311,7 @@ class TestContracts:
                 value
                 for key, value in cfg[source].items()
                 if isinstance(value, str)
-                and key not in ("file", "file_pattern", "sheet")
+                and key not in ("file", "sheet")
                 and key not in ("completed_rule", "topic_separator")
             }
             if source == "was":
@@ -1026,14 +1026,13 @@ class TestLandingFolders:
     def test_separate_workbooks_get_their_own_folders(
         self, fixture_config: Path
     ) -> None:
-        """A source with its own file, or a file_pattern, reads its own.
+        """A source with its own file reads its own folder.
 
         Args:
             fixture_config: Frozen synthetic configuration.
         """
         cfg = deepcopy(settings_of(fixture_config))
         cfg["survey"]["file"] = "survey.xlsx"
-        cfg["peer"] = {**cfg["peer"], "file_pattern": "*peer*.xlsx"}
         folders = landing.landing_folders(cfg)
         assert folders["survey"] == "survey"
         assert folders["peer"] == "peer"
@@ -1119,48 +1118,6 @@ class TestLandingRegressions:
         )
         assert not defaults[source].worksheet.allow_empty
 
-    def test_pattern_selects_newest_export_before_loading(
-        self, tmp_path: Path, data_folder: Path
-    ) -> None:
-        """Filename dates win over discovery order and unrelated files.
-
-        A source with file_pattern reads a folder named after itself.
-
-        Args:
-            tmp_path: Isolated test folder.
-            data_folder: Synthetic input fixture folder.
-        """
-        config = landing_config(tmp_path, data_folder, read=True)
-        workbook = settings_of(config)["survey"]["file"]
-        pattern = "*healthy-working-wales-employer-survey-tool-*.xlsx"
-        text = config.read_text(encoding="utf-8")
-        survey_lines = f'file = "{workbook}"\nsheet = "Survey info"'
-        assert text.count(survey_lines) == 1
-        config.write_text(
-            text.replace(
-                survey_lines,
-                f'file_pattern = "{pattern}"\nsheet = "Survey info"',
-            ),
-            encoding="utf-8",
-        )
-        folder = tmp_path / "landing" / "survey"
-        folder.mkdir(parents=True)
-        newest = "a-healthy-working-wales-employer-survey-tool-2026-10-01.xlsx"
-        older = "z-healthy-working-wales-employer-survey-tool-2026-09-01.xlsx"
-        for name in (newest, older, "unrelated-2026-12-01.xlsx"):
-            shutil.copyfile(data_folder / "inputs" / workbook, folder / name)
-
-        results = landing.ingest(config)["survey"]
-
-        assert [result.item.name for result in results] == [newest]
-        assert results[0].outcome == Outcome.LOADED
-        assert (
-            landed.LocalTables(tmp_path / "landed")
-            .newest_load("hww_survey")
-            .file
-            == newest
-        )
-
     def test_empty_load_replaces_previous_rows(self, tmp_path: Path) -> None:
         """An audited zero-row snapshot does not revive an older load.
 
@@ -1187,29 +1144,6 @@ class TestLandingRegressions:
 
         assert load.rows == []
         assert load.sha256 == "empty"
-
-    def test_existing_survey_history_uses_filename_dates(
-        self, tmp_path: Path
-    ) -> None:
-        """Older exports loaded last cannot win on load time alone.
-
-        Args:
-            tmp_path: Isolated test folder.
-        """
-        warehouse = landing.LocalRawWarehouse(tmp_path, {"S": "t"})
-        data = ndjson({"S": ["a"]})
-        newest = "a-survey-2026-10-01.xlsx"
-        older = "z-survey-2026-09-01.xlsx"
-        for name in (newest, older):
-            warehouse.load(
-                name, name, data, 1, SourceItem(name, name, "v1", 1)
-            )
-
-        load = landed.LocalTables(tmp_path).newest_load(
-            "t", {"file_pattern": "*-survey-*.xlsx"}
-        )
-
-        assert load.file == newest
 
     def test_exact_filename_can_select_a_previous_committed_load(
         self, tmp_path: Path
@@ -1283,131 +1217,6 @@ class TestLandingRegressions:
         )
 
 
-class TestSourceSelection:
-    """Local and cloud discovery use the same export ordering rules."""
-
-    def test_same_date_uses_modification_time_and_ignores_lock_files(
-        self,
-    ) -> None:
-        """Lock files and unrelated names cannot outrank valid exports."""
-        names = [
-            "a-survey-2026-10-01.xlsx",
-            "z-survey-2026-10-01.xlsx",
-            "~$survey-2026-12-01.xlsx",
-            "unrelated-2026-12-01.xlsx",
-        ]
-        items = [SourceItem(name, name, "1", 1) for name in names]
-        source = SimpleNamespace(
-            items=lambda: reversed(items), download=lambda item: b"original"
-        )
-        times = {names[0]: 2.0, names[1]: 1.0}
-        selected = landing.NewestSource(
-            source, "*survey-*.xlsx", lambda item: times[item.name]
-        )
-
-        (item,) = selected.items()
-
-        assert item.name == names[0]
-        assert selected.download(item) == b"original"
-
-    def test_no_matches_produces_no_source_items(self) -> None:
-        """A nonmatching file never reaches contract validation."""
-        source = SimpleNamespace(
-            items=lambda: [SourceItem("other.xlsx", "other.xlsx", "1", 1)]
-        )
-        selected = landing.NewestSource(source, "survey-*.xlsx", lambda _: 0)
-
-        assert list(selected.items()) == []
-
-    def test_cloud_build_selects_the_newest_matching_generation(
-        self,
-        fixture_config: Path,
-        project_folder: Path,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Cloud selection reads timestamps for discovered generations.
-
-        Args:
-            fixture_config: Frozen synthetic configuration.
-            project_folder: Project source folder.
-            tmp_path: Isolated test folder.
-            monkeypatch: Replaces configuration or service boundaries.
-        """
-        cfg = settings_of(fixture_config)
-        cfg["survey"].pop("file")
-        cfg["survey"]["file_pattern"] = "*survey-*.xlsx"
-        names = ["a-survey-2026-10-01.xlsx", "z-survey-2026-09-01.xlsx"]
-        items = [
-            SourceItem(name, f"hww/survey/{name}", str(n), 1)
-            for n, name in enumerate(names, 1)
-        ]
-        requested: list[tuple[str, int]] = []
-
-        def get_blob(name: str, generation: int) -> SimpleNamespace:
-            """Return metadata without contacting a cloud service.
-
-            Args:
-                name: Source or object name.
-                generation: Synthetic object generation.
-            """
-            requested.append((name, generation))
-            return SimpleNamespace(updated=datetime(2026, 10, 2, tzinfo=UTC))
-
-        source = SimpleNamespace(
-            items=lambda: items,
-            download=lambda item: b"generation bytes",
-            bucket=SimpleNamespace(get_blob=get_blob),
-        )
-        monkeypatch.setattr(
-            "py_common.adapters.gcs.GCSSource", lambda *args, **kwargs: source
-        )
-        monkeypatch.setattr(
-            "py_common.adapters.gcs.GCSObjectStore",
-            lambda *args: SimpleNamespace(),
-        )
-        monkeypatch.setattr(
-            "py_common.adapters.bigquery_raw.RawJsonWarehouse",
-            lambda *args: SimpleNamespace(),
-        )
-        settings = landing.LandingSettings(
-            "gcp",
-            tmp_path,
-            tmp_path,
-            tmp_path,
-            project="p",
-            dataset="d",
-            landing_prefix="hww",
-            landing_bucket="landing",
-            store_bucket="store",
-        )
-
-        pipelines = landing.build_pipelines(
-            cfg, project_folder / "mappings", settings
-        )
-        (selected,) = pipelines["survey"].source.items()
-
-        assert selected == items[0]
-        assert requested == [
-            (item.identity, int(item.version)) for item in items
-        ]
-        assert (
-            pipelines["survey"].source.download(selected)
-            == b"generation bytes"
-        )
-
-    def test_missing_cloud_metadata_fails_closed(self) -> None:
-        """A missing generation is not assigned a fabricated timestamp."""
-        source = SimpleNamespace(
-            bucket=SimpleNamespace(get_blob=lambda *args, **kwargs: None)
-        )
-
-        with pytest.raises(ServiceError, match="modification time"):
-            landing.gcs_modified(
-                source, SourceItem("f.xlsx", "hww/f.xlsx", "1", 1)
-            )
-
-
 class TestCommittedSnapshots:
     """Readers reject incomplete loads and preserve empty snapshots."""
 
@@ -1446,45 +1255,33 @@ class TestCommittedSnapshots:
         with pytest.raises(wrangle.InputError, match="no committed load"):
             tables.newest_load("hww_was")
 
-    def test_cloud_history_selects_filename_date_before_load_time(
+    def test_cloud_history_selects_source_version_before_load_time(
         self,
     ) -> None:
-        """Historical uploads use the same filename policy as discovery."""
+        """A later upload wins even if an earlier one loaded after it."""
         newer = datetime(2026, 10, 2, tzinfo=UTC)
         older = datetime(2026, 10, 3, tzinfo=UTC)
         queries: list[tuple[str, Any]] = []
         client = fake_bigquery(
             [
-                (
-                    "z-survey-2026-09-01.xlsx_bbbbbbbb",
-                    "bbbbbbbb",
-                    older,
-                    1,
-                    "2",
-                ),
-                (
-                    "a-survey-2026-10-01.xlsx_aaaaaaaa",
-                    "aaaaaaaa",
-                    newer,
-                    1,
-                    "1",
-                ),
+                ("f.xlsx_bbbbbbbb", "bbbbbbbb", older, 1, "1"),
+                ("f.xlsx_aaaaaaaa", "aaaaaaaa", newer, 1, "2"),
             ],
             [(2, {"value": 1})],
             queries,
         )
 
         load = landed.BigQueryTables("p", "d", client).newest_load(
-            "t", {"file_pattern": "*survey-*.xlsx"}
+            "t", {"file": "f.xlsx"}
         )
 
-        assert load.file == "a-survey-2026-10-01.xlsx"
+        assert load.file == "f.xlsx"
         assert load.sha256 == "aaaaaaaa"
         audit_sql, audit_config = queries[0]
         assert "LIMIT 1" not in audit_sql
         assert audit_config.query_parameters[0].value == "p.d.t"
         _, rows_config = queries[1]
-        assert [q.value for q in rows_config.query_parameters] == ["1", newer]
+        assert [q.value for q in rows_config.query_parameters] == ["2", newer]
 
     def test_cloud_row_count_must_match_committed_audit(self) -> None:
         """A partial or inconsistent snapshot cannot enter wrangling."""

@@ -5,14 +5,13 @@ import re
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from py_common import GraphJsonLinesContract
 
-from hww_dashboard import landed, landing, publishing, service, wrangle
+from hww_dashboard import landed, landing, publishing, wrangle
 
 
 class TestWorkbooks:
@@ -274,22 +273,3 @@ class TestLandedInputsRead:
         )
         with pytest.raises(wrangle.InputError, match="overdue"):
             inputs.read("was", {}, "WAS", [])
-
-
-class TestOnUpload:
-    """The Cloud Run wrapper releases its logging handlers."""
-
-    def test_entry_point_closes_handlers(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The entry point handles an event without calling cloud services.
-
-        Args:
-            monkeypatch: Replaces the service and logging boundaries.
-        """
-        calls: list[Any] = []
-        monkeypatch.setattr(service, "configure_logging", lambda *args: [])
-        monkeypatch.setattr(service, "close_logging", calls.append)
-        monkeypatch.setattr(service, "handle", lambda data, config: "rebuilt")
-        service.on_upload(SimpleNamespace(data={}))
-        assert calls == [[]]

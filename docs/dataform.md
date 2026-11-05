@@ -316,9 +316,8 @@ same inputs:
   published run, recorded in `hww_gold.published_loads`, where
   `wrangle.py` uses its run record. The table starts empty, so the first
   run has nothing to compare with.
-- **File names (R02).** Only the agreed file name is read; there is no
-  `file_pattern`. py-common's contracts already require one name per
-  workbook.
+- **File names (R02).** Only the agreed file name is read. py-common's
+  contracts already require one name per workbook.
 - **Dates (R11).** Only ISO dates are read, because py-common's
   contracts refuse a date column holding anything else; the
   day-first text and Excel serial numbers `to_date` also reads never

@@ -1,4 +1,4 @@
-"""Serialise GCP reads and publication across job and upload triggers."""
+"""Serialise GCP reads and publication across the job and the workflow."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -11,8 +11,8 @@ def publication_lock(config_path: str | Path) -> Iterator[None]:
 
     Local runs rely on the caller to serialise writes. GitHub also
     serialises workflow invocations; the storage lease covers overlap
-    with a Cloud Run job or upload service. Only the GCP target needs
-    py-common, so it is imported only there.
+    with a Cloud Run job. Only the GCP target needs py-common, so it is
+    imported only there.
 
     Args:
         config_path: HWW configuration file.
