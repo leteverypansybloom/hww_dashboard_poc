@@ -21,6 +21,10 @@
   `file` ends in `.jsonl` reads through py-common's
   `GraphJsonLinesContract`, configured with `field_map`, `metadata_map`,
   `excluded_fields` and `site_time_zone` in its config section.
+- `tests/data/inputs/dummy_was_database.jsonl`: the dummy WAS workbook as
+  a Graph list export, written by `scripts/make_was_jsonl.py` and mapped
+  by `tests/data/was_graph.toml`. `tests/test_was_jsonl.py` lands it and
+  checks that it builds the same tables as the workbook.
 - `config.gcp.dummy.toml`: `config.gcp.toml` with the dummy workbooks,
   for proving a GCP set-up before the real exports exist.
 - `privacy.org_overrides_file` and the Dataform variable

@@ -1,0 +1,60 @@
+# How dummy_was_database.jsonl maps to the WAS contract's columns: the
+# settings a real WAS list needs under [was] in the config. The internal
+# names follow SharePoint's naming rule. They are not read from a real
+# list, so replace them with the list's column definitions once those
+# are available (docs/production.md).
+
+site_time_zone = "Europe/London"
+
+excluded_fields = [
+    # Columns the workbook contract excludes.
+    "Have_x0020_they_x0020_worked_x00",
+    "How_x0020_did_x0020_they_x0020_h",
+    "Key_x0020_contact_x0020_",
+    "Job_x0020_role",
+    "Preferred_x0020_contact_x0020_de",
+    "Accessibility_x0020_requirements",
+    "HWW_x0020_AdviserLookupId",
+    "Date_x0020_booking_x0020_request",
+    # What Graph sends about a multi-choice column's type.
+    "Topics_x0020_discussed_x0020_in_@odata.type",
+    "Topics_x0020_discussed_x0020_in_0@odata.type",
+    # SharePoint's system fields.
+    "@odata.etag",
+    "id",
+    "ContentType",
+    "Modified",
+    "Created",
+    "AuthorLookupId",
+    "EditorLookupId",
+    "_UIVersionString",
+    "Attachments",
+    "Edit",
+    "LinkTitleNoMenu",
+    "LinkTitle",
+    "ItemChildCount",
+    "FolderChildCount",
+    "_ComplianceFlags",
+    "_ComplianceTag",
+    "_ComplianceTagWrittenTime",
+    "_ComplianceTagUserId",
+]
+
+[field_map]
+"Participant ID" = "Participant_x0020_ID"
+"Date of Enquiry" = "Date_x0020_of_x0020_Enquiry"
+"Date allocated to adviser" = "Date_x0020_allocated_x0020_to_x0"
+"Date of Session 1 " = "Date_x0020_of_x0020_Session_x002"
+"Date summary sent to organisation" = "Date_x0020_summary_x0020_sent_x0"
+"Date of session 2" = "Date_x0020_of_x0020_session_x0020"
+"Date Summary 2 sent " = "Date_x0020_Summary_x0020_2_x0020"
+"Date of Session 3 " = "Date_x0020_of_x0020_Session_x0021"
+"Title" = "Title"
+"Number of employees" = "Number_x0020_of_x0020_employees"
+"Sector" = "Sector"
+"Organisation Industry " = "Organisation_x0020_Industry_x002"
+"Number of sites" = "Number_x0020_of_x0020_sites"
+"Duration of session 1 " = "Duration_x0020_of_x0020_session_"
+"Topics discussed in session 1" = "Topics_x0020_discussed_x0020_in_"
+"Duration of session 2" = "Duration_x0020_of_x0020_session_0"
+"Topics discussed in session 2" = "Topics_x0020_discussed_x0020_in_0"
