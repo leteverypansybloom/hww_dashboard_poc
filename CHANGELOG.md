@@ -67,6 +67,17 @@
 - Spelling ties in `dim_employer` no longer depend on the order Python
   happens to count them.
 - Error messages no longer repeat workbook values.
+- An Excel error value such as `#REF!` stops the run instead of
+  appearing in a table, for example as an employer's name.
+- A date outside the years 1900 to 2100 stops the run with a message to
+  correct it. A year such as 9999 was an unexpected error, and 2300 made
+  `dim_date` hundreds of years long.
+- `constraints.txt` pins py-common's own runtime requirements, including
+  `defusedxml`, `google-cloud-storage` and `pyyaml`, so the `landing`
+  extra and the GitHub route install the versions the image has.
+- The `landing` extra pins the py-common commit that refuses Excel error
+  values, rows that a workbook stores out of order, oversized tables and
+  dates outside the years 1900 to 2100.
 - `constraints.txt` pins certifi 2026.10.19, which fixes
   PYSEC-2026-4320, and py-common at the commit whose image builds.
 - JSON log lines carry py-common's structured fields such as `outcome`,

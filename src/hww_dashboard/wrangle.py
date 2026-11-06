@@ -37,6 +37,7 @@ from typing import Any, Protocol
 from xml.etree.ElementTree import ParseError
 
 import pandas as pd
+from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.datetime import from_excel
 from openpyxl.xml.functions import iterparse
@@ -88,6 +89,27 @@ MONTHS = {
     "nov": 11,
     "dec": 12,
 }
+
+#: The years a date may fall in, as py-common's contracts accept. Outside
+#: them it is a typing slip or a placeholder such as 9999-12-31.
+MIN_DATE_YEAR, MAX_DATE_YEAR = 1900, 2100
+
+#: What Excel shows for a formula that failed.
+EXCEL_ERRORS = (
+    "#BLOCKED!",
+    "#CALC!",
+    "#DIV/0!",
+    "#FIELD!",
+    "#GETTING_DATA",
+    "#N/A",
+    "#NAME?",
+    "#NULL!",
+    "#NUM!",
+    "#REF!",
+    "#SPILL!",
+    "#UNKNOWN!",
+    "#VALUE!",
+)
 
 # Column order of every output table. Empty tables are still written
 # with these headers.
@@ -986,6 +1008,39 @@ def files_in(folder: Path) -> list[str]:
     return [p.name for p in folder.iterdir()] if folder.is_dir() else []
 
 
+def excel_error_columns(
+    path: Path, sheet_name: str, columns: Sequence[str], first_row: int
+) -> list[str]:
+    """Find the columns holding an Excel error value such as ``#REF!``.
+
+    pandas reads an error cell as empty, so a failed formula looks like
+    a blank cell and its row can silently drop out. The workbook is read
+    again with openpyxl, which gives the error's text.
+
+    Args:
+        path: The workbook.
+        sheet_name: The sheet to scan.
+        columns: The sheet's column names, left to right.
+        first_row: The first data row.
+
+    Returns:
+        The names of the columns with such a cell, sorted.
+    """
+    book = load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheet = book[sheet_name]
+        sheet.reset_dimensions()
+        found = {
+            name
+            for row in sheet.iter_rows(min_row=first_row, values_only=True)
+            for name, value in zip(columns, row, strict=False)
+            if isinstance(value, str) and value.strip() in EXCEL_ERRORS
+        }
+    finally:
+        book.close()
+    return sorted(found)
+
+
 def uncached_formula_rows(path: Path, sheet_name: str) -> list[int]:
     """Find the rows of formula cells stored with no saved result.
 
@@ -1157,6 +1212,20 @@ def read_sheet(
         source,
         f"{path.name}, sheet '{sheet_name}', heading row {header_row}",
     )
+    # Only the columns the run reads: an error in a column it never
+    # reads does no harm, as on the landed route.
+    errors = [
+        name
+        for name in excel_error_columns(
+            path, sheet_name, list(df.columns), header_row + 1
+        )
+        if name in required
+    ]
+    if errors:
+        raise InputError(
+            f"{source}: column(s) {errors} hold an Excel error value such "
+            "as #REF!. Correct the workbook and run again."
+        )
     df["excel_row"] = range(header_row + 1, header_row + 1 + len(df))
     logger.info(
         "%s: read %d row(s) from %s (sheet '%s')",
@@ -3179,6 +3248,11 @@ def build_dim_date(*date_lists: Iterable[Any]) -> pd.DataFrame:
     Returns:
         dim_date, one row per day from 1 April to 31 March. Empty if
         there are no dates.
+
+    Raises:
+        InputError: A date is outside the accepted years. py-common's
+            contracts refuse these on the landed route; the workbook
+            route has no earlier check.
     """
     all_dates = [
         d for dates in date_lists for d in dates if d and not pd.isna(d)
@@ -3186,6 +3260,11 @@ def build_dim_date(*date_lists: Iterable[Any]) -> pd.DataFrame:
     if not all_dates:
         return pd.DataFrame(columns=COLUMNS["dim_date"])
     first, last = min(all_dates), max(all_dates)
+    if first.year < MIN_DATE_YEAR or last.year > MAX_DATE_YEAR:
+        raise InputError(
+            f"A date is outside the years {MIN_DATE_YEAR} to {MAX_DATE_YEAR}. "
+            "Correct it in the source and run again."
+        )
     start = date(first.year if first.month >= 4 else first.year - 1, 4, 1)
     end = date(last.year + 1 if last.month >= 4 else last.year, 3, 31)
     days = pd.date_range(start, end, freq="D")
@@ -3302,6 +3381,29 @@ def check_public_text(text: str, filename: str) -> None:
         )
 
 
+def check_excel_errors(cells: pd.DataFrame, filename: str) -> None:
+    """Stop an Excel error value from reaching an output.
+
+    A failed formula reads as text such as ``#REF!``, which would
+    otherwise become an organisation's name or an answer. py-common
+    refuses these on the landed route; this covers the workbook route
+    and any value a mapping passes through.
+
+    Args:
+        cells: The table as text, from ``parse_csv``.
+        filename: Output name, to say where the repair is needed.
+
+    Raises:
+        InputError: A cell holds an Excel error value.
+    """
+    count = int(cells.isin(EXCEL_ERRORS).to_numpy().sum())
+    if count:
+        raise InputError(
+            f"{filename}: {count} cell(s) hold an Excel error value such as "
+            "#REF!. Correct the source workbook and run again."
+        )
+
+
 def csv_text(df: pd.DataFrame, name: str) -> str:
     """Render a table as the CSV text that every writer starts from.
 
@@ -3339,12 +3441,15 @@ def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
         Number of rows written.
 
     Raises:
-        InputError: The table holds a contact identifier.
+        InputError: The table holds a contact identifier or an Excel
+            error value.
         SchemaError: The table breaks its schema (a bug).
     """
     text = csv_text(df, name)
     check_public_text(text, f"{name}.csv")
-    check_cells(parse_csv(text), name)
+    cells = parse_csv(text)
+    check_excel_errors(cells, f"{name}.csv")
+    check_cells(cells, name)
     (folder / f"{name}.csv").write_bytes(text.encode("utf-8"))
     return len(df)
 
@@ -3482,7 +3587,9 @@ def publish_bigquery(
     for name, df in tables.items():
         text = csv_text(df, name)
         check_public_text(text, f"{name}.csv")
-        check_cells(parse_csv(text), name)
+        cells = parse_csv(text)
+        check_excel_errors(cells, f"{name}.csv")
+        check_cells(cells, name)
         texts[name] = text
         counts.append((name, len(df)))
     staged_report = deepcopy(report)

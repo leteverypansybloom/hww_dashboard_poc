@@ -1,5 +1,5 @@
-# Pinned runtime dependencies of hww-dashboard[dashboard,bigquery], for
-# reproducible installs: CI, the GCP image and laptops
+# Pinned runtime dependencies of hww-dashboard[dashboard,bigquery] and of
+# py-common[gcp], for reproducible installs: CI, the GCP image and laptops
 # (pip install -r requirements.txt -c constraints.txt).
 # pyproject.toml keeps compatible ranges; this file pins one version of
 # everything they resolve to. Every pin has wheels for CPython 3.11, 3.12
@@ -15,11 +15,13 @@ cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
 cryptography==50.0.2
+defusedxml==0.7.1
 et_xmlfile==2.0.0
 google-api-core==2.42.0
 google-auth==2.62.0
 google-cloud-bigquery==3.46.2
 google-cloud-core==2.8.0
+google-cloud-storage==3.17.1
 google-crc32c==1.9.0
 google-resumable-media==2.11.0
 googleapis-common-protos==1.75.5
@@ -51,6 +53,7 @@ pycparser==3.11
 pydeck==0.9.3
 python-dateutil==2.9.0.post0
 python-multipart==0.0.32
+pyyaml==6.0.3
 referencing==0.37.0
 requests==2.34.2
 rpds-py==2026.9.1
