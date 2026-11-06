@@ -3,9 +3,11 @@
     python scripts/update_constraints.py
 
 Resolves the runtime dependencies in pyproject.toml (the package's own,
-plus its dashboard and bigquery extras) for CPython 3.11, 3.12 and 3.13
-on Linux and Windows x86_64. It uses pip's resolver without installing
-anything, so it needs network access to PyPI. A package that resolves
+plus its dashboard and bigquery extras) and py-common's, for CPython
+3.11, 3.12 and 3.13 on Linux and Windows x86_64. py-common installs from
+Git, which this resolver can't read, so its requirements are listed
+here. It uses pip's resolver without installing anything, so it needs
+network access to PyPI. A package that resolves
 to different versions on different Pythons gets one pin per Python,
 with an environment marker. The type stubs that mypy reads are pinned
 to the versions installed in the current environment. Review the diff
@@ -34,10 +36,20 @@ PLATFORMS = {
     "windows": ("win_amd64",),
 }
 EXTRAS = ("dashboard", "bigquery")
+#: py-common[gcp]'s runtime requirements, as in its pyproject.toml.
+PY_COMMON = (
+    "openpyxl>=3.1,<4",
+    "pyyaml>=6.0,<7",
+    "defusedxml>=0.7.1,<1",
+    "tzdata>=2024.1",
+    "google-cloud-storage>=2.10,<4",
+    "google-cloud-bigquery>=3.13,<4",
+    "google-api-core>=2.11,<3",
+)
 STUBS = ("pandas-stubs", "types-openpyxl")
 HEADER = """\
-# Pinned runtime dependencies of hww-dashboard[dashboard,bigquery], for
-# reproducible installs: CI, the GCP image and laptops
+# Pinned runtime dependencies of hww-dashboard[dashboard,bigquery] and of
+# py-common[gcp], for reproducible installs: CI, the GCP image and laptops
 # (pip install -r requirements.txt -c constraints.txt).
 # pyproject.toml keeps compatible ranges; this file pins one version of
 # everything they resolve to. Every pin has wheels for CPython 3.11, 3.12
@@ -55,14 +67,15 @@ def requirements(pyproject: Path = PROJECT / "pyproject.toml") -> list[str]:
         pyproject: The project file.
 
     Returns:
-        The package's dependencies, then those of each runtime extra.
+        The package's dependencies, then those of each runtime extra,
+        then py-common's.
     """
     with open(pyproject, "rb") as f:
         project = tomllib.load(f)["project"]
     found = list(project["dependencies"])
     for extra in EXTRAS:
         found += project["optional-dependencies"][extra]
-    return found
+    return [*found, *PY_COMMON]
 
 
 def resolve(python: str, platforms: Sequence[str]) -> dict[str, str]:

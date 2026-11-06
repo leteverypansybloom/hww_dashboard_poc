@@ -1,13 +1,14 @@
 """Checks on the wrangling pipeline, grouped by the function under test."""
 
 import re
+import shutil
 import tomllib
 from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
 import pytest
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from hww_dashboard import wrangle
 
@@ -1035,6 +1036,107 @@ class TestBuildDimDate:
         empty = wrangle.build_dim_date([None, pd.NaT])
         assert empty.empty
         assert list(empty.columns) == wrangle.COLUMNS["dim_date"]
+
+    @pytest.mark.parametrize(
+        "day",
+        [date(9999, 12, 31), date(2300, 6, 1), date(1500, 6, 1)],
+        ids=["placeholder", "far-future", "far-past"],
+    )
+    def test_date_outside_the_accepted_years_stops_the_run(
+        self, day: date
+    ) -> None:
+        """A date no calendar should span is a problem a person can fix.
+
+        Args:
+            day: The date.
+        """
+        with pytest.raises(wrangle.InputError, match="outside the years"):
+            wrangle.build_dim_date([date(2026, 1, 1), day])
+
+    @pytest.mark.parametrize("day", [date(1900, 1, 1), date(2100, 12, 31)])
+    def test_first_and_last_accepted_years_are_kept(self, day: date) -> None:
+        """The accepted years include both ends.
+
+        Args:
+            day: The date.
+        """
+        frame = wrangle.build_dim_date([day])
+        assert day in set(frame["date"])
+
+
+class TestCheckExcelErrors:
+    """An Excel error value can't reach an output table."""
+
+    @pytest.mark.parametrize("value", ["#REF!", "#N/A", "#DIV/0!", "#VALUE!"])
+    def test_error_value_stops_the_run(self, value: str) -> None:
+        """Any cell holding one stops the run.
+
+        Args:
+            value: The cell's text.
+        """
+        cells = pd.DataFrame({"name": ["Acme", value], "n": ["1", "2"]})
+        with pytest.raises(wrangle.InputError, match="1 cell"):
+            wrangle.check_excel_errors(cells, "dim_employer.csv")
+
+    def test_text_mentioning_one_is_kept(self) -> None:
+        """Only a whole cell counts: the text may be a real name."""
+        cells = pd.DataFrame({"name": ["The #REF! Company", "Acme"]})
+        wrangle.check_excel_errors(cells, "dim_employer.csv")
+
+    def test_excel_error_in_a_column_not_read_is_ignored(
+        self, tmp_path: Path
+    ) -> None:
+        """An error in a column the run doesn't read does no harm.
+
+        Args:
+            tmp_path: Isolated test folder.
+        """
+        book = Workbook()
+        sheet = book.create_sheet("S", 0)
+        sheet.append(["name", "unused"])
+        sheet.append(["Acme", "#REF!"])
+        path = tmp_path / "f.xlsx"
+        book.save(path)
+        frame = wrangle.read_sheet(path, "S", 1, required=["name"])
+        assert frame["name"].tolist() == ["Acme"]
+
+    def test_workbook_with_an_error_value_publishes_nothing(
+        self,
+        data_folder: Path,
+        project_folder: Path,
+        run_time: datetime,
+        tmp_path: Path,
+    ) -> None:
+        """A failed formula in a workbook doesn't become an employer.
+
+        Args:
+            data_folder: The synthetic data folder.
+            project_folder: The project folder.
+            run_time: Fixed analysis timestamp.
+            tmp_path: Isolated test folder.
+        """
+        data = tmp_path / "data"
+        shutil.copytree(data_folder / "inputs", data / "inputs")
+        name = "dummy_HWW monitoring and reporting.xlsx"
+        book = load_workbook(data / "inputs" / name)
+        sheet = book["Account signups"]
+        column = next(
+            cell.column
+            for cell in sheet[2]
+            if cell.value == "Org (duplicates in red)"
+        )
+        sheet.cell(row=5, column=column).value = "#REF!"
+        book.save(data / "inputs" / name)
+        text = (data_folder / "config.toml").read_text(encoding="utf-8")
+        maps = (project_folder / "mappings").as_posix()
+        config = data / "config.toml"
+        config.write_text(
+            text.replace("../../mappings", maps), encoding="utf-8"
+        )
+        out = tmp_path / "out"
+        with pytest.raises(wrangle.InputError, match="Excel error value"):
+            wrangle.run(config, output_folder=out, now=run_time)
+        assert not (out / "dim_employer.csv").exists()
 
 
 class TestCalendarDates:

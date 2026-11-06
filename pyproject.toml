@@ -60,7 +60,7 @@ bigquery = [
 # and BigQuery adapters. Update the commit after reviewing and
 # releasing a coordinated py-common change.
 landing = [
-    "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@8d3195cad10dac729b98a5e642d5c81113a1213e",
+    "py-common[gcp] @ git+https://github.com/leteverypansybloom/py-common.git@e4da0eb29dca57ab40a82e41e699b43730b84acf",
 ]
 dev = [
     "hww-dashboard[dashboard,bigquery,landing]",

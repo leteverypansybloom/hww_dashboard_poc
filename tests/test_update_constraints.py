@@ -5,6 +5,7 @@ requirements and combining the versions pip resolved.
 """
 
 import importlib.util
+from importlib.metadata import requires
 from pathlib import Path
 from types import ModuleType
 
@@ -116,3 +117,22 @@ class TestConstraintsFile:
         }
         for requirement in script.requirements():
             assert Requirement(requirement).name.lower() in pinned
+
+    def test_lists_every_py_common_requirement(
+        self, script: ModuleType
+    ) -> None:
+        """py-common's runtime requirements are all in the script's list.
+
+        The script can't resolve py-common itself, which installs from
+        Git, so a requirement added there must be added to its list too.
+
+        Args:
+            script: The constraints script.
+        """
+        pytest.importorskip("py_common")
+        listed = {Requirement(text).name.lower() for text in script.PY_COMMON}
+        for text in requires("py-common") or []:
+            requirement = Requirement(text)
+            marker = requirement.marker
+            if marker is None or marker.evaluate({"extra": "gcp"}):
+                assert requirement.name.lower() in listed
