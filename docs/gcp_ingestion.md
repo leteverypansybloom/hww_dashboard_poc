@@ -12,7 +12,11 @@ workbook uploaded to the landing bucket
      reporting tables
 ```
 
-In GCP this runs once a day as a Cloud Run job.
+In GCP this can run once a day as a Cloud Run job, as below. Production
+runs start from the GitHub workflow instead for now
+([production operation](production.md), "GitHub scheduling and upload
+events"), so the Cloud Run job and Cloud Scheduler steps are for a later
+move off GitHub.
 
 > **Status.** Tested end to end on local folders. The daily job has been
 > built and run in a development project. The two-project layout below

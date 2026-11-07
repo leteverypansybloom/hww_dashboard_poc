@@ -45,6 +45,15 @@
 
 ### Changed
 
+- Every contract refuses a file over 5 MiB or a table over 2,000,000
+  cells (`landing.MAX_FILE_BYTES`, `landing.MAX_CELLS`), instead of
+  py-common's 50 MiB and 5,000,000.
+- The `landing` extra pins the py-common commit that loads JSON Lines
+  exports with no records under `allow_empty`, and quarantines CSV files
+  saved as UTF-16 or separated by semicolons or tabs.
+- Production runs start from `.github/workflows/pipeline.yml`, not Cloud
+  Scheduler (`DECISIONS_en.md`, 2026-11-07). Its settings check names
+  every unset `hww-production` variable.
 - **A source that loses more than `max_row_drop` of its rows holds
   publication**, in `wrangle.py` and in Dataform. It used to be a
   warning. `allow_row_drop` publishes an agreed reduction.
@@ -59,6 +68,9 @@
 
 ### Fixed
 
+- A duplicate-load or freshness check that can't run logs
+  `Duplicate-load check failed` or `Freshness check failed` at ERROR, the
+  messages py-common's documented alert matches, before the run exits 2.
 - `hww-ingest` (and so `hww-run`) exits 2 for an unexpected error,
   logged with its traceback, as `hww-wrangle` does. It used to exit 1,
   the code for a problem a person can fix.
