@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
 
 import pandas as pd
 import pytest
@@ -429,6 +430,23 @@ class TestWorkbooks:
                 for column in sheet.columns
             )
 
+    def test_every_workbook_has_the_hww_size_limits(
+        self, fixture_config: Path, project_folder: Path
+    ) -> None:
+        """Each contract refuses files over HWW's lower limits.
+
+        Args:
+            fixture_config: Frozen synthetic configuration.
+            project_folder: Project source folder.
+        """
+        books = landing.workbooks(
+            settings_of(fixture_config), project_folder / "mappings"
+        )
+
+        for book in books.values():
+            assert book.contract.max_file_bytes == landing.MAX_FILE_BYTES
+            assert book.contract.max_cells == landing.MAX_CELLS
+
 
 class TestRepeatedHeadings:
     """Headings convert between pandas' and py-common's numbering."""
@@ -719,6 +737,81 @@ class TestMain:
         (record,) = [r for r in caplog.records if r.levelname == "ERROR"]
         assert "Unexpected error" in record.getMessage()
         assert record.exc_info is not None
+
+
+class TestIngest:
+    """ingest(): the raw load health checks after the GCP loads."""
+
+    @pytest.mark.parametrize(
+        ("broken", "message"),
+        [
+            ("check_duplicate_loads", "Duplicate-load check failed"),
+            ("check_freshness", "Freshness check failed"),
+        ],
+    )
+    def test_a_check_that_cannot_run_logs_the_alert_message(
+        self,
+        broken: str,
+        message: str,
+        fixture_config: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The message the documented alert matches is logged at ERROR.
+
+        Args:
+            broken: The check whose query fails.
+            message: The message its failure logs.
+            fixture_config: Frozen synthetic configuration.
+            monkeypatch: Replaces the GCP settings, pipelines and checks.
+            caplog: Captures the log lines.
+        """
+        pytest.importorskip("google.cloud.bigquery")
+
+        def gcp(cfg: wrangle.Config, base: Path) -> landing.LandingSettings:
+            """GCP settings, without reading [landed].
+
+            Args:
+                cfg: The config, ignored.
+                base: The config's folder.
+
+            Returns:
+                Settings for a GCP run.
+            """
+            return landing.LandingSettings(
+                "gcp", base, base, base, project="p", dataset="d"
+            )
+
+        def fails(*args: Any) -> list[str]:
+            """Fail as a BigQuery query that can't run does.
+
+            Args:
+                *args: The check's arguments, ignored.
+
+            Raises:
+                ServiceError: Always.
+            """
+            raise ServiceError("query failed")
+
+        cfg = settings_of(fixture_config)
+        cfg.setdefault("checks", {})["freshness_view"] = "p.d.freshness"
+        monkeypatch.setattr(landing, "load_config", lambda path: cfg)
+        monkeypatch.setattr(landing, "landing_settings", gcp)
+        monkeypatch.setattr(landing, "build_pipelines", lambda *a: {})
+        monkeypatch.setattr("google.cloud.bigquery.Client", Mock())
+        monkeypatch.setattr(
+            "py_common.runner.check_duplicate_loads", lambda *a: []
+        )
+        monkeypatch.setattr("py_common.runner.check_freshness", lambda *a: [])
+        monkeypatch.setattr(f"py_common.runner.{broken}", fails)
+
+        with pytest.raises(ServiceError):
+            landing.ingest(fixture_config)
+
+        errors = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert [r.getMessage() for r in errors] == [
+            f"{message} (ServiceError)"
+        ]
 
 
 class TestLongPath:

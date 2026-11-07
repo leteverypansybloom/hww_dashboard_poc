@@ -13,6 +13,46 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-07 - Scheduling and limits
+
+### GitHub Actions starts production runs
+
+`.github/workflows/pipeline.yml` runs the daily job and takes upload
+events; Cloud Scheduler and the Cloud Run job are not used for now.
+Supersedes "Whether production runs start from Cloud Scheduler ... is
+not settled" in "The upload-triggered service is removed" (2026-11-05).
+The Cloud Run set-up in `docs/gcp_ingestion.md` stays documented, and
+the publication lease still stops two runs overlapping if both are ever
+used. Log-based alerts in Cloud Logging don't see a GitHub run's logs,
+so a failed run is reported by GitHub's own notifications.
+
+Not chosen: Cloud Scheduler with the Cloud Run job. It needs no GitHub
+environment or runner approval, and may replace this later.
+
+### Dataform gold tables are replaced one at a time
+
+A failed gold contract check can leave some gold tables replaced and
+others not. This is accepted for now: Power BI is refreshed only after
+a successful Dataform run, so it never reads a part-built set.
+
+Not chosen: building gold in a staging dataset and copying it across
+once every check passes. It gives an all-or-nothing switch, at the cost
+of a second dataset and a copy step.
+
+### HWW files have lower size limits
+
+Each contract refuses a file over 5 MiB, or a table over 2,000,000
+cells, instead of py-common's 50 MiB and 5,000,000. The real files are
+under 1 MB, and a file near py-common's limit can take more than a
+gigabyte of memory while it is read. The limits are
+`landing.MAX_FILE_BYTES` and `landing.MAX_CELLS`.
+
+### Dates from 1900 to 2100
+
+py-common and `wrangle.py` refuse dates outside the years 1900 to 2100.
+The pipeline is expected to be used for about ten years, so real dates
+fall well inside that range, and a date outside it is a typing error.
+
 ## 2026-11-05 - Peer item IDs
 
 ### Peer mentoring follows the WAS item ID rule
@@ -51,6 +91,7 @@ and Eventarc set-up and the functions-framework dependency. py-common's
 Whether production runs start from Cloud Scheduler and the Cloud Run
 job, from the GitHub workflow, or from both is not settled, so both stay
 and so does the publication lease that stops them overlapping.
+Superseded by "GitHub Actions starts production runs" (2026-11-07).
 
 Not chosen: keeping the service unused, in case timing changes. Git
 keeps it, and it is easy to restore with a real requirement.

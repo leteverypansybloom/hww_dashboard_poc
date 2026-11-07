@@ -85,6 +85,14 @@ logger = logging.getLogger("hww_dashboard.landing")
 #: Raw table for each source.
 TABLES = {source: f"hww_{source}" for source in SOURCES}
 
+#: Size limits on every workbook and export, well under py-common's
+#: defaults (50 MiB and 5,000,000 cells). The real files are under
+#: 1 MB, and a file is held in memory several times over while it is
+#: read, so a larger one is refused before it can exhaust the job's
+#: memory. Raise them here if a real file grows near them.
+MAX_FILE_BYTES = 5 * 1024 * 1024
+MAX_CELLS = 2_000_000
+
 #: Columns of a raw table row, as py-common's RawJsonWarehouse writes
 #: them: the NDJSON fields plus the commit time.
 RAW_COLUMNS = (*ROW_FIELDS, "ingested_at")
@@ -506,6 +514,8 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
                     multi_value_separators=_multi_value_separators(
                         first, canonical
                     ),
+                    max_file_bytes=MAX_FILE_BYTES,
+                    max_cells=MAX_CELLS,
                 )
             except ConfigError:
                 raise InputError(
@@ -518,6 +528,8 @@ def workbooks(cfg: Config, maps: Path) -> dict[str, Workbook]:
             contract = Contract(
                 worksheets=sheets,
                 file_name=file_name,
+                max_file_bytes=MAX_FILE_BYTES,
+                max_cells=MAX_CELLS,
             )
         tables = {
             contracts[s].worksheet.name: contracts[s].table for s in sources
@@ -1022,13 +1034,27 @@ def ingest(
         from py_common.runner import check_duplicate_loads, check_freshness
 
         client = bigquery.Client(project=settings.project)
-        duplicates = check_duplicate_loads(
-            client, f"{settings.project}.{settings.dataset}.audit"
-        )
+        # The alerts in py-common's docs/GCP_SETUP.md, section 7, match
+        # these messages when a check can't run.
+        try:
+            duplicates = check_duplicate_loads(
+                client, f"{settings.project}.{settings.dataset}.audit"
+            )
+        except Exception as error:
+            logger.error(
+                "Duplicate-load check failed (%s)", type(error).__name__
+            )
+            raise
         freshness_view = cfg.get("checks", {}).get("freshness_view")
-        overdue = (
-            check_freshness(client, freshness_view) if freshness_view else []
-        )
+        try:
+            overdue = (
+                check_freshness(client, freshness_view)
+                if freshness_view
+                else []
+            )
+        except Exception as error:
+            logger.error("Freshness check failed (%s)", type(error).__name__)
+            raise
         if duplicates or overdue:
             raise InputError(
                 "Raw load health checks failed; publication is held."

@@ -114,11 +114,15 @@ upload, the transfer tool or an approved event bridge must send a GitHub
 repository dispatch. Do not include record values or credentials in that
 payload. This repository deploys no bridge, credentials or GCP resources.
 
-Whether production runs start from Cloud Scheduler and the Cloud Run job, from
-this workflow, or from both is not settled. Both can run: already-loaded files
-are skipped, and the publication lease stops them overlapping.
+Production runs start from this workflow; Cloud Scheduler and the Cloud Run
+job are not used for now. If both are ever used, already-loaded files are
+skipped, and the publication lease stops them overlapping.
 
-Configure failure notifications and an independent absence check for an
+The workflow's logs stay in GitHub, so the log-based alerts in py-common's
+`docs/GCP_SETUP.md` don't see them. A failed run is reported by GitHub:
+make sure the people who support the pipeline get its failed-run
+notifications, which go to whoever last changed the workflow's schedule
+unless set otherwise. Also set up an independent absence check for an
 expected daily run. A check inside the job cannot detect a job that never
 starts. The owner must approve the source freshness window; Dataform's
 `max_load_age_hours` defaults to 1080 hours for monthly cumulative exports.
@@ -138,8 +142,9 @@ Dataform materialises `raw_latest_loads` once per invocation and chooses the
 highest numeric GCS generation. All gold tables wait for the shared checks
 for load completeness, payload keys, source freshness, source keys, contact
 identifiers, row counts, mappings and other contract rules. Run dependencies
-with the gold selection. Gold replacement is still one table at a time;
-refresh readers only after a successful invocation. These changes need a
+with the gold selection. Gold replacement is one table at a time, which is
+accepted for now: refresh Power BI only after a successful invocation, so it
+never reads a part-built set. These changes need a
 BigQuery execution test before cut-over.
 
 Turning free text off rebuilds the silver and gold free-text tables empty.

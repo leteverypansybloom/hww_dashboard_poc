@@ -309,6 +309,23 @@ class TestLanding:
         original = (data_folder / "inputs" / EXPORT).read_bytes()
         assert copies[0].read_bytes() == original
 
+    def test_the_export_has_the_hww_size_limits(
+        self, tmp_path: Path, data_folder: Path
+    ) -> None:
+        """The Graph contract refuses files over HWW's lower limits.
+
+        Args:
+            tmp_path: Folder for the config.
+            data_folder: tests/data.
+        """
+        config = land_config(tmp_path, data_folder, export=True)
+        cfg = wrangle.load_config(config)
+
+        books = landing.workbooks(cfg, data_folder.parent.parent / "mappings")
+
+        assert books["was"].contract.max_file_bytes == landing.MAX_FILE_BYTES
+        assert books["was"].contract.max_cells == landing.MAX_CELLS
+
     def test_landing_it_again_loads_nothing(self, export_run: Path) -> None:
         """The same upload isn't loaded twice.
 

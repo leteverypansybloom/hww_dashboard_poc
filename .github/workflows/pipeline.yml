@@ -29,12 +29,30 @@ jobs:
           python-version: "3.11"
       - name: Check deployment settings
         env:
-          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
-          COMMON_REF: ${{ vars.PY_COMMON_REF }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          HWW_LANDING_BUCKET: ${{ vars.HWW_LANDING_BUCKET }}
+          HWW_STORE_BUCKET: ${{ vars.HWW_STORE_BUCKET }}
+          HWW_RAW_DATASET: ${{ vars.HWW_RAW_DATASET }}
+          HWW_REPORTING_DATASET: ${{ vars.HWW_REPORTING_DATASET }}
+          PY_COMMON_REF: ${{ vars.PY_COMMON_REF }}
         run: |
-          test -n "$PROVIDER" && test -n "$ACCOUNT"
-          [[ "$COMMON_REF" =~ ^[0-9a-f]{40}$ ]]
+          missing=""
+          names="GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT GCP_PROJECT_ID"
+          names="$names HWW_LANDING_BUCKET HWW_STORE_BUCKET HWW_RAW_DATASET"
+          names="$names HWW_REPORTING_DATASET PY_COMMON_REF"
+          for name in $names; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Set these hww-production environment variables (docs/production.md):$missing"
+            exit 1
+          fi
+          if ! [[ "$PY_COMMON_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "PY_COMMON_REF must be a full 40-character commit."
+            exit 1
+          fi
       - name: Install the approved source versions
         env:
           COMMON_REF: ${{ vars.PY_COMMON_REF }}
