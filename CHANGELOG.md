@@ -49,8 +49,11 @@
   cells (`landing.MAX_FILE_BYTES`, `landing.MAX_CELLS`), instead of
   py-common's 50 MiB and 5,000,000.
 - The `landing` extra pins the py-common commit that loads JSON Lines
-  exports with no records under `allow_empty`, and quarantines CSV files
-  saved as UTF-16 or separated by semicolons or tabs.
+  exports with no records under `allow_empty`, quarantines CSV files
+  saved as UTF-16 or separated by semicolons or tabs, and warns of a
+  mapped SharePoint field that no item of an export holds. The dummy
+  WAS export gives that warning for `Date of session 2`, which is empty
+  in every row of the dummy workbook.
 - Production runs start from `.github/workflows/pipeline.yml`, not Cloud
   Scheduler (`DECISIONS_en.md`, 2026-11-07). Its settings check names
   every unset `hww-production` variable.
