@@ -12,11 +12,11 @@ workbook uploaded to the landing bucket
      reporting tables
 ```
 
-In GCP this can run once a day as a Cloud Run job, as below. Production
-runs start from the GitHub workflow instead for now
-([production operation](production.md), "GitHub scheduling and upload
-events"), so the Cloud Run job and Cloud Scheduler steps are for a later
-move off GitHub.
+In GCP this runs once a day as a Cloud Run job, as below. In production
+the image isn't built by hand: a Cloud Build trigger runs
+`cloudbuild.deploy.yaml` on every push to `main`, which builds both images
+from GitHub and points the job at the new one (see "Updating"). Step 5's
+zips are for a one-off build without the trigger.
 
 > **Status.** Tested end to end on local folders. The daily job has been
 > built and run in a development project. The two-project layout below
@@ -506,10 +506,17 @@ datasets:
 
 ## Updating
 
-- **Code, config or mapping change:** commit it, rebuild this project's
-  image (step 5, tag it with the new commit) and deploy it: step 6 again.
-- **py-common change:** update the commit pinned in `pyproject.toml`,
-  rebuild both images, and deploy.
+With the Cloud Build trigger in place (`cloudbuild.deploy.yaml`, run on
+every push to `main`):
+
+- **Code, config or mapping change:** merge it to `main`. The trigger
+  builds the image, tagged with the commit, and points the job at it.
+- **py-common change:** merge it in py-common, then update the commit
+  pinned in this project's `pyproject.toml` and merge that. The trigger
+  builds py-common's image at the new commit as well.
+
+Without the trigger, rebuild by hand (step 5, tagged with the new
+commit) and deploy it (step 6 again).
 
 ## When something goes wrong
 

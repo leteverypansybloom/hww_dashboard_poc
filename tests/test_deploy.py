@@ -306,3 +306,57 @@ class TestPackaging:
             "src/",
         ):
             assert f"!{needed}" in ignore
+
+
+def deploy_steps(project_folder: Path) -> dict[str, str]:
+    """Each step of cloudbuild.deploy.yaml, as the text it runs.
+
+    Args:
+        project_folder: The project folder.
+
+    Returns:
+        Step id to its arguments joined into one string.
+    """
+    yaml = pytest.importorskip("yaml")
+    text = (project_folder / "cloudbuild.deploy.yaml").read_text("utf-8")
+    steps = yaml.safe_load(text)["steps"]
+    return {step["id"]: " ".join(step["args"]) for step in steps}
+
+
+class TestDeployBuild:
+    """cloudbuild.deploy.yaml builds main's code and deploys it."""
+
+    def test_reads_the_py_common_commit_pyproject_pins(
+        self, project_folder: Path
+    ) -> None:
+        """The build's search finds exactly the landing extra's commit.
+
+        Args:
+            project_folder: The project folder.
+        """
+        script = deploy_steps(project_folder)["py-common source"]
+        found = re.search(r"grep -o '([^']+)' pyproject\.toml", script)
+        assert found is not None
+        pattern = found.group(1).replace(r"\{", "{").replace(r"\}", "}")
+        pyproject = (project_folder / "pyproject.toml").read_text("utf-8")
+        landing = read(project_folder / "pyproject.toml")["project"][
+            "optional-dependencies"
+        ]["landing"]
+
+        matches = re.findall(pattern, pyproject)
+
+        assert len(matches) == 1
+        assert matches[0] in landing[0]
+
+    def test_deploys_the_image_it_builds(self, project_folder: Path) -> None:
+        """The job gets the image tagged with the commit just built.
+
+        Args:
+            project_folder: The project folder.
+        """
+        steps = deploy_steps(project_folder)
+        image = "${_REGISTRY}/hww-job:$COMMIT_SHA"
+
+        assert f'image="{image}"' in steps["hww image"]
+        assert 'HWW_GIT_COMMIT="$COMMIT_SHA"' in steps["hww image"]
+        assert f"--image={image}" in steps["deploy"]
