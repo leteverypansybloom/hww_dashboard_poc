@@ -114,15 +114,15 @@ upload, the transfer tool or an approved event bridge must send a GitHub
 repository dispatch. Do not include record values or credentials in that
 payload. This repository deploys no bridge, credentials or GCP resources.
 
-Production runs start from this workflow; Cloud Scheduler and the Cloud Run
-job are not used for now. If both are ever used, already-loaded files are
-skipped, and the publication lease stops them overlapping.
+Production doesn't use this workflow: the daily job is the Cloud Run job,
+whose image a Cloud Build trigger builds from `main` with
+`cloudbuild.deploy.yaml` (`DECISIONS_en.md`, 2026-11-10). Keep the workflow
+disabled in GitHub (**Actions > HWW pipeline > Disable workflow**), so real
+data never runs on GitHub's machines. If both are ever used, already-loaded
+files are skipped, and the publication lease stops them overlapping.
 
-The workflow's logs stay in GitHub, so the log-based alerts in py-common's
-`docs/GCP_SETUP.md` don't see them. A failed run is reported by GitHub:
-make sure the people who support the pipeline get its failed-run
-notifications, which go to whoever last changed the workflow's schedule
-unless set otherwise. Also set up an independent absence check for an
+The Cloud Run job logs to Cloud Logging, so the log-based alerts in
+py-common's `docs/GCP_SETUP.md` apply. Also set up an independent absence check for an
 expected daily run. A check inside the job cannot detect a job that never
 starts. The owner must approve the source freshness window; Dataform's
 `max_load_age_hours` defaults to 1080 hours for monthly cumulative exports.

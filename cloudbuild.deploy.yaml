@@ -1,0 +1,88 @@
+# Builds the daily job's image from GitHub and points the Cloud Run job
+# at it. A Cloud Build trigger runs this on every push to main, so the
+# job always runs the code on main and nothing is uploaded by hand.
+#
+# 1. Read the py-common commit that pyproject.toml pins, and clone
+#    py-common at that commit from GitHub.
+# 2. Build py-common's image, unless the registry already has one for
+#    that commit.
+# 3. Build this project's image on it, tagged with this commit.
+# 4. Point the Cloud Run job at the new image. The next run uses it.
+#
+# Substitutions, set on the trigger:
+#   _REGISTRY  <region>-docker.pkg.dev/<app project>/<repository>
+#   _JOB       the Cloud Run job's name
+#   _REGION    the Cloud Run job's region
+# COMMIT_SHA is Cloud Build's own: the commit that started the build.
+#
+# A $$ is a literal $ for the shell; Cloud Build fills in ${_NAME} and
+# $COMMIT_SHA.
+
+steps:
+  - id: py-common source
+    name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        ref="$$(grep -o 'py-common.git@[0-9a-f]\{40\}' pyproject.toml | cut -d@ -f2)"
+        if [ -z "$$ref" ]; then
+          echo "pyproject.toml pins no py-common commit" >&2
+          exit 1
+        fi
+        echo "py-common $$ref"
+        echo "$$ref" > /workspace/py_common_ref
+        git clone --quiet https://github.com/leteverypansybloom/py-common.git /workspace/py-common
+        git -C /workspace/py-common checkout --quiet "$$ref"
+
+  - id: py-common image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        base="${_REGISTRY}/py-common:$$(cat /workspace/py_common_ref)"
+        if docker manifest inspect "$$base" > /dev/null 2>&1; then
+          echo "Using $$base"
+        else
+          docker build --tag "$$base" /workspace/py-common
+          docker push "$$base"
+        fi
+        echo "$$base" > /workspace/base_image
+
+  - id: hww image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        image="${_REGISTRY}/hww-job:$COMMIT_SHA"
+        docker build \
+          --build-arg BASE_IMAGE="$$(cat /workspace/base_image)" \
+          --build-arg HWW_GIT_COMMIT="$COMMIT_SHA" \
+          --tag "$$image" .
+        docker push "$$image"
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - update
+      - ${_JOB}
+      - --region=${_REGION}
+      - --image=${_REGISTRY}/hww-job:$COMMIT_SHA
+
+substitutions:
+  _REGISTRY: ""
+  _JOB: hww-daily
+  _REGION: europe-west2
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1800s

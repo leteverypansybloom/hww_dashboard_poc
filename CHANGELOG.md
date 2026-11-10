@@ -4,6 +4,11 @@
 
 ### Added
 
+- `cloudbuild.deploy.yaml`: for a Cloud Build trigger on pushes to
+  `main`. It builds py-common's image at the commit `pyproject.toml`
+  pins, builds the job image on it tagged with the commit, and points
+  the Cloud Run job at the new image.
+
 - `dataform/`: Dataform models that build the output tables from
   py-common's raw tables in BigQuery, in three layers: bronze (the raw
   tables), silver (the mappings as reference tables and one cleaned row

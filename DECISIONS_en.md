@@ -13,6 +13,27 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-10 - Production runs in Cloud Run
+
+### A Cloud Run job built from GitHub runs production
+
+The daily job is the Cloud Run job in `europe-west2`, started by Cloud
+Scheduler, as in `docs/gcp_ingestion.md`. A Cloud Build trigger runs
+`cloudbuild.deploy.yaml` on every push to `main`: it builds py-common's
+image at the commit `pyproject.toml` pins, builds this project's image
+on it tagged with the commit, and points the job at the new image. So
+the job runs `main`'s code, and nothing is copied or built by hand.
+Supersedes "GitHub Actions starts production runs" (2026-11-07).
+
+Personal data then stays in GCP in London during a run. On GitHub's
+hosted runners it would pass through machines whose location can't be
+chosen, which the IG lead would have to approve. GitHub only holds the
+code. `.github/workflows/pipeline.yml` is disabled in GitHub, and the
+log-based alerts in py-common's `docs/GCP_SETUP.md` apply again.
+
+Not chosen: GitHub Actions on GitHub's hosted runners, for the reason
+above, and on a self-hosted runner, which is a machine to look after.
+
 ## 2026-11-07 - Scheduling and limits
 
 ### GitHub Actions starts production runs
@@ -25,6 +46,8 @@ The Cloud Run set-up in `docs/gcp_ingestion.md` stays documented, and
 the publication lease still stops two runs overlapping if both are ever
 used. Log-based alerts in Cloud Logging don't see a GitHub run's logs,
 so a failed run is reported by GitHub's own notifications.
+Superseded by "A Cloud Run job built from GitHub runs production"
+(2026-11-10).
 
 Not chosen: Cloud Scheduler with the Cloud Run job. It needs no GitHub
 environment or runner approval, and may replace this later.
