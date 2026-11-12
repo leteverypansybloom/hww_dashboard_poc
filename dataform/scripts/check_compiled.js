@@ -9,7 +9,7 @@ assert.equal((errors.compilationErrors || []).length, 0, "Compilation failed");
 const gates = [
   "assert_loads_complete", "assert_mappings_valid", "assert_sources_not_empty",
   "assert_signup_months_valid", "assert_identifier_cases", "assert_keys_valid",
-  "assert_no_contact_details", "assert_row_counts_valid", "assert_loads_fresh",
+  "assert_row_counts_valid", "assert_loads_fresh",
   "assert_payload_keys_valid", "assert_no_duplicate_loads"
 ];
 const tables = graph.tables || [];
@@ -23,9 +23,21 @@ for (const table of tables.filter((action) => (action.tags || []).includes("gold
   }
 }
 assert.equal(tables.find((action) => action.target.name === "raw_latest_loads").type, "table");
-for (const name of ["stg_survey_other_text", "survey_other_text"]) {
-  assert(!tables.find((action) => action.target.name === name).disabled, `${name} must be replaced when text is off`);
+// Gold publishes source text as it is: no check holds it back for
+// looking like an email address, phone number or link.
+for (const action of [...tables, ...(graph.assertions || [])]) {
+  assert(
+    !/@\[|\\\+44|https\?:/.test(action.query || ""),
+    `${action.target.name} still filters contact details`
+  );
 }
+// Every "Other (more info)" box loads into survey_other_text.
+const otherText = tables.find((action) => action.target.name === "stg_survey_other_text");
+assert(!otherText.disabled, "stg_survey_other_text is disabled");
+assert(
+  /Other \(more info\)/.test(otherText.query),
+  "stg_survey_other_text reads no Other (more info) column"
+);
 const goldNames = tables
   .filter((action) => (action.tags || []).includes("gold"))
   .map((action) => action.target.name);

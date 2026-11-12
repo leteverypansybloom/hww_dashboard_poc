@@ -55,8 +55,6 @@ file = "dummy_HWW monitoring and reporting.xlsx"
 sheet = "Survey info"
 header_row = 2            # Excel row that holds the column headings
 # Which column is which question lives in mappings/survey_columns.csv.
-# Free text typed into "Other (more info)" boxes may contain personal details, so it is off by default.
-keep_other_free_text = false
 
 [was]
 file = "dummy_was_database.xlsx"
@@ -121,16 +119,3 @@ allow_row_drop = false
 # When duplicate rows for one organisation disagree, the most common value wins.
 # On a tie, a specific value beats "Other", then this source order decides.
 source_priority = ["signups", "survey", "was", "peer"]
-
-[privacy]
-# These columns must never reach the output. The script only keeps the columns it needs,
-# and the tests fail if any of these names appears in an output file.
-personal_columns = [
-    "Full Name", "Email address", "Email Address", "First Name", "Last Name",
-    "Job role", "Job Role Title", "Key contact", "Preferred contact details",
-    "Accessibility requirements including language", "HWW Adviser", "HWW Adviser (Cohort)",
-    "User IP", "User Agent", "Created By (User Id)", "Source Url", "Post Id",
-    "Transaction Id", "Payment Amount", "Payment Date", "Payment Status",
-    "Submission Speed (ms)", "PDF: HWW Employer Survey Tool",
-    "PDF: HWW Employer Survey Tool (Internal)", "Item Type", "Path",
-]

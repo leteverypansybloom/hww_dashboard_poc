@@ -3,8 +3,7 @@
 *For anyone who reads the pipeline's tables, and for whoever builds the
 Dataform models that will replace the pipeline.*
 
-The pipeline writes eleven tables, or twelve when
-`keep_other_free_text` is on. One schema file per table in
+The pipeline writes twelve tables. One schema file per table in
 [`src/hww_dashboard/schema/`](../src/hww_dashboard/schema/), in
 BigQuery's JSON schema format, fixes each table's columns, their order
 and types, which may be empty, and what each holds. Every table is
@@ -23,7 +22,7 @@ schemas.
 | `fact_engagement` | engagement event | `engagement_id` |
 | `dim_survey_response` | survey response (a row on Survey info) | `response_id` (the row's Count) |
 | `fact_survey_answer` | response and option chosen | `response_id`, `question_id`, `answer` |
-| `survey_other_text` | free text typed into an "Other (more info)" box (only when switched on) | `response_id`, `question_id` |
+| `survey_other_text` | free text typed into an "Other (more info)" box | `response_id`, `question_id` |
 | `question_catalogue` | question and answer option | `answer_id` |
 | `fact_was_session` | WAS session with any detail recorded | `session_id` |
 | `fact_was_session_topic` | session and topic | `session_id`, `topic` |

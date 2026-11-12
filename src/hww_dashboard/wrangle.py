@@ -127,8 +127,8 @@ COLUMNS = {
         "in_peer",
         "attribute_conflicts",
     ],
-    # Job roles and the flag columns' raw text are not output (data
-    # minimisation, DECISIONS_en.md 2026-10-18).
+    # Job roles and the flag columns' raw text are not output: no table
+    # or report uses them yet (DECISIONS_en.md, 2026-11-12).
     "fact_signup": [
         "signup_id",
         "employer_id",
@@ -229,7 +229,7 @@ REQUIRED_SETTINGS = {
         "completed_survey",
         "requested_was",
     ],
-    "survey": ["sheet", "header_row", "keep_other_free_text"],
+    "survey": ["sheet", "header_row"],
     "was": [
         "sheet",
         "header_row",
@@ -325,8 +325,8 @@ ASSUMPTIONS = [
     "A WAS session only counts as 'was_session_held' if it has a date.",
     "Survey % for a question = respondents who ticked the answer / "
     "respondents who gave any answer to that question.",
-    "Survey free text ('Other' boxes, 'What parts could be improved?') is "
-    "not output unless keep_other_free_text = true in config.toml.",
+    "Text typed into the 'Other (more info)' boxes is output in "
+    "survey_other_text, not as an answer.",
     "Peer mentoring 'relationships' = expressions of interest (no matching "
     "dates recorded yet).",
     "Job roles, and the text typed into 'Completed survey?' and "
@@ -467,7 +467,7 @@ class Report:
             path: File to write (overwritten).
             run_at: When the run started, shown at the top of the report.
         """
-        text = self.render(run_at, path.name)
+        text = self.render(run_at)
         path.write_text(text, encoding="utf-8", newline="\n")
 
     def attention_lines(self) -> list[str]:
@@ -482,20 +482,14 @@ class Report:
             for key, count in self.to_act_on().items()
         ] or ["None."]
 
-    def render(
-        self, run_at: datetime, filename: str = "data_quality_report.md"
-    ) -> str:
-        """Render the report as markdown, checked for contact details.
+    def render(self, run_at: datetime) -> str:
+        """Render the report as markdown.
 
         Args:
             run_at: When the run started, shown at the top of the report.
-            filename: The report's name, for the contact-detail message.
 
         Returns:
             The report's text.
-
-        Raises:
-            InputError: The report would hold a contact identifier.
         """
         lines = [
             "# Data quality report",
@@ -534,9 +528,7 @@ class Report:
         lines.append("")
         lines.extend(f"- {a}" for a in ASSUMPTIONS)
         lines.append("")
-        text = "\n".join(lines)
-        check_public_text(text, filename)
-        return text
+        return "\n".join(lines)
 
 
 def markdown_table(df: pd.DataFrame) -> str:
@@ -799,8 +791,6 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
                 valid = (type(value) is int and value >= 0) or (
                     isinstance(value, str) and bool(value.strip())
                 )
-            elif key == "keep_other_free_text":
-                valid = type(value) is bool
             elif key in ("sessions", "source_priority"):
                 valid = isinstance(value, list)
             else:
@@ -860,34 +850,11 @@ def check_config(cfg: Config, name: str = "config.toml") -> None:
         raise InputError(
             f"{name}: [checks] max_load_age_hours must be positive and finite."
         )
-    privacy = cfg.get("privacy", {})
-    if not isinstance(privacy, dict) or not isinstance(
-        privacy.get("personal_columns", []), list
-    ):
+    if "privacy" in cfg:
         raise InputError(
-            f"{name}: [privacy] personal_columns must be a list of names."
+            f"{name}: [privacy] is not a settings section. Move "
+            "org_overrides_file to [paths]."
         )
-    personal_columns = privacy.get("personal_columns", [])
-    if not all(isinstance(c, str) and c.strip() for c in personal_columns):
-        raise InputError(
-            f"{name}: [privacy] personal_columns must contain nonblank names."
-        )
-    personal = {clean_text(c).casefold() for c in personal_columns}
-    for source in SOURCES:
-        for key, value in cfg[source].items():
-            if key not in (
-                "file",
-                "completed_rule",
-                "topic_separator",
-            ):
-                if (
-                    isinstance(value, str)
-                    and clean_text(value).casefold() in personal
-                ):
-                    raise InputError(
-                        f"{name}: [{source}] {key} selects a personal column. "
-                        "Choose a non-personal business field."
-                    )
     numbers: set[int] = set()
     for number, session in enumerate(cfg["was"]["sessions"], start=1):
         if not isinstance(session, dict):
@@ -2074,7 +2041,6 @@ def unpivot_survey(
     columns_map: pd.DataFrame,
     answer_lookup: Mapping[tuple[str, str], str],
     translations: Mapping[tuple[str, str], str],
-    keep_other_text: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, Counter[tuple[str, str]]]:
     """Turn the wide Survey info sheet into long rows.
 
@@ -2086,14 +2052,12 @@ def unpivot_survey(
             written in survey_answers.csv.
         translations: (question_id, lower-case raw answer) -> English
             answer.
-        keep_other_text: Keep the free text typed into 'Other' boxes.
 
     Returns:
         (answers, other_text, new_answers):
           answers      one row per ticked option or single answer:
                        response_id, question_id, answer
-          other_text   free text typed into 'Other' boxes (empty unless
-                       keep_other_text)
+          other_text   free text typed into 'Other' boxes
           new_answers  (question_id, answer) pairs not found in
                        survey_answers.csv
     """
@@ -2123,14 +2087,13 @@ def unpivot_survey(
                 answer = translations.get((qid, text.casefold()), text)
                 answer = answer_lookup.get((qid, answer.casefold()), answer)
             else:
-                if keep_other_text:
-                    other_rows.append(
-                        {
-                            "response_id": response_id,
-                            "question_id": qid,
-                            "other_text": text,
-                        }
-                    )
+                other_rows.append(
+                    {
+                        "response_id": response_id,
+                        "question_id": qid,
+                        "other_text": text,
+                    }
+                )
                 continue
             if (qid, answer.casefold()) not in answer_lookup:
                 new_answers[(qid, answer)] += 1
@@ -2155,7 +2118,6 @@ def load_survey(
     lookups: Mapping[str, Lookup],
     overrides: Lookup,
     report: Report,
-    personal_columns: Sequence[str] = (),
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Read the employer survey responses on Survey info.
 
@@ -2170,15 +2132,13 @@ def load_survey(
         lookups: From ``load_mappings``.
         overrides: Organisation-name overrides.
         report: Data quality report.
-        personal_columns: Source headings that may only have the drop role.
 
     Returns:
         (survey, answers, other_text, columns_map):
           survey       one row per response with response_id, date, org
                        and the bands
           answers      long answers from ``unpivot_survey``
-          other_text   'Other' free text (empty unless
-                       keep_other_free_text)
+          other_text   'Other' free text
           columns_map  survey_columns.csv
 
     Raises:
@@ -2188,16 +2148,6 @@ def load_survey(
     columns_map = read_csv_text(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
     )
-
-    personal = {clean_text(c).casefold() for c in personal_columns}
-    selected_personal = columns_map["column"].map(
-        lambda c: clean_text(c).casefold() in personal
-    ) & columns_map["role"].ne("drop")
-    if selected_personal.any():
-        raise InputError(
-            "mappings/survey_columns.csv: personal columns must use "
-            "the drop role. Correct the mapping before running again."
-        )
     validate_survey_columns(columns_map)
 
     def column_for(role: str) -> str:
@@ -2275,8 +2225,7 @@ def load_survey(
     dropped = list(columns_map.loc[columns_map["role"] == "drop", "column"])
     report.add(
         "Survey checks",
-        "- Columns never read (personal, technical or free text): "
-        f"{', '.join(dropped)}.",
+        "- Columns never read (the drop role): " f"{', '.join(dropped)}.",
     )
 
     df = drop_blank_rows(df)
@@ -2347,7 +2296,6 @@ def load_survey(
         columns_map,
         answer_lookup,
         translations,
-        cfg["keep_other_free_text"],
     )
     for (qid, answer), n in sorted(new_answers.items()):
         report.add(
@@ -3353,34 +3301,6 @@ def reconcile(
         )
 
 
-def check_public_text(text: str, filename: str) -> None:
-    """Stop recognisable contact identifiers from reaching an output.
-
-    This guard catches email addresses, UK phone numbers (0 or +44 and
-    10 more digits, spaces, dashes and brackets allowed), IPv4
-    addresses and web links. It cannot identify arbitrary personal
-    names in free-form text.
-
-    Args:
-        text: Text destined for an output table or report.
-        filename: Output name to identify the repair without echoing data.
-
-    Raises:
-        InputError: Text contains a recognisable personal identifier.
-    """
-    pattern = (
-        r"[\w.+-]+@[\w-]+\.[\w.]+|"
-        r"(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|"
-        r"\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://"
-    )
-    if re.search(pattern, text, flags=re.IGNORECASE):
-        raise InputError(
-            f"{filename}: personal identifiers found in retained text. "
-            "Remove contact details from source fields and mappings "
-            "before running again."
-        )
-
-
 def check_excel_errors(cells: pd.DataFrame, filename: str) -> None:
     """Stop an Excel error value from reaching an output.
 
@@ -3428,7 +3348,7 @@ def csv_text(df: pd.DataFrame, name: str) -> str:
 def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
     """Write a table with its agreed columns. Dates come out as YYYY-MM-DD.
 
-    The text is checked for contact details and against the table's
+    The text is checked for Excel errors and against the table's
     schema (``hww_dashboard/schema/``) before anything is written.
 
     Args:
@@ -3441,12 +3361,10 @@ def write_csv(df: pd.DataFrame, folder: Path, name: str) -> int:
         Number of rows written.
 
     Raises:
-        InputError: The table holds a contact identifier or an Excel
-            error value.
+        InputError: The table holds an Excel error value.
         SchemaError: The table breaks its schema (a bug).
     """
     text = csv_text(df, name)
-    check_public_text(text, f"{name}.csv")
     cells = parse_csv(text)
     check_excel_errors(cells, f"{name}.csv")
     check_cells(cells, name)
@@ -3561,7 +3479,7 @@ def publish_bigquery(
 ) -> list[tuple[str, int]]:
     """Publish every table, the report and the run record to BigQuery.
 
-    The tables pass the same checks as in a folder (contact details,
+    The tables pass the same checks as in a folder (Excel errors,
     schema) and are sent as the same CSV text, so both targets publish
     the same rows. ``tables`` and ``report`` are updated as
     ``write_outputs`` updates them.
@@ -3578,7 +3496,7 @@ def publish_bigquery(
         (table name, rows published) for each table.
 
     Raises:
-        InputError: A table holds a contact identifier, or BigQuery
+        InputError: A table holds an Excel error value, or BigQuery
             reports a problem a person can fix (access, a missing
             dataset, a changed table, no network).
     """
@@ -3586,7 +3504,6 @@ def publish_bigquery(
     counts = []
     for name, df in tables.items():
         text = csv_text(df, name)
-        check_public_text(text, f"{name}.csv")
         cells = parse_csv(text)
         check_excel_errors(cells, f"{name}.csv")
         check_cells(cells, name)
@@ -3667,8 +3584,6 @@ def write_outputs(
             staged_tables[name] = df.reindex(columns=COLUMNS[name])
         add_output_counts(staged_report, counts, engagement)
         staged_report.write(stage / "data_quality_report.md", run_at)
-        if "survey_other_text" not in staged_tables:
-            (stage / "survey_other_text.csv").unlink(missing_ok=True)
         if record is not None:
             outputs: dict[str, dict[str, Any]] = {
                 name: {"rows": n, "sha256": sha256_file(stage / f"{name}.csv")}
@@ -3807,7 +3722,7 @@ def _run(
             ) from error
     bq_target = connect_bigquery(output) if target == "bigquery" else None
     report = Report()
-    private_overrides = cfg.get("privacy", {}).get("org_overrides_file")
+    private_overrides = cfg["paths"].get("org_overrides_file")
     overrides_path = (
         (base / str(private_overrides)).resolve()
         if private_overrides
@@ -3839,7 +3754,6 @@ def _run(
         lookups,
         overrides,
         report,
-        cfg.get("privacy", {}).get("personal_columns", []),
     )
     was, sessions, topics = load_was(
         cfg["was"], inputs, lookups, overrides, report
@@ -3888,6 +3802,7 @@ def _run(
         "fact_engagement": engagement,
         "dim_survey_response": responses,
         "fact_survey_answer": fact_answers,
+        "survey_other_text": other_text,
         "question_catalogue": catalogue,
         "fact_was_session": sessions,
         "fact_was_session_topic": topics,
@@ -3897,8 +3812,6 @@ def _run(
         "badges": pd.DataFrame(columns=COLUMNS["badges"]),
         "dim_date": dim_date,
     }
-    if cfg["survey"]["keep_other_free_text"]:
-        tables["survey_other_text"] = other_text
     checks = cfg.get("checks", {})
     compare_with_previous(
         report,

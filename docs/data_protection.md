@@ -4,16 +4,22 @@
 pipeline's tables. It describes what the code does; the decisions it
 lists at the end belong to the data owner and the DPO.*
 
+## Personal data in the outputs
+
+The DPIA approves personal data in the reporting (gold) tables
+(`DECISIONS_en.md`, 2026-11-12). The pipeline therefore has no check
+that stops a run, or hides a value, because it looks like an email
+address, a phone number or a link. What reaches an output is decided
+by the contracts, the mappings and each table's schema, and each
+column added to an output should be one the DPIA covers.
+
 ## What the inputs hold
 
-The three workbooks hold more than the pipeline needs. The columns
-listed under `[privacy] personal_columns` in `config.toml` are the known
-personal ones: names, email addresses (among them `Email address` on
-Survey info, the respondent's own address), job roles, contact
-details, accessibility requirements and adviser names. The list also
-covers the survey tool's own export: user IP address, user agent, user
-id, payment fields and report links. As well:
+The three workbooks hold more than the pipeline uses:
 
+- **Personal columns.** Names, email addresses (among them `Email
+  address` on Survey info, the respondent's own address), job roles,
+  contact details, accessibility requirements and adviser names.
 - **Organisation names.** For a sole trader or a very small employer,
   the name can identify a person.
 - **Free text.** The survey's "Other (more info)" boxes and "What parts
@@ -24,30 +30,22 @@ id, payment fields and report links. As well:
 ## What the pipeline reads
 
 Each sheet is read whole into memory, then only the columns named in
-`config.toml` and `mappings/survey_columns.csv` are used. Personal
-columns are read into memory but are not used or written to the
-dashboard's output tables.
+`config.toml` and `mappings/survey_columns.csv` are used.
 
 With `[landed] read = true`, the separate py-common ingestion job checks
-each workbook and loads only the contract's allowed columns into raw
+each workbook and loads only the contract's listed columns into raw
 tables, as a JSON payload per row with the file, version and Excel row
-it came from. Excluded columns never reach BigQuery. Unknown signup and survey columns are also rejected; the
+it came from. Excluded columns are not loaded. They are the columns no
+table uses yet, personal ones among them: the contact, job role,
+accessibility and adviser columns of the WAS database, the name, job
+role, email and adviser columns of the peer database, and, on Survey
+info, `Email address`, `Month`, "What parts could be improved?" and an
+empty column (the `drop` role). A column is loaded once a contract
+lists it. Unknown signup and survey columns are rejected; the
 mixed-value Number of sites exception applies only to that named column
-on each sheet. On Survey info, `Email address`, `Month`, "What parts
-could be improved?" and the "Other (more info)" boxes are excluded, so
-they never reach `hww_survey` (the boxes load only with
-`keep_other_free_text = true`). However,
-ingestion archives the complete original workbook in its object store,
-including excluded columns. Rejected files are retained in raw and
-quarantine storage. Exclusions do not redact those archived originals.
-
-Two checks run before any workbook is opened:
-
-- a setting in `config.toml` that names a column on the `[privacy]`
-  list stops the run;
-- a survey column on that list must have the `drop` role in
-  `mappings/survey_columns.csv`, or the run stops. `Email address` on
-  Survey info has that role.
+on each sheet. Ingestion archives the complete original workbook in its
+object store, including excluded columns. Rejected files are retained
+in raw and quarantine storage.
 
 ## What it writes
 
@@ -58,17 +56,10 @@ Only the columns in each table's schema are written
 |---|---|---|
 | `dim_employer.employer_name` | organisation names | can identify a sole trader |
 | every `employer_id` | a hash of the organisation name | pseudonymous, not anonymous: anyone with a list of names can recompute it |
-| `fact_signup` | one row per user: employer, sign-up month, flags | job roles and the flag cells' text are not written |
+| `fact_signup` | one row per user: employer, sign-up month, flags | job roles and the flag cells' text are not written, as no table uses them yet |
 | `fact_was_session`, `fact_was_session_topic` | session topics and durations | a value missing from the mapping files is kept as typed |
-| `survey_other_text` | free text from "Other (more info)" boxes | only written when `keep_other_free_text = true`; off by default |
-| `data_quality_report.md` | organisation names, and raw values that didn't map or couldn't be read | the dashboard's Home page shows the whole report |
-
-Before anything is written, every table and the report are checked for
-email addresses, UK phone numbers, IPv4 addresses and web links. One
-found stops the run (exit code 1), and the message names the table but
-never the value. The check can't recognise people's names or postal
-addresses in free text: only fixed lists of values (the mapping files)
-would rule those out.
+| `survey_other_text` | free text from "Other (more info)" boxes | written on every run, as typed |
+| `data_quality_report.md` | organisation names, and raw values that didn't map or couldn't be read | shown in full; the dashboard's Home page shows the whole report |
 
 ## Logs
 
@@ -103,7 +94,8 @@ audit records.
   reserved values (`example.org`, `192.0.2.x`), and a test fails if a
   real-looking email address, IP address or link appears in them.
   Real organisation overrides belong in a private file configured by
-  privacy.org_overrides_file, or a private reference table for Dataform.
+  `[paths] org_overrides_file`, or a private reference table for
+  Dataform.
   The committed override CSV remains an empty template. The repositories
   are public; no production values belong in Git or generated JavaScript.
 - **BigQuery** (in GCP, with `[output] target = "bigquery"`): the
@@ -135,19 +127,16 @@ completely).
 - Retention periods for inputs, outputs and logs, on laptops and in GCP.
 - Who may see the output tables and the report, and through what
   (dashboard, BigQuery, Power BI).
-- Whether `role` or the flag text should ever be output again. They
-  were removed on 2026-10-18 for data minimisation.
-- Whether free-text fields should be limited to fixed lists of values,
-  since the contact-detail check can't recognise names.
+- Which personal columns each new table or column may carry, as the
+  DPIA approves them.
 - Where `mappings/org_overrides.csv` lives once it holds real names.
 
 ## Dataform and production policy
 
 Silver includes retained source values and restricted data-quality output.
-Gold contains reporting data; assertion results and acceptance differences
-can also expose retained rows. Apply the approved access and retention
-policy to silver, gold, assertions, job history and logs as well as raw.
-Disabling free text empties current tables but does not erase old exports
-or backups. See [production operation](production.md) for the per-source
+Gold contains reporting data, personal data among it; assertion results
+and acceptance differences can also expose retained rows. Apply the
+approved access and retention policy to silver, gold, assertions, job
+history and logs as well as raw. See [production operation](production.md) for the per-source
 correction and erasure procedure, production roles, and decisions awaiting
 the data owner and IG lead. No retention period is approved by the code.

@@ -14,7 +14,6 @@ from hww_dashboard import wrangle
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 IP = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
-LINK = re.compile(r"https?://")
 
 
 def read_outputs(folder: Path) -> dict[str, pd.DataFrame]:
@@ -89,7 +88,7 @@ def unpivoted() -> tuple[pd.DataFrame, pd.DataFrame]:
     (Welsh for Sometimes) and No.
 
     Returns:
-        (answers, other_text) from ``unpivot_survey``, without free text.
+        (answers, other_text) from ``unpivot_survey``.
     """
     wide = pd.DataFrame(
         {
@@ -118,50 +117,13 @@ def unpivoted() -> tuple[pd.DataFrame, pd.DataFrame]:
     }
     translations = {("Q14", "weithiau"): "Sometimes"}
     answers, other_text, _ = wrangle.unpivot_survey(
-        wide, columns_map, answer_lookup, translations, False
+        wide, columns_map, answer_lookup, translations
     )
     return answers, other_text
 
 
 class TestRun:
-    """``run``: privacy and key rules hold across the whole output."""
-
-    def test_no_personal_columns_in_output(
-        self, outputs: dict[str, pd.DataFrame], settings: wrangle.Config
-    ) -> None:
-        """No column named in [privacy] personal_columns reaches a table.
-
-        Args:
-            outputs: Synthetic output tables.
-            settings: Source or pipeline settings.
-        """
-        personal = {
-            c.casefold() for c in settings["privacy"]["personal_columns"]
-        }
-        for name, df in outputs.items():
-            found = [c for c in df.columns if c.casefold() in personal]
-            assert not found, f"{name}.csv has personal column(s) {found}"
-
-    def test_no_personal_values_in_output(
-        self, outputs: dict[str, pd.DataFrame]
-    ) -> None:
-        """No email addresses, IP addresses or web links in any cell.
-
-        Args:
-            outputs: Synthetic output tables.
-        """
-        patterns = (
-            (EMAIL, "an email"),
-            (IP, "an IP address"),
-            (LINK, "a link"),
-        )
-        for name, df in outputs.items():
-            for column in df.columns:
-                for value in df[column]:
-                    for pattern, what in patterns:
-                        assert not pattern.search(
-                            value
-                        ), f"{name}.{column} contains {what}: {value}"
+    """``run``: key rules hold across the whole output."""
 
     def test_every_employer_id_exists_in_dim_employer(
         self, outputs: dict[str, pd.DataFrame]
@@ -254,10 +216,9 @@ class TestSyntheticInputs:
     """The committed inputs hold only reserved, synthetic personal data."""
 
     def test_personal_values_are_present(self, input_cells: list[str]) -> None:
-        """Email addresses exist, so the privacy tests can fail.
+        """Email addresses exist, so the reserved-example check has work.
 
-        The workbooks the pipeline reads hold no IP addresses or links;
-        TestCheckPublicText checks those with made-up values.
+        The workbooks the pipeline reads hold no IP addresses or links.
 
         Args:
             input_cells: Synthetic worksheet cells.
@@ -288,17 +249,23 @@ class TestSyntheticInputs:
 class TestUnpivotSurvey:
     """``unpivot_survey``: the wide sheet becomes one row per answer."""
 
-    def test_free_text_stays_out(
+    def test_free_text_is_kept_apart(
         self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
     ) -> None:
-        """Text typed into an Other box is neither an answer nor kept.
+        """Text typed into an Other box is kept, but not as an answer.
 
         Args:
             unpivoted: Synthetic long-form survey rows.
         """
         answers, other_text = unpivoted
         assert "my free text" not in set(answers["answer"])
-        assert other_text.empty
+        assert other_text.to_dict("records") == [
+            {
+                "response_id": "R1",
+                "question_id": "Q04",
+                "other_text": "my free text",
+            }
+        ]
 
     def test_ticked_boxes_give_the_mapped_option(
         self, unpivoted: tuple[pd.DataFrame, pd.DataFrame]
@@ -349,7 +316,6 @@ class TestUnpivotSurvey:
                 specs,
                 {},
                 {},
-                False,
             )
 
     @pytest.mark.parametrize("blank", [" ", "\xa0", " \xa0 ", "_x000D_"])
@@ -371,7 +337,6 @@ class TestUnpivotSurvey:
             specs,
             {},
             {},
-            False,
         )
         assert list(answers["response_id"]) == ["R2"]
 
@@ -386,34 +351,8 @@ class TestUnpivotSurvey:
             specs,
             {("Q01", "yes"): "Yes"},
             {},
-            False,
         )
         assert list(answers["answer"]) == ["Yes"]
-
-    def test_explicit_free_text_opt_in(self) -> None:
-        """Opting in returns Other text separately from coded answers."""
-        specs = pd.DataFrame(
-            [["Other", "other_text", "Q01", ""]],
-            columns=wrangle.MAPPING_COLUMNS["survey_columns"],
-        )
-        answers, other, new = wrangle.unpivot_survey(
-            pd.DataFrame(
-                {"response_id": ["R1"], "Other": ["Business suggestion"]}
-            ),
-            specs,
-            {},
-            {},
-            True,
-        )
-        assert answers.empty
-        assert not new
-        assert other.to_dict("records") == [
-            {
-                "response_id": "R1",
-                "question_id": "Q01",
-                "other_text": "Business suggestion",
-            }
-        ]
 
 
 class TestCountValues:
@@ -660,7 +599,7 @@ class TestWriteOutputs:
     def test_success_replaces_generation(
         self, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Successful publication removes stale free text and keeps notes.
+        """Successful publication replaces the tables and keeps notes.
 
         Args:
             tmp_path: Isolated test folder.
@@ -669,7 +608,6 @@ class TestWriteOutputs:
         out = tmp_path / "out"
         out.mkdir()
         (out / "notes.txt").write_text("keep", encoding="utf-8")
-        (out / "survey_other_text.csv").write_text("stale", encoding="utf-8")
         tables = {"badges": pd.DataFrame({"badge": ["Award"]})}
         report = wrangle.Report()
         counts = wrangle.write_outputs(
@@ -678,7 +616,6 @@ class TestWriteOutputs:
         assert counts == [("badges", 1)]
         assert list(tables["badges"].columns) == wrangle.COLUMNS["badges"]
         assert (out / "notes.txt").read_text() == "keep"
-        assert not (out / "survey_other_text.csv").exists()
         assert (
             "Run at 2026-10-10 12:00."
             in (out / "data_quality_report.md").read_text()
@@ -687,27 +624,33 @@ class TestWriteOutputs:
 
 
 class TestWriteCsv:
-    """Output schema filtering also checks retained values for identifiers."""
+    """``write_csv``: the agreed columns, checked against the schema."""
 
     @pytest.mark.parametrize(
-        "value", ["person@example.org", "192.0.2.4", "https://example.org/p"]
+        "value",
+        [
+            "person@example.org",
+            "07700 900123",
+            "192.0.2.4",
+            "https://example.org/p",
+        ],
     )
-    def test_blocks_personal_values(self, tmp_path: Path, value: str) -> None:
-        """Stop personal text pasted into a retained output field.
+    def test_writes_contact_details(self, tmp_path: Path, value: str) -> None:
+        """Contact details in a published column are written unchanged.
 
         Args:
             tmp_path: Temporary output folder.
-            value: Reserved synthetic personal identifier.
+            value: A synthetic email, phone number, IP address or link.
         """
-        with pytest.raises(wrangle.InputError, match="badges.csv") as error:
-            wrangle.write_csv(
-                pd.DataFrame({"badge": [value]}), tmp_path, "badges"
-            )
-        assert value not in str(error.value)
-        assert not (tmp_path / "badges.csv").exists()
+        frame = pd.DataFrame(
+            {"employer_id": ["E1"], "badge": [value], "awarded_date": [""]}
+        )
+        assert wrangle.write_csv(frame, tmp_path, "badges") == 1
+        written = pd.read_csv(tmp_path / "badges.csv", dtype=str)
+        assert written.loc[0, "badge"] == value
 
-    def test_schema_dates_and_private_columns(self, tmp_path: Path) -> None:
-        """Extra personal columns are dropped and dates use ISO format.
+    def test_schema_dates_and_extra_columns(self, tmp_path: Path) -> None:
+        """Columns not in the schema are dropped and dates use ISO format.
 
         Args:
             tmp_path: Isolated test folder.
@@ -727,23 +670,22 @@ class TestWriteCsv:
 
 
 class TestReport:
-    """Reports must not leak personal text through warnings."""
+    """``Report``: the notes of a run, written as data_quality_report.md."""
 
-    def test_blocks_personal_values(
+    def test_keeps_contact_details(
         self, tmp_path: Path, run_time: datetime
     ) -> None:
-        """Reject identifiers in report notes without echoing them.
+        """A note holding an email address is written as it is.
 
         Args:
             tmp_path: Isolated test folder.
             run_time: Fixed analysis timestamp.
         """
         report = wrangle.Report()
-        report.add("Warnings", "bad value person@example.org")
+        report.add("Warnings", "unmapped value person@example.org")
         path = tmp_path / "data_quality_report.md"
-        with pytest.raises(wrangle.InputError, match="data_quality_report.md"):
-            report.write(path, run_time)
-        assert not path.exists()
+        report.write(path, run_time)
+        assert "unmapped value person@example.org" in path.read_text("utf-8")
 
     def test_repeated_write_is_identical(
         self, tmp_path: Path, run_time: datetime

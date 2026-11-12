@@ -148,7 +148,7 @@ in those folders; a file it has already loaded is skipped.
 
 The contracts are in `src/hww_dashboard/landing.py`, one per
 workbook. Each sheet lists the columns `wrangle.py` uses, with their
-types, and the columns to leave out (personal and unused ones), which
+types, and the columns to leave out (the ones no table uses yet), which
 are never loaded. A workbook with a column the contract doesn't know,
 a listed column missing, or a value of the wrong type is quarantined
 (copied to `store/quarantine/`) and nothing from it loads, on any of

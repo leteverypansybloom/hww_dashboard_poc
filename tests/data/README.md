@@ -27,8 +27,8 @@ non-breaking spaces of the dummy workbook.
 
 Values in personal and technical columns that the pipeline never reads
 were replaced with reserved, obviously synthetic values. They keep the
-shape of the real thing, so the privacy tests still have something to
-catch:
+shape of the real thing, so the tests that check for reserved values
+still have something to catch:
 
 | Workbook | Column | Synthetic value |
 |---|---|---|

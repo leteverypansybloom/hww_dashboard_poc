@@ -13,6 +13,49 @@ earlier entry as superseded.
 The format is the one py-common uses (`DECISIONS_en.md` in that
 repository).
 
+## 2026-11-12 - Personal data in gold
+
+### The DPIA approves personal data in the reporting tables
+
+The HWW DPIA approves personal data in the gold (reporting) tables, and
+later work will need it. Nothing in either pipeline now stops a run, or
+hides a value, because the data is personal:
+
+- no output or report is checked for email addresses, phone numbers,
+  IPv4 addresses or links (`check_public_text`,
+  `assert_no_contact_details` and that part of each `gold_*_contract`
+  are gone), and `data_quality_issues` shows raw values in full;
+- `[privacy] personal_columns`, and the rule that a personal survey
+  column has the `drop` role, are gone from `wrangle.py`, the survey
+  contract and `includes/hww.js`;
+- `keep_other_free_text` is gone: `survey_other_text` holds the
+  "Other (more info)" text on every run, in both routes.
+
+`org_overrides_file` moves to `[paths]`, and a `[privacy]` section stops
+the run, so an overrides file left there is not silently ignored.
+
+A column still reaches gold only when a contract loads it and a schema
+lists it. No new personal column is loaded or published: the dashboard
+wireframes need none, so the WAS and peer contact, job role, adviser and
+email columns, and Survey info's `Email address`, stay excluded, and job
+roles and flag text stay out of `fact_signup`. A column added later
+should be one the DPIA covers. Keeping cell values out of logs, error
+messages and audit records, keeping real data out of Git, and access
+to each dataset are unchanged.
+
+Supersedes "Job roles and flag text leave fact_signup; phone numbers are
+refused" (2026-10-18), the "Contact identifiers are refused" point of
+"Code-quality review" (2026-10-17) and "Privacy by allow-list"
+(2026-10-10).
+
+Not chosen: keeping the contact-detail check as a warning. It would
+flag the data the DPIA approves on every run.
+
+**Trade-off**: a contact detail typed into a published field is
+published; the DPIA and dataset access cover it, not a pattern check.
+Benefit: later work can use the personal data the DPIA approves, and
+neither route refuses or hides a value for its shape.
+
 ## 2026-11-10 - Production runs in Cloud Run
 
 ### A Cloud Run job built from GitHub runs production
@@ -445,6 +488,9 @@ BigQuery's CSV loader reads the current style with the schema.
 
 ### Job roles and flag text leave fact_signup; phone numbers are refused
 
+*Superseded by "The DPIA approves personal data in the reporting
+tables" (2026-11-12).*
+
 `fact_signup` kept each user's job role (free text such as "School
 nurse") and the raw text of the two flag columns. With the employer
 and the month, a role can identify a person at a small employer, and
@@ -683,9 +729,10 @@ changed what stops a run. These are decisions as well as fixes:
 - **Outputs are staged, then swapped in.** The whole set is written to
   a temporary folder, which then replaces the output folder; the
   previous folder is restored if that fails.
-- **Contact identifiers are refused.** An email address, IPv4 address
-  or web link in any output, the report included, stops the run, and
-  the message never repeats the value.
+- **Contact identifiers are refused.** *Superseded by "The DPIA
+  approves personal data in the reporting tables" (2026-11-12).* An
+  email address, IPv4 address or web link in any output, the report
+  included, stops the run, and the message never repeats the value.
 - **Dates.** Text in ISO form is read year first, and Excel serial
   numbers are read as dates (1900 epoch).
 - **The golden test is read-only.** Tests never rewrite
@@ -736,6 +783,9 @@ way every time and listed in the data quality report.
 typo doesn't stop the monthly refresh, and nobody misses it either.
 
 ### Privacy by allow-list
+
+*Superseded by "The DPIA approves personal data in the reporting
+tables" (2026-11-12).*
 
 Only the columns named in `COLUMNS` are written; survey columns with
 the `drop` role are never used; free text is off by default.

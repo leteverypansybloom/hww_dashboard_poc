@@ -36,10 +36,10 @@
   (`WAS-row22`).
 - `config.gcp.dummy.toml`: `config.gcp.toml` with the dummy workbooks,
   for proving a GCP set-up before the real exports exist.
-- `privacy.org_overrides_file` and the Dataform variable
+- `[paths] org_overrides_file` and the Dataform variable
   `org_overrides_table`: real organisation overrides stay out of Git.
   A committed `mappings/org_overrides.csv` with rows is refused.
-- Dataform checks that run before any gold table: keys, contact details,
+- Dataform checks that run before any gold table: keys,
   row counts, freshness, payload keys and duplicate loads.
 - `hww_gold.published_loads`, recording the loads behind each published
   run, which the row-count check compares with.
@@ -50,6 +50,17 @@
 
 ### Changed
 
+- **Personal data may reach the reporting tables**, as the DPIA
+  approves (`DECISIONS_en.md`, 2026-11-12). No check stops a run or
+  hides a value for looking like an email address, phone number or
+  link, in `wrangle.py` or in Dataform. The data quality report and
+  `data_quality_issues` show raw values in full.
+- `survey_other_text` is written on every run, in both routes, with the
+  text typed into the "Other (more info)" boxes, and the Survey info
+  contract loads those boxes. The golden snapshot and the hand-worked
+  scenario have the table.
+- A `[privacy]` section in the config stops the run: `org_overrides_file`
+  belongs in `[paths]`.
 - Every contract refuses a file over 5 MiB or a table over 2,000,000
   cells (`landing.MAX_FILE_BYTES`, `landing.MAX_CELLS`), instead of
   py-common's 50 MiB and 5,000,000.
@@ -69,8 +80,7 @@
   route, and a workbook with formula cells holding no saved value.
 - One publication lease covers the read and publish of a GCP run.
 - `raw_latest_loads` is a table built once per Dataform run, and picks
-  the highest GCS generation. `survey_other_text` is always rebuilt, and
-  empty when free text is switched off.
+  the highest GCS generation.
 - `HeadingCheckedContract` is gone: `Column` type `"any"` from py-common
   does its job.
 
@@ -127,6 +137,13 @@
 
 ### Removed
 
+- The contact-detail check on every output and the report
+  (`check_public_text`), Dataform's `assert_no_contact_details`, the
+  contact-detail part of each `gold_*_contract` and the redaction in
+  `data_quality_issues`.
+- `[privacy] personal_columns`, the rule that a personal survey column
+  has the `drop` role, and Dataform's personal-column list.
+- The `keep_other_free_text` setting and Dataform variable.
 - `landing.ROW_COLUMN`, `ROW_FIELD`, `LOADED_AT` and the Parquet tables.
 - The upload-triggered Cloud Run service (`hww_dashboard.service`, the
   `service` extra and its Pub/Sub and Eventarc set-up). The daily run picks

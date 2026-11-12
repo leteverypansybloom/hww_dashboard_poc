@@ -58,7 +58,7 @@ jobs:
       - name: Compile with every option switched on
         run: >
           npx --yes @dataform/cli@3.0.71 compile
-          --vars=keep_other_free_text=true,expected_dataset=hww_expected,completed_rule=last_session_held
+          --vars=expected_dataset=hww_expected,completed_rule=last_session_held
 
   publish:
     needs: compile

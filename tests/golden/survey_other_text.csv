@@ -1,0 +1,55 @@
+response_id,question_id,other_text
+103,Q07,Made-up note for this test
+103,Q10,Synthetic answer with a line break
+102,Q12,"Example text, not a real response"
+101,Q10,Synthetic answer with a line break
+98,Q12,Made-up note for this test
+96,Q07,"Example text, not a real response"
+95,Q07,Made-up note for this test
+95,Q08,Synthetic answer with a line break
+95,Q09,"Example text, not a real response"
+95,Q10,Made-up note for this test
+93,Q08,"Example text, not a real response"
+90,Q10,Made-up note for this test
+87,Q04,Synthetic answer with a line break
+85,Q05,"Example text, not a real response"
+85,Q10,Made-up note for this test
+84,Q10,Synthetic answer with a line break
+77,Q08,Made-up note for this test
+69,Q04,Synthetic answer with a line break
+66,Q12,"Example text, not a real response"
+64,Q07,Synthetic answer with a line break
+56,Q10,"Example text, not a real response"
+56,Q12,Made-up note for this test
+52,Q07,"Example text, not a real response"
+50,Q04,Made-up note for this test
+50,Q08,Synthetic answer with a line break
+49,Q08,"Example text, not a real response"
+46,Q10,Made-up note for this test
+44,Q07,"Example text, not a real response"
+43,Q07,Made-up note for this test
+41,Q12,Synthetic answer with a line break
+40,Q08,"Example text, not a real response"
+40,Q10,Made-up note for this test
+36,Q04,Synthetic answer with a line break
+35,Q12,"Example text, not a real response"
+33,Q10,Made-up note for this test
+31,Q08,Synthetic answer with a line break
+31,Q10,"Example text, not a real response"
+30,Q12,Made-up note for this test
+27,Q10,Synthetic answer with a line break
+25,Q08,"Example text, not a real response"
+25,Q09,Made-up note for this test
+25,Q10,Synthetic answer with a line break
+22,Q08,"Example text, not a real response"
+22,Q09,Made-up note for this test
+22,Q10,Synthetic answer with a line break
+20,Q08,"Example text, not a real response"
+19,Q10,Made-up note for this test
+13,Q12,Made-up note for this test
+10,Q04,Synthetic answer with a line break
+9,Q08,"Example text, not a real response"
+7,Q08,"Example text, not a real response"
+3,Q08,Made-up note for this test
+3,Q09,Synthetic answer with a line break
+3,Q10,"Example text, not a real response"

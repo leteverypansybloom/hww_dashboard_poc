@@ -41,8 +41,8 @@ repository (README, `docs/RAW_JSON_VS_CONTRACT_VALIDATION.md`,
 - **py-common lands the files.** Each workbook arrives in its own
   folder of a GCS landing bucket (SharePoint files are copied there
   first) and keeps one agreed file name. A contract per workbook reads
-  the heading row, loads only the columns it lists, leaves personal
-  columns out, and quarantines an export when its layout drifts.
+  the heading row, loads only the columns it lists, leaves the rest
+  out, and quarantines an export when its layout drifts.
   Every row of every configured worksheet is inserted into a raw
   BigQuery table (`raw_hww.hww_was_database`, for example) as a JSON
   payload, with the file's version, an audit record and a kept copy of
@@ -63,7 +63,7 @@ design (its `INGESTION_FRAMEWORK_GUIDE.md`, section 8).
 |---|---|---|
 | `input_folder`, `input_file` | Find each workbook in a local folder by its name; the monitoring workbook holds both Account signups and Survey info | py-common `GCSSource`, one landing folder per workbook, fixed names; the monitoring workbook's folder feeds the signups and survey tables |
 | `read_sheet`, `require`, `check_config` | Read a sheet by name or position below a heading row; stop with a clear message on missing files, sheets or columns | py-common `Contract` (heading row, listed columns, warn or quarantine) |
-| `COLUMNS`, survey `drop` roles, `keep_other_free_text` | Never write personal columns or free text (the tests check against `[privacy]` in the config) | py-common contracts' `excluded` columns (personal data never loaded), then Dataform's selected columns |
+| `COLUMNS`, survey `drop` roles | Write only the columns each table's schema lists | py-common contracts' listed and `excluded` columns, then Dataform's selected columns |
 | `clean_text`, `to_date`, `drop_blank_rows` | Tidy cells, read dates day-first, skip blank rows | Dataform staging models (`SAFE_CAST`, trimming) |
 | `mappings/*.csv`, `map_value`, `map_bands` | Map messy labels to agreed bands | Dataform reference tables loaded from the same CSVs |
 | `build_dim_employer`, `pick_value`, `org_overrides.csv` | One employer per organisation, explainable tie-breaks | Dataform employer model (identity resolution) |
@@ -177,11 +177,6 @@ A suggested order, each step useful on its own:
 
 Concrete opportunities:
 
-- **One personal-column list.** `[privacy] personal_columns` in
-  `config.toml` and the `drop` roles in `survey_columns.csv` list the
-  same columns that the HWW contracts' `excluded` lists must hold. A
-  test in the solution repository can check that every column listed
-  here is excluded there.
 - **Shared synthetic fixtures.** `tests/data/inputs/` holds copies of
   the dummy workbooks in which every personal value is a reserved
   example (`example.org`, `192.0.2.10`). py-common's `docs/` folder

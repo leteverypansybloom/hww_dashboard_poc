@@ -408,24 +408,6 @@ class TestPublish:
                 golden_tables(), "", record("r"), DATASET, client
             )
 
-    def test_switched_off_free_text_is_emptied(
-        self, client: FakeClient
-    ) -> None:
-        """Free text from an earlier run goes when the option is off.
-
-        Args:
-            client: A fake BigQuery.
-        """
-        tables = golden_tables()
-        with_text = dict(
-            tables,
-            survey_other_text="response_id,question_id,other_text\nR,Q,x\n",
-        )
-        bigquery_output.publish(with_text, "", record("r1"), DATASET, client)
-        assert len(client.rows("survey_other_text")) == 1
-        bigquery_output.publish(tables, "", record("r2"), DATASET, client)
-        assert client.rows("survey_other_text") == []
-
 
 class TestLatestRecord:
     """``latest_record``: the last run, to compare row counts with."""

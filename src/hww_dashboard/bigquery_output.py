@@ -231,9 +231,8 @@ def commit_script(
 
     Args:
         dataset: ``project.dataset``.
-        columns: Table -> column names. The value for a table that only
-            needs emptying (a switched-off free-text table) is empty.
-            ``runs`` is appended to, never emptied.
+        columns: Table -> column names. ``runs`` is appended to,
+            never emptied.
         suffix: The staging tables' suffix, from :func:`staging_suffix`.
 
     Returns:
@@ -245,13 +244,12 @@ def commit_script(
         final = f"`{dataset}.{table}`"
         if table != RUNS:
             lines.append(f"  DELETE FROM {final} WHERE TRUE;")
-        if names:
-            listed = ", ".join(names)
-            staging = f"`{dataset}.{table}_{suffix}`"
-            lines.append(
-                f"  INSERT INTO {final} ({listed}) "
-                f"SELECT {listed} FROM {staging};"
-            )
+        listed = ", ".join(names)
+        staging = f"`{dataset}.{table}_{suffix}`"
+        lines.append(
+            f"  INSERT INTO {final} ({listed}) "
+            f"SELECT {listed} FROM {staging};"
+        )
     lines += [
         "  COMMIT TRANSACTION;",
         "EXCEPTION WHEN ERROR THEN",
@@ -481,15 +479,6 @@ def _publish(
     for name, (fields, _rows) in loads.items():
         ensure_table(client, f"{dataset}.{name}", fields)
         columns[name] = [f.name for f in fields]
-    if "survey_other_text" not in tables:
-        # Free text switched off: empty the table if an earlier run
-        # wrote it, in the same transaction.
-        try:
-            client.get_table(f"{dataset}.survey_other_text")
-        except NotFound:
-            pass
-        else:
-            columns = {"survey_other_text": [], **columns}
 
     suffix = staging_suffix(str(record["run_id"]))
     staged: list[str] = []

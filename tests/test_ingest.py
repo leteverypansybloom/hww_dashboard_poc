@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from openpyxl import load_workbook
 
 from hww_dashboard import wrangle
 
@@ -393,7 +394,6 @@ class TestCheckConfig:
     @pytest.mark.parametrize(
         ("section", "key", "value"),
         [
-            ("survey", "keep_other_free_text", "false"),
             ("survey", "sheet", True),
             ("survey", "header_row", 0),
             ("survey", "header_row", True),
@@ -419,16 +419,28 @@ class TestCheckConfig:
         with pytest.raises(wrangle.InputError, match="config.toml"):
             wrangle.check_config(settings)
 
-    def test_rejects_personal_source_column(
+    def test_accepts_a_personal_source_column(
         self, settings: wrangle.Config
     ) -> None:
-        """A personal name cannot be configured as the employer name.
+        """A setting can name a personal column, such as a person's name.
 
         Args:
             settings: Source or pipeline settings.
         """
         settings["signups"]["org"] = "Full Name"
-        with pytest.raises(wrangle.InputError, match="personal"):
+        settings.pop("privacy", None)
+        wrangle.check_config(settings)
+
+    def test_rejects_a_privacy_section(self, settings: wrangle.Config) -> None:
+        """A [privacy] section stops the run, naming where its file goes.
+
+        An overrides file left under [privacy] would otherwise go unread.
+
+        Args:
+            settings: Source or pipeline settings.
+        """
+        settings["privacy"] = {"org_overrides_file": "private.csv"}
+        with pytest.raises(wrangle.InputError, match=r"\[paths\]"):
             wrangle.check_config(settings)
 
     @pytest.fixture
@@ -632,7 +644,7 @@ class TestMain:
         [log_file] = (tmp_path / "logs").glob("*.log")
         text = log_file.read_text("utf-8")
         assert f"Run {log_file.stem}" in text
-        assert "Wrote 11 tables" in text
+        assert "Wrote 12 tables" in text
         assert "Report needs attention: 1 value(s) not in the" in text
 
     def test_json_mode_logs_lines_of_json_and_no_file(
@@ -920,49 +932,51 @@ class TestLoadSurvey:
                 wrangle.Report(),
             )
 
-    def test_personal_heading_must_be_dropped(
-        self, tmp_path: Path, project_folder: Path, settings: wrangle.Config
+    def test_email_column_can_be_read(
+        self,
+        tmp_path: Path,
+        project_folder: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
     ) -> None:
-        """Reject personal survey columns before opening a workbook.
+        """A personal column read by its mapping role is read as any other.
 
         Args:
             tmp_path: Isolated test folder.
             project_folder: Project source folder.
+            fixture_config: Frozen synthetic configuration.
             settings: Source or pipeline settings.
         """
         maps = tmp_path / "maps"
         shutil.copytree(project_folder / "mappings", maps)
         path = maps / "survey_columns.csv"
         table = wrangle.read_csv_text(path)
-        table.loc[0, "column"] = "Full Name"
+        email = table["column"] == "Email address"
+        table.loc[email, ["role", "question_id"]] = ["single", "Q16"]
         table.to_csv(path, index=False)
-        with pytest.raises(wrangle.InputError, match="personal columns"):
-            wrangle.load_survey(
-                settings["survey"],
-                wrangle.FolderInputs(tmp_path),
-                maps,
-                {},
-                {},
-                wrangle.Report(),
-                ["Full Name"],
-            )
+        lookups, overrides = wrangle.load_mappings(maps)
+        _, answers, _, _ = wrangle.load_survey(
+            settings["survey"],
+            wrangle.FolderInputs(fixture_config.parent / "inputs"),
+            maps,
+            lookups,
+            overrides,
+            wrangle.Report(),
+        )
+        assert answers["answer"].str.endswith("@example.org").any()
 
 
 class TestLoadConfig:
     """Read configuration without opening any real workbooks."""
 
     def test_valid_fixture(self, fixture_config: Path) -> None:
-        """The frozen config keeps optional free text disabled.
+        """The frozen config loads, with the survey sheet it names.
 
         Args:
             fixture_config: Frozen synthetic configuration.
         """
-        assert (
-            wrangle.load_config(fixture_config)["survey"][
-                "keep_other_free_text"
-            ]
-            is False
-        )
+        cfg = wrangle.load_config(fixture_config)
+        assert cfg["survey"]["sheet"] == "Survey info"
 
     def test_missing_and_invalid_files(self, tmp_path: Path) -> None:
         """Missing and malformed TOML are actionable input errors.
@@ -1248,55 +1262,6 @@ class TestValidateSurveyColumns:
             wrangle.validate_survey_columns(specs)
 
 
-class TestCheckPublicText:
-    """Contact guards inspect values without echoing them in diagnostics."""
-
-    def test_case_insensitive_links(self) -> None:
-        """Ordinary business text passes while uppercase web links fail."""
-        wrangle.check_public_text("Ordinary business text", "output.csv")
-        with pytest.raises(wrangle.InputError, match="output.csv"):
-            wrangle.check_public_text("HTTPS://example.org", "output.csv")
-
-    @pytest.mark.parametrize(
-        "phone",
-        [
-            "07700 900123",
-            "07700900123",
-            "+44 7700 900123",
-            "(029) 2018 0123",
-            "0161-496-0123",
-        ],
-    )
-    def test_uk_phone_numbers_are_caught(self, phone: str) -> None:
-        """UK phone numbers stop the run, and the message omits them.
-
-        Args:
-            phone: A phone number in one of the usual layouts (all in
-                Ofcom's ranges reserved for drama).
-        """
-        with pytest.raises(wrangle.InputError) as error:
-            wrangle.check_public_text(f"call {phone} today", "notes.csv")
-        assert phone not in str(error.value)
-
-    @pytest.mark.parametrize(
-        "text",
-        [
-            "2025-11-01;2026-08-01",
-            "E0016300d,Org 1,2026-04-01",
-            "PM-0011,WAS-10-S2,19460",
-            "answer_order 999, fin_year 2025-26",
-            "001234567890123",
-        ],
-    )
-    def test_ordinary_numbers_pass(self, text: str) -> None:
-        """Dates, ids and long reference numbers aren't phone numbers.
-
-        Args:
-            text: Text like the pipeline's own outputs.
-        """
-        wrangle.check_public_text(text, "output.csv")
-
-
 class TestRun:
     """The pipeline handles a generation with no source records."""
 
@@ -1324,12 +1289,111 @@ class TestRun:
             settings[source]["allow_empty"] = True
         config.write_text(to_toml(settings), encoding="utf-8")
         tables = wrangle.run(config, now=run_time)
-        assert set(tables) == set(wrangle.COLUMNS) - {"survey_other_text"}
+        assert set(tables) == set(wrangle.COLUMNS)
         for name, table in tables.items():
             assert list(table.columns) == wrangle.COLUMNS[name]
             if name != "question_catalogue":
                 assert table.empty, name
         assert not tables["question_catalogue"].empty
+
+    def test_contact_details_in_an_output_column_publish(
+        self,
+        tmp_path: Path,
+        fixture_config: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """An email address in a published column is written as it is.
+
+        Args:
+            tmp_path: Holds the copied workbooks and the output.
+            fixture_config: The frozen config, whose inputs are copied.
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+        """
+        inputs = tmp_path / "inputs"
+        shutil.copytree(fixture_config.parent / "inputs", inputs)
+        signups = settings["signups"]
+        workbook = load_workbook(inputs / signups["file"])
+        sheet = workbook[signups["sheet"]]
+        org = next(
+            cell.column
+            for cell in sheet[signups["header_row"]]
+            if cell.value == signups["org"]
+        )
+        assert isinstance(org, int)
+        sheet.cell(signups["header_row"] + 1, org, "person@example.org")
+        workbook.save(inputs / signups["file"])
+        workbook.close()
+        config = write_config(settings)
+        settings["paths"]["input_folder"] = str(inputs)
+        config.write_text(to_toml(settings), encoding="utf-8")
+
+        tables = wrangle.run(config, now=run_time)
+
+        assert "person@example.org" in set(
+            tables["dim_employer"]["employer_name"]
+        )
+        written = (tmp_path / "out" / "dim_employer.csv").read_text("utf-8")
+        assert "person@example.org" in written
+
+    def test_a_private_overrides_file_renames_employers(
+        self,
+        tmp_path: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """[paths] org_overrides_file takes the place of the committed CSV.
+
+        Args:
+            tmp_path: Holds the overrides file and the output.
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+        """
+        overrides = tmp_path / "private_overrides.csv"
+        overrides.write_text(
+            "raw_name,canonical_name\nOrg 1,Renamed Org\n", encoding="utf-8"
+        )
+        settings["paths"]["org_overrides_file"] = str(overrides)
+
+        tables = wrangle.run(write_config(settings), now=run_time)
+
+        names = set(tables["dim_employer"]["employer_name"])
+        assert "Renamed Org" in names
+        assert "Org 1" not in names
+        record = json.loads(
+            (tmp_path / "out" / "run_record.json").read_text("utf-8")
+        )
+        files = [m["file"] for m in record["mappings"]]
+        assert "private_overrides.csv" in files
+
+    def test_other_box_text_is_published(
+        self,
+        tmp_path: Path,
+        settings: wrangle.Config,
+        write_config: ConfigWriter,
+        run_time: datetime,
+    ) -> None:
+        """Text typed into the Other boxes is written to survey_other_text.
+
+        Args:
+            tmp_path: Holds the output.
+            settings: A copy of the fixture config.
+            write_config: Writes a config that reads the synthetic inputs.
+            run_time: The tests' fixed run time.
+        """
+        tables = wrangle.run(write_config(settings), now=run_time)
+
+        assert not tables["survey_other_text"].empty
+        written = pd.read_csv(
+            tmp_path / "out" / "survey_other_text.csv", dtype=str
+        )
+        assert list(written.columns) == wrangle.COLUMNS["survey_other_text"]
+        assert len(written) == len(tables["survey_other_text"])
 
     def test_an_empty_source_stops_the_run(
         self,

@@ -152,7 +152,7 @@ def landed_run(
 
 
 class TestContracts:
-    """The HWW contracts accept the workbooks and keep personal data out."""
+    """The HWW contracts accept the workbooks and load what they list."""
 
     def test_every_source_loads(self, landed_run: Path) -> None:
         """Each source's raw table has the workbook's data rows.
@@ -198,7 +198,7 @@ class TestContracts:
     def test_survey_info_loads_only_what_the_map_reads(
         self, landed_run: Path
     ) -> None:
-        """Email address, Month and free text stay out; sites are in.
+        """Dropped columns stay out; free text and sites are in.
 
         Args:
             landed_run: Folder holding a synthetic ingestion run.
@@ -206,7 +206,7 @@ class TestContracts:
         keys = payload_keys(landed_run / "landed", "hww_survey")
         assert "Email address" not in keys
         assert "Month" not in keys
-        assert not [key for key in keys if "more info" in key]
+        assert [key for key in keys if "more info" in key]
         assert "Number of sites" in keys
 
     def test_new_survey_column_quarantines_the_whole_workbook(
@@ -260,20 +260,26 @@ class TestContracts:
         assert contract.worksheet.excluded
         assert not keys & set(contract.worksheet.excluded)
 
-    def test_personal_columns_are_not_loaded(self, landed_run: Path) -> None:
-        """No column named in [privacy] reaches a raw table.
+    def test_a_mapped_email_column_is_loaded(
+        self, tmp_path: Path, project_folder: Path
+    ) -> None:
+        """A personal column with a reading role joins the contract.
 
         Args:
-            landed_run: Folder holding a synthetic ingestion run.
+            tmp_path: Isolated test folder.
+            project_folder: Project source folder.
         """
-        cfg = settings_of(landed_run / "config.toml")
-        personal = set(cfg["privacy"]["personal_columns"])
-        for table in landing.TABLES.values():
-            keys = {
-                landing.pandas_name(key)
-                for key in payload_keys(landed_run / "landed", table)
-            }
-            assert not keys & personal, table
+        maps = tmp_path / "maps"
+        shutil.copytree(project_folder / "mappings", maps)
+        path = maps / "survey_columns.csv"
+        table = wrangle.read_csv_text(path)
+        email = table["column"] == "Email address"
+        table.loc[email, ["role", "question_id"]] = ["single", "Q16"]
+        table.to_csv(path, index=False)
+        worksheet, names = landing.survey_worksheet(maps)
+        assert "Email address" in [c.name for c in worksheet.columns]
+        assert "Email address" not in worksheet.excluded
+        assert names["Email address"] == "Email address"
 
     def test_values_keep_their_excel_types(self, landed_run: Path) -> None:
         """Dates are ISO text and the WAS id a whole number.
@@ -915,7 +921,8 @@ class TestLandedInputs:
             data_folder / "inputs" / cfg["survey"]["file"], "Survey info", 2
         )
         columns = list(from_table.columns)
-        assert "Other (more info).6" in from_table.attrs["excluded"]
+        assert "Other (more info).6" in columns
+        assert "Email address" in from_table.attrs["excluded"]
         left = from_table[columns].map(wrangle.clean_text)
         right = from_book[columns].map(wrangle.clean_text)
         pd.testing.assert_frame_equal(left, right)

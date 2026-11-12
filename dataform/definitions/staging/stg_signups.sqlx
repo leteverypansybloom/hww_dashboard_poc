@@ -1,6 +1,6 @@
 config {
   type: "table",
-  description: "Account signups: one row per user with an organisation (R20 to R24). Job roles and the flags' text are not kept",
+  description: "Account signups: one row per user with an organisation (R20 to R24)",
   assertions: {
     uniqueKey: ["signup_id"],
     nonNull: ["org", "employer_id"]

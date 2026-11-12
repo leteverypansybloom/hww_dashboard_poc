@@ -16,9 +16,7 @@ const expectedTables = dataform.projectConfig.vars.expected_tables
 
 if (expectedDataset) {
   const tables = Object.keys(reference_data.schemas).filter(
-    (table) =>
-      (table !== "survey_other_text" || hww.keepOtherText) &&
-      (!expectedTables.length || expectedTables.includes(table))
+    (table) => !expectedTables.length || expectedTables.includes(table)
   );
   for (const table of tables) {
     const columns = reference_data.schemas[table].map((c) => c.name).join(", ");

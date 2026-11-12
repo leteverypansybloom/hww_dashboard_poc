@@ -144,21 +144,6 @@ class TestRun:
         assert left == right
 
 
-def dataform_contact_pattern(project_folder: Path) -> str:
-    r"""The contact pattern in hww.js, in Python's regular expressions.
-
-    Args:
-        project_folder: The project folder.
-
-    Returns:
-        The pattern, with RE2's letter and digit classes as \w.
-    """
-    source = (project_folder / "dataform/includes/hww.js").read_text("utf-8")
-    found = re.search(r"contactDetails = String\.raw`([^`]+)`", source)
-    assert found is not None
-    return found.group(1).replace(r"\p{L}\p{N}", r"\w")
-
-
 class TestDataformSources:
     """The Dataform sources hold only printable text."""
 
@@ -176,58 +161,6 @@ class TestDataformSources:
                     path.read_text("utf-8"),
                 )
                 assert found is None, path.name
-
-
-class TestContactPatterns:
-    """The Dataform contact check agrees with check_public_text."""
-
-    @pytest.mark.parametrize(
-        "text",
-        [
-            "0.30000000000000004",
-            "1.1000000000000001",
-            "0.12034567891234",
-            "1000000000123",
-            "20240101000000",
-            "2026-06-01T00:00:00",
-            "A sole trader",
-        ],
-    )
-    def test_ordinary_values_pass(
-        self, project_folder: Path, text: str
-    ) -> None:
-        """Long numbers and dates aren't contact details.
-
-        Args:
-            project_folder: The project folder.
-            text: A value that must pass.
-        """
-        wrangle.check_public_text(text, "x")
-        assert not re.search(dataform_contact_pattern(project_folder), text)
-
-    @pytest.mark.parametrize(
-        "text",
-        [
-            "someone@example.org",
-            "Someone@Example.ORG",
-            "01234 567890",
-            "+44 1234 567890",
-            "192.0.2.10",
-            "Https://example.org",
-        ],
-    )
-    def test_contact_details_are_found(
-        self, project_folder: Path, text: str
-    ) -> None:
-        """Both checks recognise contact details.
-
-        Args:
-            project_folder: The project folder.
-            text: A value that must be refused.
-        """
-        with pytest.raises(wrangle.InputError):
-            wrangle.check_public_text(text, "x")
-        assert re.search(dataform_contact_pattern(project_folder), text)
 
 
 class TestWithoutPyCommon:
@@ -256,4 +189,4 @@ class TestWithoutPyCommon:
             check=False,
         )
         assert done.returncode == 0, done.stderr
-        assert done.stdout.strip().endswith("11")
+        assert done.stdout.strip().endswith("12")

@@ -140,15 +140,12 @@ pass the check.
 
 Dataform materialises `raw_latest_loads` once per invocation and chooses the
 highest numeric GCS generation. All gold tables wait for the shared checks
-for load completeness, payload keys, source freshness, source keys, contact
-identifiers, row counts, mappings and other contract rules. Run dependencies
+for load completeness, payload keys, source freshness, source keys, row
+counts, mappings and other contract rules. Run dependencies
 with the gold selection. Gold replacement is one table at a time, which is
 accepted for now: refresh Power BI only after a successful invocation, so it
 never reads a part-built set. These changes need a
 BigQuery execution test before cut-over.
-
-Turning free text off rebuilds the silver and gold free-text tables empty.
-It does not remove historical copies from backups, logs or earlier exports.
 
 For rollback, select the last approved HWW commit, shared-library commit and
 image digest as one release set. Restore configuration and mappings from
@@ -159,7 +156,7 @@ lower GCS generation merely because its commit time is later.
 ## Private mappings and access
 
 Keep production organisation overrides out of Git and generated JavaScript.
-Python accepts `privacy.org_overrides_file` outside the repository and
+Python accepts `[paths] org_overrides_file` outside the repository and
 records its checksum. Dataform accepts `org_overrides_table` as a private
 `project.dataset.table` containing `line`, `raw_name` and `canonical_name`.
 The committed CSV remains an empty template.
@@ -198,8 +195,8 @@ Record approval and verification separately from record contents.
 
 Do not apply partition expiry indiscriminately: an old but current snapshot
 can still be the latest valid load. Preserve current required snapshots until
-an approved replacement is available. The IG lead must decide whether job
-roles, free text and small-employer health answers may be retained.
+an approved replacement is available. The DPIA approves personal data in
+gold; the IG lead sets how long each kind of it is retained.
 
 ## Known limitations
 
@@ -222,7 +219,7 @@ Name an independent code reviewer and a data-owner approver. Record the
 revision, config, mapping hashes, selected source generations and execution
 result. On synthetic data, require matching schemas, key uniqueness, row
 counts and complete row sets against the golden and hand-worked scenarios.
-Test assertion failures before publication, privacy checks, free-text removal,
+Test assertion failures before publication,
 shrunken inputs, duplicate delivery and retry after commit. Record any accepted
 differences explicitly. Production output sign-off and Python retirement
 require named owners and an agreed rollback plan.

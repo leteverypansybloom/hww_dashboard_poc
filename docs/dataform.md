@@ -67,7 +67,7 @@ lists.
 
 **Settings live in `workflow_settings.yaml`.** The settings
 `config.toml` holds for the modelling (`completed_rule`,
-`keep_other_free_text`, `source_priority`, `max_row_drop`,
+`source_priority`, `max_row_drop`,
 `allow_row_drop`, `allow_empty` and each workbook's file name) are Dataform variables
 with the same values. The WAS session columns (`[[was.sessions]]`)
 and the payload keys of each sheet are in `includes/hww.js`.
@@ -307,7 +307,7 @@ same inputs:
   own. The stops run first, so bad inputs never reach gold, but a
   failure part-way through a run (a quota, a bug) can leave some gold
   tables from this run and some from the last. Running the workflow
-  again fixes it. The output contract checks (R80, R81) run after the
+  again fixes it. The output contract checks (R80) run after the
   tables are built, so a failure there means fixing the model before
   anyone reads the tables.
 - **No run record table (R83).** Dataform keeps each run's history,
@@ -326,9 +326,6 @@ same inputs:
   Python's `casefold`; they differ only for a few letters such as `ß`,
   which no mapping uses. Employer keys use `NORMALIZE_AND_CASEFOLD`,
   and `assert_identifier_cases` checks them against Python's.
-- **Personal columns (R05)** are enforced where they enter: py-common
-  never loads a column the contracts exclude, so there is nothing for
-  Dataform to check.
 - **The report** is the `data_quality_issues` view, not a Markdown
   file, and "dated after today" uses today's date in Europe/London
   when the view is read.
@@ -340,10 +337,9 @@ Graph field mapping, GitHub schedule, access, retention and cut-over checks.
 All gold tables, including placeholders, wait for the shared publication
 checks. Table-level assertions remain additional checks after replacement;
 they do not provide atomic publication across the entire gold dataset.
-Free-text tables are rebuilt empty when retention is switched off.
 Development must override raw_dataset or use a separate project; a schema
-suffix alone does not isolate raw data. The data quality view redacts
-recognisable contact identifiers, but still belongs to restricted silver.
+suffix alone does not isolate raw data. The data quality view shows raw
+values as they are, so it belongs to restricted silver.
 Dataform and its assertions require a recorded BigQuery run before cut-over.
 
 A custom Dataform execution account needs the Service Account User and Service

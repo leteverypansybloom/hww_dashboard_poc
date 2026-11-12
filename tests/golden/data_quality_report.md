@@ -22,6 +22,7 @@ Run at 2026-10-10 12:00.
 | fact_engagement | 439 |
 | dim_survey_response | 103 |
 | fact_survey_answer | 2867 |
+| survey_other_text | 54 |
 | question_catalogue | 96 |
 | fact_was_session | 105 |
 | fact_was_session_topic | 105 |
@@ -180,7 +181,7 @@ Add them to the matching CSV in mappings/ to fix.
 ## Survey checks
 
 - 82 columns on Survey info, 82 in mappings/survey_columns.csv.
-- Columns never read (personal, technical or free text): Month, Email address, What parts (if any) of the tool completion process could be improved?, CD.
+- Columns never read (the drop role): Month, Email address, What parts (if any) of the tool completion process could be improved?, CD.
 - 103 response(s) gave 2867 answer row(s).
   - Q04: 103 respondent(s)
   - Q07: 103 respondent(s)
@@ -222,6 +223,6 @@ Add them to the matching CSV in mappings/ to fix.
 - employer_id is a short hash of the lower-case organisation name, so it stays the same between runs.
 - A WAS session only counts as 'was_session_held' if it has a date.
 - Survey % for a question = respondents who ticked the answer / respondents who gave any answer to that question.
-- Survey free text ('Other' boxes, 'What parts could be improved?') is not output unless keep_other_free_text = true in config.toml.
+- Text typed into the 'Other (more info)' boxes is output in survey_other_text, not as an answer.
 - Peer mentoring 'relationships' = expressions of interest (no matching dates recorded yet).
 - Job roles, and the text typed into 'Completed survey?' and 'Requested WAS?', are not output; fact_signup keeps only the flags and dates read from that text.

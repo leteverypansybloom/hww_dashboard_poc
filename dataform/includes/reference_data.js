@@ -2334,7 +2334,7 @@ module.exports = {
         "name": "other_text",
         "type": "STRING",
         "mode": "REQUIRED",
-        "description": "Free text typed into an 'Other' box. Written only when keep_other_free_text is true; it may hold personal details."
+        "description": "Free text typed into an 'Other (more info)' box, as typed."
       }
     ],
     "question_catalogue": [

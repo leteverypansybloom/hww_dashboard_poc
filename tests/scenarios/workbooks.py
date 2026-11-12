@@ -128,7 +128,7 @@ SURVEY: list[list[object]] = [
         # An unticked box holding a space.
         " ",
         "Other",
-        "Free text, never output",
+        "Free text in the Other box",
     ],
     [
         102,

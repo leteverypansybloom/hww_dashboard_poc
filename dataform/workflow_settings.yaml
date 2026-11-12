@@ -25,10 +25,8 @@ vars:
   was_file: WAS database.jsonl
   peer_file: Peer Mentoring Programme Database.jsonl
   # The rest mirrors config.toml: [was] completed_rule,
-  # [survey] keep_other_free_text, [employers] source_priority and
-  # [checks] max_row_drop.
+  # [employers] source_priority and [checks] max_row_drop.
   completed_rule: summary_1_sent
-  keep_other_free_text: "false"
   source_priority: signups,survey,was,peer
   max_row_drop: "0.1"
   # Set to "true" for one run to publish an agreed reduction in rows.

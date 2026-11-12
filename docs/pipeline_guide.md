@@ -33,12 +33,12 @@ folder are small launchers that keep the commands `python wrangle.py` and
 
 | Piece | Job |
 |---|---|
-| [`wrangle.py`](../src/hww_dashboard/wrangle.py) | Reads the four spreadsheets, cleans them, links rows to organisations and writes 11 tidy CSV tables plus `data_quality_report.md` to `output/`. |
+| [`wrangle.py`](../src/hww_dashboard/wrangle.py) | Reads the four spreadsheets, cleans them, links rows to organisations and writes 12 tidy CSV tables plus `data_quality_report.md` to `output/`. |
 | [`dashboard_data.py`](../src/hww_dashboard/dashboard_data.py) | Reads those CSVs and does every sum the dashboard shows. It has no Streamlit code, so it can be tested on its own. |
 | [`dashboard.py`](../src/hww_dashboard/dashboard.py) | The Streamlit app. It only draws what `dashboard_data.py` returns. |
 | [`config.toml`](../config.toml) | Where the files are, which sheet and heading row to read, which column is which. |
 | [`mappings/`](../mappings) | CSV lookup tables: messy value → agreed value (e.g. `Private Sector` → `Private`), and what each survey column means. |
-| [`tests/`](../tests) | `pytest` checks, grouped by the function under test: privacy, keys, sums, error messages, a byte-for-byte snapshot of the output, and a smoke test of every page. They read synthetic inputs in `tests/data/`, never the real files. |
+| [`tests/`](../tests) | `pytest` checks, grouped by the function under test: keys, sums, error messages, a byte-for-byte snapshot of the output, and a smoke test of every page. They read synthetic inputs in `tests/data/`, never the real files. |
 
 The four inputs:
 
@@ -214,7 +214,7 @@ What you see in the terminal (dummy data):
 2026-10-18 13:53:13 INFO    Survey info: read 103 row(s) from dummy_HWW monitoring and reporting.xlsx (sheet 'Survey info')
 2026-10-18 13:53:13 INFO    WAS database: read 35 row(s) from dummy_was_database.xlsx (sheet 'query')
 2026-10-18 13:53:13 INFO    Peer mentoring: read 11 row(s) from dummy_peer_montoring.xlsx (sheet 'query (1)')
-2026-10-18 13:53:14 INFO    Wrote 11 tables and data_quality_report.md to ...\output
+2026-10-18 13:53:14 INFO    Wrote 12 tables and data_quality_report.md to ...\output
 2026-10-18 13:53:14 INFO      dim_employer                168 rows
   ...
 2026-10-18 13:53:14 WARNING Report needs attention: 1 value(s) not in the mapping files. See data_quality_report.md.
@@ -281,8 +281,7 @@ this way) and **Gotchas** (what can trip you up).
   counting each unmapped raw value once. `render()` builds the text: the run time, then **Needs
   attention** (one line per item, saying what was found and what to do, or `None.`), then every
   section in order (`None.` if it is empty) with the unmapped-values table, then `ASSUMPTIONS`.
-  It checks the text for recognisable contact identifiers and leaves the stored sections
-  unchanged, so rendering twice gives the same bytes. `write()` saves that text with LF line
+  It leaves the stored sections unchanged, so rendering twice gives the same bytes. `write()` saves that text with LF line
   endings; the BigQuery writer stores the same text in its `data_quality_report` table.
 - **Why:** each function adds notes as it goes, so the report says exactly what happened in this run.
   The fixed section order makes two reports easy to compare. Needs attention comes first so whoever
@@ -353,8 +352,8 @@ this way) and **Gotchas** (what can trip you up).
   `check_config` then checks:
   - every section and setting in `REQUIRED_SETTINGS` is present with its expected type;
   - headers and session numbers are positive integers; session numbers are unique;
-  - the free-text switch is a boolean, and column names and paths are nonblank text;
-  - configured personal source headings cannot be selected as business fields;
+  - column names and paths are nonblank text;
+  - there is no `[privacy]` section (`org_overrides_file` belongs in `[paths]`);
   - each source has `file`;
   - each `[[was.sessions]]` entry has `number` and `date`;
   - `completed_rule` is a known rule;
@@ -512,7 +511,7 @@ Each `load_*` function follows the same pattern:
   `date_precision = "month"`. Excel row numbers change if someone inserts rows above, and so do
   the signup ids.
 
-#### `unpivot_survey(df, columns_map, answer_lookup, translations, keep_other_text)`
+#### `unpivot_survey(df, columns_map, answer_lookup, translations)`
 - Mapping roles, column uniqueness, question IDs and tick options are validated before reading answers.
 - Tick labels use the catalogue spelling when they match without case, preserving answer links.
 - **What:** turns the wide export (one column per question or tick box) into long rows
@@ -521,17 +520,16 @@ Each `load_*` function follows the same pattern:
     `survey_columns.csv`, not the cell text.
   - **`single`**: the cell text is the answer. Welsh text is translated first, then the text is
     matched to the catalogue's spelling.
-  - **`other_text`**: free text, kept only if `keep_other_text` is on.
+  - **`other_text`**: free text, returned apart from the answers, for
+    `survey_other_text`.
 
   It also counts answers that aren't in `survey_answers.csv`.
 - **Why:** long data makes the Figure 13 maths a `groupby`. It also lets a new question appear
   without new columns anywhere downstream.
 - **Gotchas:** `drop_duplicates()` at the end makes sure a response counts once per answer, even if
-  two columns map to the same option. Free text can contain personal details, which is why it is
-  off by default.
+  two columns map to the same option.
 
 #### `load_survey(cfg, folder, maps, lookups, overrides, report)` (with inner `column_for`)
-- Personal source headings may only have the `drop` mapping role.
 - Translation keys must reference a known question and have one nonblank target per cleaned raw answer.
 - **What:**
   1. Read `survey_columns.csv` and find the Survey info columns for the roles `response_id`, `date`,
@@ -698,25 +696,21 @@ Each `load_*` function follows the same pattern:
 #### `write_csv(df, folder, name)` and `write_outputs(tables, out, engagement, report, run_at)`
 - **What:** `write_csv` turns the table into CSV text with `csv_text` (reindexed to
   `COLUMNS[name]`, dates as `YYYY-MM-DD`, LF line endings on every system), checks that text for
-  contact details and against the table's schema (`output_schema.check_cells`), then writes it as
+  Excel errors and against the table's schema (`output_schema.check_cells`), then writes it as
   UTF-8 without the index. `write_outputs` writes every table, adds the row counts and
   event-type counts to the report, and writes the report. A sibling staging directory holds
   the whole generation before publication. Rename failures restore the previous directory;
   if restoration itself fails, the `.hww-*/previous` backup is retained for recovery.
   This is rollback on ordinary errors, not a crash-safe or concurrent-reader transaction.
 - **Gotchas:**
-  - `reindex` drops every column not in `COLUMNS`. This is the main privacy guard: raw columns
-    such as names or emails can't leak out by accident.
-  - Retained values and report text are checked for email, phone, IPv4 and URL identifiers.
+  - `reindex` drops every column not in `COLUMNS`, so a source column reaches an output only
+    when its table's schema lists it.
   - Given the run record from `run()`, `write_outputs` completes it with each output's rows and
     SHA-256 and publishes it with the tables as `run_record.json`
     (`hww_dashboard.run_record`). The record names files and holds checksums and counts, never
     cell values.
-    A match stops the run without echoing the value. Arbitrary personal names still
-    require source governance; this pattern guard is not general anonymisation.
   - Booleans are written as `True`/`False`, and `None` as an empty cell.
-  - When free text is off, `write_outputs()` removes an old `survey_other_text.csv` only
-    when the new generation has been written successfully. Unmanaged files are preserved.
+  - Files in the output folder that are not outputs are kept.
 
 ### Entry points
 
@@ -969,9 +963,9 @@ database are. The hand-typed flags are kept and compared (Reconciliation) but do
 because they disagree with the records in many cases (in the dummy data, 43 employers flagged
 for the survey have no response, and 37 with a response aren't flagged).
 
-**Privacy by allow-list.** Only columns named in `COLUMNS` are written. Survey columns marked `drop`
-are never read. Free text is off by default. Two tests check the output for personal column names,
-emails, IP addresses and links.
+**Outputs by allow-list.** Only columns named in `COLUMNS` are written, and survey columns marked
+`drop` are never read. Personal data may reach an output: the DPIA approves it in the reporting
+tables (`DECISIONS_en.md`, 2026-11-12), so a column is added only when the DPIA covers it.
 
 **Loops instead of vectorised pandas in places.** `load_signups`, `unpivot_survey`,
 `unpivot_was_sessions` and `pick_value` loop over rows. The data is hundreds of rows, each row may

@@ -134,6 +134,7 @@ class TestRun:
             "fact_signup",
             "dim_survey_response",
             "fact_survey_answer",
+            "survey_other_text",
             "fact_was_session",
             "fact_was_session_topic",
             "fact_engagement",

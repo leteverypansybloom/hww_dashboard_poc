@@ -18,7 +18,7 @@ This is the ingestion job: ``python ingest.py`` (or
    number it came from, with the raw file, the converted rows and an
    audit record kept in the store.
 
-Personal and unused columns are excluded from the raw tables. The
+Columns that no table uses yet are excluded from the raw tables. The
 store still archives complete original workbooks, including excluded
 columns, for successful and quarantined uploads. ``wrangle.py`` reads
 committed loads when ``[landed] read = true`` (see
@@ -301,24 +301,17 @@ def py_common_name(name: str) -> str:
     return name
 
 
-def survey_worksheet(
-    maps: Path,
-    keep_other_text: bool,
-    personal_columns: Sequence[str] = (),
-) -> tuple[Worksheet, dict[str, str]]:
+def survey_worksheet(maps: Path) -> tuple[Worksheet, dict[str, str]]:
     """The Survey info contract, from mappings/survey_columns.csv.
 
     The column map lists every column of the sheet with its role, so
-    the contract follows it: role columns and answers are loaded, the
-    rest (personal, unused) excluded. "Other (more info)" free text
-    loads only when keep_other_free_text is on. The sites column holds
+    the contract follows it: columns with the drop role are excluded
+    and every other column is loaded. The sites column holds
     numbers and text (1, "2-5"), so it is loaded untyped, as on
     Account signups.
 
     Args:
         maps: The mappings folder.
-        keep_other_text: The survey's keep_other_free_text setting.
-        personal_columns: Additional headings that must use the drop role.
 
     Returns:
         The worksheet, and py-common name -> wrangle.py name for each
@@ -328,28 +321,6 @@ def survey_worksheet(
         maps / "survey_columns.csv", MAPPING_COLUMNS["survey_columns"]
     )
     validate_survey_columns(table)
-    personal = {
-        clean_text(name).casefold()
-        for name in (
-            "Name",
-            "First Name",
-            "Last Name",
-            "Email address",
-            "Email",
-            "Phone",
-            "Telephone",
-            "Contact details",
-            *personal_columns,
-        )
-    }
-    selected = table["column"].map(
-        lambda name: clean_text(name).casefold() in personal
-    ) & table["role"].ne("drop")
-    if selected.any():
-        raise InputError(
-            "mappings/survey_columns.csv: personal columns must use "
-            "the drop role."
-        )
     columns: list[Column] = []
     excluded: list[str] = []
     names: dict[str, str] = {}
@@ -359,7 +330,7 @@ def survey_worksheet(
     }
     for heading, role in zip(table["column"], table["role"], strict=True):
         name = py_common_name(heading)
-        if role == "drop" or (role == "other_text" and not keep_other_text):
+        if role == "drop":
             excluded.append(name)
             continue
         if role == "sites":
@@ -390,11 +361,7 @@ def source_contracts(cfg: Config, maps: Path) -> dict[str, SourceContract]:
     Returns:
         SourceContract per source, in SOURCES order.
     """
-    survey, survey_names = survey_worksheet(
-        maps,
-        bool(cfg["survey"]["keep_other_free_text"]),
-        cfg.get("privacy", {}).get("personal_columns", []),
-    )
+    survey, survey_names = survey_worksheet(maps)
     sheets = {"signups": SIGNUPS, "survey": survey, "was": WAS, "peer": PEER}
     result: dict[str, SourceContract] = {}
     for source in SOURCES:

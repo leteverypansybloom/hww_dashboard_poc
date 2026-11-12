@@ -23,7 +23,7 @@ rule.
 | Signups: Alpha's flags `Y (Dec)` and `Y` | R24: December 2025 (nearest to the November sign-up), and yes with no date |
 | Signups: Gamma Group `N` and `Y (Jan 26)` | R24: no, and January 2026 |
 | Signups: the empty last row | R21 dropped |
-| Survey 101, and a second 101 | R31 the first is kept; R33 Weithiau is Sometimes; R32 ticks, and the Headaches box holding a space is not ticked; Email address is never read (R05) |
+| Survey 101, and a second 101 | R31 the first is kept; R33 Weithiau is Sometimes; R32 ticks, and the Headaches box holding a space is not ticked; R34 the Other box's text is kept; Email address has the drop role, so it is never read |
 | Survey 102 "beta café" with no bands | R60 matches Beta Café; R35 bands from the employer; R33 "Maybe" kept, catalogue Q14-04 (R37); R32 the Other box holding a non-breaking space is not ticked |
 | Survey 103 with no Organisation | R65 no employer; its own bands, with industry `other_options` as Other (R12) |
 | Survey row with no Count (Gamma Group) | R31 dropped, so it adds no response, event or employer attribute |
