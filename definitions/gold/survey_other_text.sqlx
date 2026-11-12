@@ -1,7 +1,7 @@
 config {
   type: "table",
   schema: hww.gold,
-  description: "R34: free text typed into an 'Other (more info)' box; empty when keep_other_free_text is \"false\"",
+  description: "R34: free text typed into an 'Other (more info)' box",
   dependencies: hww.stopChecks,
   dependOnDependencyAssertions: true,
   tags: ["gold"],

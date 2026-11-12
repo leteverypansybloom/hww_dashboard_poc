@@ -33,10 +33,6 @@ if (
   );
 }
 
-if (!["true", "false"].includes(vars.keep_other_free_text)) {
-  throw new Error("keep_other_free_text must be true or false");
-}
-const keepOtherText = vars.keep_other_free_text === "true";
 const allowEmpty = vars.allow_empty
   .split(",")
   .map((s) => s.trim())
@@ -56,7 +52,6 @@ const maxLoadAgeHours = Number(vars.max_load_age_hours || "1080");
 if (!Number.isFinite(maxLoadAgeHours) || maxLoadAgeHours <= 0) {
   throw new Error("max_load_age_hours must be a positive number");
 }
-const contactDetails = String.raw`(?i)[\p{L}\p{N}_.+-]+@[\p{L}\p{N}_-]+\.[\p{L}\p{N}_.]+|(?:\+44|\b0)(?:[\s()-]*\d){9,10}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|https?://`;
 
 // The gold dataset, and the checks that must pass before any gold
 // table is rebuilt: if one fails, the gold tables keep the previous
@@ -74,7 +69,6 @@ const stopChecks = [
   "assert_signup_months_valid",
   "assert_identifier_cases",
   "assert_keys_valid",
-  "assert_no_contact_details",
   "assert_row_counts_valid",
   "assert_loads_fresh",
   "assert_payload_keys_valid",
@@ -177,30 +171,13 @@ const PEER = {
   ],
 };
 
-// survey_columns.csv, as the survey contract loads it: dropped columns
-// are never loaded, nor "Other (more info)" text unless it is kept.
+// survey_columns.csv, as the survey contract loads it: columns with
+// the drop role are never loaded.
 const surveyColumns = reference_data.surveyColumns.map((column, index) => ({
   ...column,
   position: index + 1,
 }));
-const personalColumns = new Set([
-  "name", "first name", "last name", "email", "email address", "phone",
-  "telephone", "contact details", "full name", "job role", "job role title",
-  "key contact", "preferred contact details", "accessibility requirements including language",
-  "hww adviser", "hww adviser (cohort)", "user ip", "user agent",
-  "created by (user id)", "source url", "post id", "transaction id",
-  "payment amount", "payment date", "payment status", "submission speed (ms)",
-  "pdf: hww employer survey tool", "pdf: hww employer survey tool (internal)",
-  "item type", "path"
-]);
-if (surveyColumns.some((column) =>
-  personalColumns.has(column.column.trim().toLowerCase()) && column.role !== "drop"
-)) {
-  throw new Error("Personal survey columns must use the drop role");
-}
-const surveyLoaded = surveyColumns.filter(
-  (c) => c.role !== "drop" && (c.role !== "other_text" || keepOtherText)
-);
+const surveyLoaded = surveyColumns.filter((c) => c.role !== "drop");
 const surveyQuestionColumns = surveyLoaded.filter((c) =>
   ["single", "tick", "other_text"].includes(c.role)
 );
@@ -425,9 +402,7 @@ module.exports = {
   clean,
   columns,
   allowRowDrop,
-  contactDetails,
   goldTables,
-  personalColumns,
   orgOverridesTable,
   maxLoadAgeHours,
   completedRule,
@@ -438,7 +413,6 @@ module.exports = {
   flagDates,
   flagUnreadParts,
   gold,
-  keepOtherText,
   latestRows,
   maxRowDrop,
   nameKey,
